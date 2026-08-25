@@ -1,0 +1,35 @@
+# Evidence 02 — Repository state (ALGRP/alanyagroup-platform)
+
+Captured: 2026-08-25T06:43:19Z
+HEAD: 5c1781b4b1264682f769cd698ddd74a55ba99191
+
+## Full file inventory
+```
+./.gitattributes
+./.gitignore
+./AG_GM/README.md
+./AI_COMMAND_CENTER/AI_OPERATING_RULES.md
+./AI_COMMAND_CENTER/AI_WORKFLOW_PROTOCOL.md
+./AI_COMMAND_CENTER/CHANGELOG.md
+./AI_COMMAND_CENTER/CURRENT_STATUS.md
+./AI_COMMAND_CENTER/MASTER_PROJECT_STATUS.md
+./AI_COMMAND_CENTER/OWNER_GO_LOG.md
+./AI_COMMAND_CENTER/PROJECT_MEMORY.md
+./AI_COMMAND_CENTER/RISK_REGISTER.md
+./AI_COMMAND_CENTER/TASK_QUEUE.md
+./BOOKING/README.md
+./DOMAINS/README.md
+./INVESTOR/README.md
+./N8N/README.md
+./README.md
+./REPORTS/README.md
+./SEO/README.md
+```
+## File count
+```
+19
+```
+## Source-code files (php/js/ts/css/py/sql)
+```
+(count: 0)
+```
