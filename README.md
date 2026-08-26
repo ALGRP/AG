@@ -13,6 +13,7 @@ Working repository for Alanya Group implementation tasks.
 
 | Report | Status |
 |---|---|
+| [`reports/ALANYAGROUP_RECONCILED_BOOKING_CANDIDATE_V1/`](reports/ALANYAGROUP_RECONCILED_BOOKING_CANDIDATE_V1/) | ⛔ **STOPPED** — baseline absent; stop condition met. Includes a macOS preflight script. |
 | [`reports/ALANYAGROUP_FINAL_COMPLETION_V1/`](reports/ALANYAGROUP_FINAL_COMPLETION_V1/) | ⛔ **BLOCKED** — preconditions absent, spec conflicts found. Start with [`TASK_STATUS.md`](reports/ALANYAGROUP_FINAL_COMPLETION_V1/TASK_STATUS.md). |
 
 ### ALANYAGROUP_FINAL_COMPLETION_V1 — read in this order
