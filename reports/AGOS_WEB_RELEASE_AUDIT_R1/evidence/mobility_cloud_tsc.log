@@ -1,0 +1,65 @@
+app/api/activities/route.ts(1,21): error TS2307: Cannot find module 'cloudflare:workers' or its corresponding type declarations.
+app/api/bookings/route.ts(1,21): error TS2307: Cannot find module 'cloudflare:workers' or its corresponding type declarations.
+app/api/bookings/route.ts(140,42): error TS7006: Parameter 'row' implicitly has an 'any' type.
+app/api/claim-job/route.ts(1,21): error TS2307: Cannot find module 'cloudflare:workers' or its corresponding type declarations.
+app/api/domain-reservations/route.ts(1,21): error TS2307: Cannot find module 'cloudflare:workers' or its corresponding type declarations.
+app/api/ecosystem/route.ts(1,21): error TS2307: Cannot find module 'cloudflare:workers' or its corresponding type declarations.
+app/api/fallback-engine/route.ts(1,21): error TS2307: Cannot find module 'cloudflare:workers' or its corresponding type declarations.
+app/api/fleet-control/route.ts(1,21): error TS2307: Cannot find module 'cloudflare:workers' or its corresponding type declarations.
+app/api/geo-pricing/route.ts(1,21): error TS2307: Cannot find module 'cloudflare:workers' or its corresponding type declarations.
+app/api/global-directory/route.ts(1,21): error TS2307: Cannot find module 'cloudflare:workers' or its corresponding type declarations.
+app/api/global-directory/route.ts(148,51): error TS7006: Parameter 'row' implicitly has an 'any' type.
+app/api/global-directory/route.ts(150,63): error TS7006: Parameter 'row' implicitly has an 'any' type.
+app/api/identity/route.ts(1,21): error TS2307: Cannot find module 'cloudflare:workers' or its corresponding type declarations.
+app/api/marketplace/route.ts(1,21): error TS2307: Cannot find module 'cloudflare:workers' or its corresponding type declarations.
+app/api/marketplace/route.ts(293,47): error TS7006: Parameter 'row' implicitly has an 'any' type.
+app/api/marketplace/route.ts(848,46): error TS7006: Parameter 'vehicle' implicitly has an 'any' type.
+app/api/marketplace/route.ts(857,12): error TS7006: Parameter 'a' implicitly has an 'any' type.
+app/api/marketplace/route.ts(857,15): error TS7006: Parameter 'b' implicitly has an 'any' type.
+app/api/mobility/route.ts(1,21): error TS2307: Cannot find module 'cloudflare:workers' or its corresponding type declarations.
+app/api/operations-reservations/route.ts(1,21): error TS2307: Cannot find module 'cloudflare:workers' or its corresponding type declarations.
+app/api/operations-reservations/route.ts(66,77): error TS7006: Parameter 'row' implicitly has an 'any' type.
+app/api/operations-reservations/route.ts(67,71): error TS7006: Parameter 'row' implicitly has an 'any' type.
+app/api/operations-reservations/route.ts(70,43): error TS7006: Parameter 'row' implicitly has an 'any' type.
+app/api/operations-reservations/route.ts(71,43): error TS7006: Parameter 'row' implicitly has an 'any' type.
+app/api/operations-reservations/route.ts(72,39): error TS7006: Parameter 'row' implicitly has an 'any' type.
+app/api/operations-reservations/route.ts(75,7): error TS2345: Argument of type 'unknown' is not assignable to parameter of type 'Row | undefined'.
+app/api/operations-reservations/route.ts(78,42): error TS7006: Parameter 'row' implicitly has an 'any' type.
+app/api/partner/v1/jobs/route.ts(1,21): error TS2307: Cannot find module 'cloudflare:workers' or its corresponding type declarations.
+app/api/platform-foundation/route.ts(1,21): error TS2307: Cannot find module 'cloudflare:workers' or its corresponding type declarations.
+app/api/profile-media/route.ts(1,21): error TS2307: Cannot find module 'cloudflare:workers' or its corresponding type declarations.
+app/api/reservation-marketplace/route.ts(1,21): error TS2307: Cannot find module 'cloudflare:workers' or its corresponding type declarations.
+app/api/supplier-tours/route.ts(1,21): error TS2307: Cannot find module 'cloudflare:workers' or its corresponding type declarations.
+app/api/supplier-tours/route.ts(35,39): error TS7006: Parameter 'tour' implicitly has an 'any' type.
+app/api/v1/driver/seat-offers/route.ts(1,21): error TS2307: Cannot find module 'cloudflare:workers' or its corresponding type declarations.
+app/api/v1/finance/self-billing/route.ts(1,21): error TS2307: Cannot find module 'cloudflare:workers' or its corresponding type declarations.
+app/api/v1/global/availability/route.ts(1,21): error TS2307: Cannot find module 'cloudflare:workers' or its corresponding type declarations.
+app/api/v1/global/bookings/[bookingId]/cancel/route.ts(1,21): error TS2307: Cannot find module 'cloudflare:workers' or its corresponding type declarations.
+app/api/v1/global/bookings/[bookingId]/route.ts(1,21): error TS2307: Cannot find module 'cloudflare:workers' or its corresponding type declarations.
+app/api/v1/global/bookings/[bookingId]/wifi/route.ts(1,21): error TS2307: Cannot find module 'cloudflare:workers' or its corresponding type declarations.
+app/api/v1/global/bookings/route.ts(1,21): error TS2307: Cannot find module 'cloudflare:workers' or its corresponding type declarations.
+app/api/v1/global/outbound/availability/route.ts(1,21): error TS2307: Cannot find module 'cloudflare:workers' or its corresponding type declarations.
+app/api/v1/global/status/route.ts(1,21): error TS2307: Cannot find module 'cloudflare:workers' or its corresponding type declarations.
+app/api/v1/global/webhooks/flight-update/route.ts(1,21): error TS2307: Cannot find module 'cloudflare:workers' or its corresponding type declarations.
+app/api/v1/global/webhooks/partner-update/route.ts(1,21): error TS2307: Cannot find module 'cloudflare:workers' or its corresponding type declarations.
+app/api/v1/micro-shuttle/match/route.ts(1,21): error TS2307: Cannot find module 'cloudflare:workers' or its corresponding type declarations.
+app/api/v1/micro-shuttle/matches/[matchId]/complete/route.ts(1,21): error TS2307: Cannot find module 'cloudflare:workers' or its corresponding type declarations.
+app/api/v1/sla/events/[eventId]/review/route.ts(1,21): error TS2307: Cannot find module 'cloudflare:workers' or its corresponding type declarations.
+app/api/v5-safety/route.ts(1,21): error TS2307: Cannot find module 'cloudflare:workers' or its corresponding type declarations.
+app/api/vehicle-media/route.ts(1,21): error TS2307: Cannot find module 'cloudflare:workers' or its corresponding type declarations.
+app/api/vehicle-studio/route.ts(1,21): error TS2307: Cannot find module 'cloudflare:workers' or its corresponding type declarations.
+app/api/vehicle-studio/route.ts(43,45): error TS7006: Parameter 'row' implicitly has an 'any' type.
+app/r/[code]/route.ts(1,21): error TS2307: Cannot find module 'cloudflare:workers' or its corresponding type declarations.
+app/server/driver-access.ts(1,21): error TS2307: Cannot find module 'cloudflare:workers' or its corresponding type declarations.
+app/server/global-directory.ts(1,21): error TS2307: Cannot find module 'cloudflare:workers' or its corresponding type declarations.
+app/server/global-integration.ts(1,21): error TS2307: Cannot find module 'cloudflare:workers' or its corresponding type declarations.
+app/server/global-integration.ts(283,45): error TS7006: Parameter 'column' implicitly has an 'any' type.
+app/server/master-modules.ts(1,21): error TS2307: Cannot find module 'cloudflare:workers' or its corresponding type declarations.
+app/server/tenant-access.ts(1,21): error TS2307: Cannot find module 'cloudflare:workers' or its corresponding type declarations.
+app/server/tenant-access.ts(114,29): error TS7006: Parameter 'row' implicitly has an 'any' type.
+app/server/tenant-access.ts(128,31): error TS7006: Parameter 'row' implicitly has an 'any' type.
+app/track/[token]/page.tsx(1,21): error TS2307: Cannot find module 'cloudflare:workers' or its corresponding type declarations.
+db/index.ts(1,21): error TS2307: Cannot find module 'cloudflare:workers' or its corresponding type declarations.
+worker/index.ts(6,11): error TS2304: Cannot find name 'Fetcher'.
+worker/index.ts(7,7): error TS2552: Cannot find name 'D1Database'. Did you mean 'IDBDatabase'?
+TSC_EXIT=2

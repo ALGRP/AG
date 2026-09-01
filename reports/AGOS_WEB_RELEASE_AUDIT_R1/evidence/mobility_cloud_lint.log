@@ -1,0 +1,29 @@
+
+> agos-mobility-cloud@0.1.0 lint
+> eslint . --ignore-pattern dist --ignore-pattern .next
+
+
+/home/user/agos-mobility-cloud/app/components/GlobalDirectoryView.tsx
+  78:26  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+/home/user/agos-mobility-cloud/app/components/GlobalDirectoryView.tsx:78:26
+  76 |   }, []);
+  77 |
+> 78 |   useEffect(() => { void refresh(); }, [refresh]);
+     |                          ^^^^^^^ Avoid calling setState() directly within an effect
+  79 |
+  80 |   async function action(actionName: string, payload: JsonRow = {}) {
+  81 |     setBusy(actionName);  react-hooks/set-state-in-effect
+
+/home/user/agos-mobility-cloud/app/representative/apply/page.tsx
+  36:9  error  Do not use an `<a>` element to navigate to `/`. Use `<Link />` from `next/link` instead. See: https://nextjs.org/docs/messages/no-html-link-for-pages  @next/next/no-html-link-for-pages
+
+✖ 2 problems (2 errors, 0 warnings)
+
+LINT_EXIT=1
