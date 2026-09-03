@@ -32,3 +32,9 @@ literal text and leave zero working booking forms. See conflict **C1**.
 
 `owner_go = false`. No live WordPress mutation, n8n activation, or credential binding without a
 new explicit OWNER GO. Documentation updates never imply authorization.
+
+## Handoff
+
+| Paket | Alıcı |
+|---|---|
+| [`handoff/HERMES_TASK_PACKET_01.md`](handoff/HERMES_TASK_PACKET_01.md) | **Hermes** — baseline sağlama + TÜRSAB / fiyat formülü / dil kapsamı doğrulaması. Rapor yolları ve teslim formatı içinde. |
