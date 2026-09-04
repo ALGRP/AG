@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Sultan Kebab & Pizza Kielce — sitemap
+  Kurulum: bu dosyayi sunucuda public/sitemap.xml olarak kaydedin, sonra
+  docker compose build app && docker compose up -d app
+  Dogrulama: curl -s -o /dev/null -w '%{http_code}\n' https://www.sultankebabkielce.com/sitemap.xml
+  Sonra Google Search Console > Site Haritalari > sitemap.xml gonderin.
+
+  ONEMLI: Bu surum yalnizca SU AN VAR OLAN sayfalari icerir. Var olmayan bir
+  URL'yi sitemap'e koymak zarar verir. Yeni sayfalar yayina alindikca
+  SAYFA-METINLERI.md icindeki genisletilmis surume gecin.
+-->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+
+  <url>
+    <loc>https://www.sultankebabkielce.com/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+  </url>
+
+  <url>
+    <loc>https://www.sultankebabkielce.com/order</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+
+</urlset>
