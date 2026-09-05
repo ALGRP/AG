@@ -1,0 +1,40 @@
+TOTAL URLS: 906
+
+[1] ENGINE DISTRIBUTION       : {'none': 699, 'agsc-v6': 192, 'ag_home': 13, 'c6': 2}
+[2] DISTINCT FORM COUNT       : {'0': 699, '1': 207}
+[3] HTTP STATUS               : {'200': 906}
+[4] LITERAL SHORTCODE TEXT    : {'none': 906}
+[5] PAGE TYPE                 : {'post': 633, 'page': 273}
+
+ACCEPTANCE CHECKS (against this dataset)
+  duplicate form (>1)   : 0   -> PASS
+  raw shortcode visible : 0   -> PASS
+  non-200 URLs          : 0   -> PASS
+
+MONEY PAGES: 587
+  engine: {'ag_home': 10, 'none': 384, 'agsc-v6': 191, 'c6': 2}
+  ZERO booking form: 384  (65%)
+
+LEGACY c6 (migration candidates):
+  /alanya-transfer/  id=31925
+  /antalya-alanya-transfer/  id=31889
+
+CANONICAL ag_home (all):
+  /grand-okan-hotel-alanya-transfer/  id=34004
+  /private-transfer/  id=33989
+  /tours/alanya/atv-safari/  id=33975
+  /antalya-transfer/kemer/  id=33226
+  /antalya-transfer/serik/belek/  id=33202
+  /antalya-transfer/manavgat/side/  id=33176
+  /antalya-transfer/manavgat/  id=33174
+  /antalya-transfer/  id=33146
+  /  id=23532
+  /antalya-transfer-booking/  id=21024
+  /korean-restaurants-in-antalya/  id=31033
+  /gazipasa-airport-transfer/  id=12174
+  /antalya-airport-transfer/  id=11460
+
+PRIORITY MATRIX (699 zero-form URLs)
+  priority_group: {'MUST_HAVE_BOOKING': 466, 'SHOULD_HAVE_BOOKING': 124, 'NO_BOOKING_NEEDED': 92, 'EXCLUDE_SYSTEM': 17}
+  proposed_batch: {'Batch 2 - Hotel transfer pages': 321, 'Batch 5 - Remaining optional pages': 108, 'Batch 1 - Top revenue pages only': 94, 'NO_BOOKING_NEEDED': 92, 'Batch 3 - Tours & activities': 51, 'EXCLUDE_SYSTEM': 17, 'Batch 4 - Destination guides': 16}
+  language_scope: {'EN_OR_ASCII_OR_UNKNOWN': 521, 'NON_EN_OR_ENCODED_REVIEW_WPML_SCOPE': 178}
