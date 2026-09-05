@@ -1,5 +1,9 @@
 # ALGRP/AG
 
+> 📌 **Ortak durum brifingi.** Bu işin güncel durumu, kilitlenmiş owner kararları ve yürürlükteki
+> yasaklar: **[`CLAUDE.md`](CLAUDE.md)**. Aynı dosya beş ALGRP deposunun hepsinde birebir aynıdır.
+> Kod veya içerik değiştirmeden önce okuyun — `owner_go = false`.
+
 Working repository for Alanya Group implementation tasks.
 
 > **Note on repository roles.** `ALGRP/alanyagroup-platform` is the shared project memory
