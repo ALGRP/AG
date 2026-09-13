@@ -313,7 +313,7 @@ geçerlidir. `TESTS` satırında NOT_RUN sayısı sıfıra inmeden production ap
 5. **Üretilen dosyalar** (hepsi `ALGRP/AG`, branch `claude/alanyagroup-final-completion-me48z5`; HEAD `96f61d0`):
    `reports/ALANYAGROUP_FULL_SITE_REMEDIATION_SPEC_V1/ACCESS_STATUS.md` (commit `b9200cc`); `01_…` + `02_…` (commit
    `96f61d0`); `03_…`, `04_…`, `05_…`, `README.md`, `tools/reproduce_counts.py` ve bu paket — bu paket yazılırken untracked idi;
-   **2026-09-13'te commit `__SHA1__` ile aynı branch'e commit edilip PR #1'e push edildi** (bu satır o commit'ten sonra güncellendi;
+   **2026-09-13'te commit `e227147` ile aynı branch'e commit edilip PR #1'e push edildi** (bu satır o commit'ten sonra güncellendi;
    Codex'in okuyacağı sürüm PR #1'dedir, çalışma kopyası değil). `CLAUDE.md` beş depoya dağıtıldı (`5c42a1e`; AGOS
    `0307c9a`, platform `a0e558d`). Her dosya yayın öncesi gizlilik taramasından geçti (e-posta/telefon/host yolu/DB
    tanımlayıcısı/sayfa ID: 0). 04'te iki yanlış satır atfı (L37→L35, L22→L23) düzeltildi. **Tamamlayıcı eleştiri sonrası
