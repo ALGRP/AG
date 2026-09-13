@@ -4,8 +4,8 @@ Host: Linux 6.18.44-fc-v21  (container; the task's target path is macOS)
 
 ## 1. Target workspace parent
 ```
-$ ls -d /Users/a1453/Documents/ALANYAGROUP-REVENUE-RECOVERY-2026-08-04
-ls: cannot access '/Users/a1453/Documents/ALANYAGROUP-REVENUE-RECOVERY-2026-08-04': No such file or directory
+$ ls -d <MAC_WORKSPACE_ROOT>          # host path redacted from public copy 2026-09-13
+ls: cannot access '<MAC_WORKSPACE_ROOT>': No such file or directory
 $ ls -d /Users
 ls: cannot access '/Users': No such file or directory
 ```

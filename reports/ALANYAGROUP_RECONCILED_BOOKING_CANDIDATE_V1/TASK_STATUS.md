@@ -4,13 +4,13 @@
 TASK_STATUS            = STOPPED — STOP CONDITION MET, NO IMPLEMENTATION
                          All four stated stop conditions are triggered. The required
                          baseline is not absent-in-part but absent entirely: the target
-                         workspace is a macOS path (/Users/a1453/...) that does not exist
+                         workspace is a macOS path (<MAC_WORKSPACE_ROOT>; redacted 2026-09-13) that does not exist
                          in this Linux container, and no booking runtime source exists in
                          any of the five ALGRP repositories. Reported per instruction
                          rather than implemented. No source was invented.
 
 RECONCILED_CANDIDATE_PATH = NOT CREATED.
-                         Target: /Users/a1453/Documents/ALANYAGROUP-REVENUE-RECOVERY-2026-08-04/
+                         Target: <MAC_WORKSPACE_ROOT>/   (macOS host path; redacted from public copy 2026-09-13)
                                  ALANYAGROUP-FINAL-RECONCILED-CANDIDATE-20260826/
                          The /Users tree does not exist here. Creating a same-named folder
                          at some other path would produce a candidate not rooted in the real
@@ -79,7 +79,7 @@ ROLLBACK_METHOD        = NOT REQUIRED — nothing was created, modified or deplo
                          For this report branch: git revert of the commit, or close the PR
                          unmerged.
 
-BLOCKERS               = B1 Target workspace /Users/a1453/... does not exist (macOS path;
+BLOCKERS               = B1 Target workspace <MAC_WORKSPACE_ROOT> does not exist (macOS path, redacted;
                             this session is a Linux container, folder not mounted).
                          B2 No production pull present -> BASELINE_COMPLETE=NO.
                          B3 CLE received/confirmed email module not locatable (0 hits).

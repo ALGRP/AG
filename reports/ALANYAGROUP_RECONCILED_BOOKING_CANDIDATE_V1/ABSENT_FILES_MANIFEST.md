@@ -8,7 +8,7 @@ absent. Nothing was implemented, and no source was invented.
 
 ## Why: the workspace is on a machine this session cannot reach
 
-The task's target path is **`/Users/a1453/Documents/...`** — a macOS path on your local machine.
+The task's target path is **`<MAC_WORKSPACE_ROOT>`** — a macOS `/Users/...` path on your local machine (host path redacted from the public copy 2026-09-13; the real path is known only on the owner's Mac).
 This session runs in a Linux container: the entire `/Users` tree does not exist
 (`ls: cannot access '/Users': No such file or directory`). The working folder, the production
 pulls, `single-booking-engine-candidate/`, the backups and the proof folders are all on your Mac,
@@ -20,7 +20,7 @@ All five ALGRP repositories are now attached and were searched. None contains th
 
 | # | Required input | Status | Evidence |
 |---|---|---|---|
-| 1 | Workspace root `/Users/a1453/Documents/ALANYAGROUP-REVENUE-RECOVERY-2026-08-04/` | ❌ **ABSENT** | `/Users` does not exist |
+| 1 | Workspace root `<MAC_WORKSPACE_ROOT>` (macOS path, redacted 2026-09-13) | ❌ **ABSENT** | `/Users` does not exist |
 | 2 | Newest verified **production pull** (baseline) | ❌ **ABSENT** | no `wp-content` or `*production-pull*` anywhere on disk |
 | 3 | `single-booking-engine-candidate/` | ❌ **ABSENT** | 0 files in 5 repos |
 | 4 | `single-booking-engine-candidate/ag-homepage-live-pilot/` | ❌ **ABSENT** | referenced in AGOS docs only |

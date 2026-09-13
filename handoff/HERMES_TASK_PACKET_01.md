@@ -86,11 +86,11 @@ ALGRP/AGOS → AG_BOOKING_OWNER_DECISION_01.md
 ```
 cd <AG klonu>/reports/ALANYAGROUP_RECONCILED_BOOKING_CANDIDATE_V1/tools/
 chmod +x preflight_baseline_check.sh
-./preflight_baseline_check.sh
+./preflight_baseline_check.sh <MAC_WORKSPACE_ROOT>
 ```
 
-Varsayılan kök: `/Users/a1453/Documents/ALANYAGROUP-REVENUE-RECOVERY-2026-08-04`
-Farklıysa argüman olarak ver: `./preflight_baseline_check.sh /gerçek/yol`
+Kök: `<MAC_WORKSPACE_ROOT>` — Mac'teki çalışma klasörünün gerçek yolu (2026-09-13: host yolu public kopyadan çıkarıldı, `AG/CLAUDE.md` §6; betikte varsayılan yok, argüman veya `AG_WORKSPACE_ROOT` ortam değişkeni zorunlu).
+Argüman olarak ver: `./preflight_baseline_check.sh /gerçek/yol` (kök verilmezse exit 2)
 
 **Betik hakkında:** salt-okunur — kök içinde hiçbir şey oluşturmaz/değiştirmez/silmez,
 ağ erişimi yok, macOS'un varsayılan bash 3.2'sinde çalışır. Tam, eksik ve kök-yok

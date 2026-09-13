@@ -4,7 +4,7 @@
 
 | | |
 |---|---|
-| Candidate created | **NO** — target path `/Users/a1453/...` does not exist in this container |
+| Candidate created | **NO** — target path `<MAC_WORKSPACE_ROOT>` (macOS `/Users/...`; host path redacted 2026-09-13) does not exist in this container |
 | Baseline complete | **NO** — no production pull present |
 | CLE module | **NOT LOCATABLE** — 0 hits across all five repos |
 | Tests | 0 passed, 0 failed, **24 not run** |

@@ -21,14 +21,14 @@
 # USAGE
 #   chmod +x preflight_baseline_check.sh
 #   ./preflight_baseline_check.sh [ROOT]
-#   Default ROOT: /Users/a1453/Documents/ALANYAGROUP-REVENUE-RECOVERY-2026-08-04
+#   ROOT: required — pass as $1 or set AG_WORKSPACE_ROOT (no default; host path redacted from public copy 2026-09-13)
 #
 # EXIT CODES
 #   0 = baseline complete   (reconciliation may proceed)
 #   1 = baseline incomplete (STOP — do not implement)
 #   2 = root folder not found
 
-ROOT="${1:-/Users/a1453/Documents/ALANYAGROUP-REVENUE-RECOVERY-2026-08-04}"
+ROOT="${1:-${AG_WORKSPACE_ROOT:-}}"; [ -n "$ROOT" ] || { printf 'usage: %s ROOT   (or set AG_WORKSPACE_ROOT)\n' "$0" >&2; exit 2; }
 TMP="${TMPDIR:-/tmp}/agpf.$$"
 MISS="$TMP.miss"; PULLS="$TMP.pulls"
 trap 'rm -f "$MISS" "$PULLS"' EXIT
