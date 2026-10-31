@@ -1,0 +1,10 @@
+{
+  "status": "BLOCKED_UID_MAP",
+  "uid_map": "0          0          1",
+  "gid_map": "0          0          1",
+  "run": 0,
+  "passed": 0,
+  "S1_ACCEPTED": false,
+  "INDEPENDENT_ACCEPTED": false,
+  "LIVE_CHANGED": false
+}

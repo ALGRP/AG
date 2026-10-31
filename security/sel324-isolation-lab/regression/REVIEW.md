@@ -1,5 +1,11 @@
 # SEL-433 — Broker task effects must share the nonce transaction
 
+Consolidation update: use `../COORDINATION.md` for the current candidate and
+`coordination_20261031/` for its 16-test comparison (5/11 baseline, 16/0 candidate).
+The candidate now uses PR #5's BoardLedger API plus PR #6's all-action scope
+and same-database checks. Everything below records the earlier 11-test patch;
+its logs are retained as historical evidence, not current-head acceptance.
+
 PR #5 at commit `76a9638983d4955af3062d10a249f38195c43367` used one SQLite connection for the nonce transaction and a separate connection/commit for task effects. Injecting an exception after the task commit left `state=done` with zero consumed nonces. A second connection could observe the completed task before the nonce committed. Validly signed wrong-tenant/project capabilities also changed the task, and fresh nonces could repeatedly complete or block a finished task.
 
 The patch passes the ledger transaction connection into `_apply`, stores the nonce table in the board database, and checks board/tenant/project/run/active state before applying effects. Completion/block updates repeat these checks in a conditional UPDATE. An incompatible separate-ledger configuration now fails closed. The lab's active state is `claimed`; this is not an implementation of the native Hermes adapter.

@@ -26,7 +26,10 @@ if not source_root.is_dir():
 sys.path.insert(0,str(source_root))
 from lab.approach_c_broker import BoardBroker,send_frame,recv_frame
 from lab.capability import Issuer,Verifier
-from lab.nonce_ledger import NonceLedger
+if variant == 'baseline':
+    from lab.nonce_ledger import NonceLedger as Ledger
+else:
+    from lab.nonce_ledger import BoardLedger as Ledger
 
 class AtomicBroker(unittest.TestCase):
     def setUp(self):
@@ -40,7 +43,7 @@ class AtomicBroker(unittest.TestCase):
         # PR#5 uses a separate ledger DB. The corrected broker's migration
         # requires the ledger table in the same physical DB as task effects.
         self.ledger_path=(str(Path(self.tmp.name)/'ledger.db') if variant=='baseline' else self.db)
-        self.ledger=NonceLedger(self.ledger_path)
+        self.ledger=Ledger(self.ledger_path)
         self.issuer=Issuer()
         self.broker=BoardBroker(board='boardA',db_path=self.db,sock_path=str(Path(self.tmp.name)/'unused.sock'),bound_uid=511,verifier=Verifier(self.issuer.public_bytes()),ledger=self.ledger,worker_gid=511,manage_dir=False)
 
@@ -132,6 +135,44 @@ class AtomicBroker(unittest.TestCase):
         self.assertFalse(self.call(self.token(task='missing'))['ok'])
         self.assertEqual((self.state(),self.count()),('claimed',0))
 
+    def test_mismatched_ledger_configuration_rejected(self):
+        other = Ledger(str(Path(self.tmp.name)/'other.db'))
+        with self.assertRaises(ValueError):
+            BoardBroker(board='boardA',db_path=self.db,
+                sock_path=str(Path(self.tmp.name)/'unused2.sock'),bound_uid=511,
+                verifier=self.broker.verifier,ledger=other,worker_gid=511,
+                manage_dir=False)
+
+    def test_heartbeat_checks_task_scope_run_and_terminal_state(self):
+        for changes in ({'tenant':'wrong'}, {'project':'wrong'},
+                        {'run_id':'stale'}, {'task':'missing'}):
+            with self.subTest(changes=changes):
+                self.assertFalse(self.call(self.token(action='heartbeat',**changes))['ok'])
+                self.assertEqual(self.count(),0)
+        self.assertTrue(self.call(self.token())['ok'])
+        self.assertFalse(self.call(self.token(action='heartbeat'))['ok'])
+        self.assertEqual(self.count(),1)
+
+    def test_sentinel_read_requires_active_scoped_task(self):
+        for changes in ({'tenant':'wrong'}, {'task':'missing'}, {'run_id':'stale'}):
+            with self.subTest(changes=changes):
+                self.assertFalse(self.call(self.token(action='read_sentinel',**changes))['ok'])
+                self.assertEqual(self.count(),0)
+        self.assertEqual(self.call(self.token(action='read_sentinel'))['result'],'FAKE_A')
+        self.assertEqual(self.count(),1)
+
+    def test_running_task_can_complete(self):
+        with sqlite3.connect(self.db) as c:
+            c.execute("UPDATE tasks SET state='running'")
+        self.assertTrue(self.call(self.token())['ok'])
+        self.assertEqual((self.state(),self.count()),('done',1))
+
+    def test_wrong_board_row_rejected_without_consumption(self):
+        with sqlite3.connect(self.db) as c:
+            c.execute("UPDATE tasks SET board='boardB'")
+        self.assertFalse(self.call(self.token())['ok'])
+        self.assertEqual((self.state(),self.count()),('claimed',0))
+
     def test_eight_distinct_capabilities_have_one_task_winner(self):
         from concurrent.futures import ThreadPoolExecutor
         barrier=threading.Barrier(8)
@@ -141,7 +182,7 @@ class AtomicBroker(unittest.TestCase):
             try:
                 def effect(tx):
                     if variant=='baseline':return self.broker._apply(claim)
-                    return self.broker._apply(claim,tx)
+                    return self.broker._apply(tx,claim)
                 self.ledger.consume_and_apply(claim,effect)
                 return True
             except Exception:
@@ -153,5 +194,11 @@ class AtomicBroker(unittest.TestCase):
         self.assertEqual(self.state(),'done')
 
 result=unittest.TextTestRunner(verbosity=2).run(unittest.defaultTestLoader.loadTestsFromTestCase(AtomicBroker))
-print(json.dumps({'variant':variant,'run':result.testsRun,'passed':result.testsRun-len(result.failures)-len(result.errors),'failures':len(result.failures),'errors':len(result.errors)}))
+failed_cases={getattr(test,'test_case',test).id() for test,_ in result.failures}
+errored_cases={getattr(test,'test_case',test).id() for test,_ in result.errors}
+print(json.dumps({'variant':variant,'run':result.testsRun,
+    'passed':result.testsRun-len(failed_cases|errored_cases),
+    'failures':len(failed_cases),'errors':len(errored_cases),
+    'assertion_failures':len(result.failures)}))
 raise SystemExit(0 if result.wasSuccessful() else 1)
+

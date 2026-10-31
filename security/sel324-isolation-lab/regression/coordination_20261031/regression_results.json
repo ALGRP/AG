@@ -1,0 +1,26 @@
+[
+  {
+    "variant": "baseline",
+    "exit_code": 1,
+    "result": {
+      "variant": "baseline",
+      "run": 16,
+      "passed": 5,
+      "failures": 11,
+      "errors": 0,
+      "assertion_failures": 18
+    }
+  },
+  {
+    "variant": "candidate",
+    "exit_code": 0,
+    "result": {
+      "variant": "candidate",
+      "run": 16,
+      "passed": 16,
+      "failures": 0,
+      "errors": 0,
+      "assertion_failures": 0
+    }
+  }
+]

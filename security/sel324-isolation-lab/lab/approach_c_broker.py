@@ -27,7 +27,7 @@ import threading
 import traceback
 
 from lab.capability import Verifier, CapabilityError
-from lab.nonce_ledger import NonceLedger, ReplayError
+from lab.nonce_ledger import BoardLedger, ReplayError
 
 MAX_FRAME = 64 * 1024
 ALLOWED_ACTIONS = {"complete", "block", "heartbeat", "read_sentinel"}
@@ -68,7 +68,7 @@ class BoardBroker:
     """Serves exactly one board on exactly one socket, for exactly one UID."""
 
     def __init__(self, *, board: str, db_path: str, sock_path: str,
-                 bound_uid: int, verifier: Verifier, ledger: NonceLedger,
+                 bound_uid: int, verifier: Verifier, ledger: BoardLedger,
                  worker_gid: int, manage_dir: bool = True) -> None:
         if os.path.realpath(ledger.path) != os.path.realpath(db_path):
             raise ValueError("nonce ledger and board effects must share one database")
@@ -150,7 +150,7 @@ class BoardBroker:
                 return
 
             result = self.ledger.consume_and_apply(
-                claims, lambda tx: self._apply(claims, tx))
+                claims, lambda txn: self._apply(txn, claims))
             send_frame(conn, {"ok": True, "action": action, "result": result,
                               "peer": {"pid": pid, "uid": uid, "gid": gid}})
         except CapabilityError as exc:
@@ -168,34 +168,56 @@ class BoardBroker:
             except OSError:
                 pass
 
-    def _apply(self, claims: dict, conn: sqlite3.Connection) -> str:
-        """Use the ledger transaction's connection; never commit separately.
+    # States a task may legitimately be moved OUT of. Anything already
+    # terminal is not re-transitionable, so a fresh nonce cannot redo it.
+    OPEN_STATES = ("claimed", "running")
 
-        This lab's active state is ``claimed``. Native Hermes state mapping
-        must be implemented and reviewed independently in its adapter.
+    def _apply(self, txn: sqlite3.Connection, claims: dict) -> str:
+        """The effect.
+
+        Runs on the LEDGER'S OWN connection, inside its BEGIN IMMEDIATE, and
+        never commits -- the ledger owns the commit. Only the broker UID can
+        reach this database at all.
         """
-        row = conn.execute(
+        # Preserve PR #6's task binding for EVERY action, including heartbeat
+        # and sentinel reads. The transition CAS below repeats the predicates.
+        row = txn.execute(
             "SELECT board, tenant, project_id, run_id, state FROM tasks "
             "WHERE task_id=?", (claims["task"],)).fetchone()
         expected = (self.board, claims["tenant"], claims["project"],
-                    claims["run_id"], "claimed")
-        if row != expected:
+                    claims["run_id"])
+        if (claims["board"] != self.board or row is None
+                or tuple(row[:4]) != expected or row[4] not in self.OPEN_STATES):
             raise CapabilityError("task scope, active state or run_id CAS failed")
         if claims["action"] == "read_sentinel":
-            row = conn.execute(
-                "SELECT v FROM board_identity WHERE k='sentinel'"
-            ).fetchone()
+            row = txn.execute(
+                "SELECT v FROM board_identity WHERE k='sentinel'").fetchone()
             return row[0] if row else "<none>"
+
         if claims["action"] in ("complete", "block"):
             state = "done" if claims["action"] == "complete" else "blocked"
-            cur = conn.execute(
-                "UPDATE tasks SET state=? WHERE task_id=? AND board=? "
-                "AND tenant=? AND project_id=? AND run_id=? AND state='claimed'",
-                (state, claims["task"], self.board, claims["tenant"],
-                 claims["project"], claims["run_id"]))
+            # Full-scope CAS: the capability's board, tenant and project must
+            # match the ROW, and the row must still be in an open state. A
+            # freshly minted nonce therefore cannot redo a finished task, and
+            # a cross-scope capability matches nothing and fails closed.
+            placeholders = ",".join("?" * len(self.OPEN_STATES))
+            cur = txn.execute(
+                f"""UPDATE tasks SET state=?
+                     WHERE task_id=?
+                       AND run_id=?
+                       AND board=?
+                       AND tenant=?
+                       AND project_id=?
+                       AND state IN ({placeholders})""",
+                (state, claims["task"], claims["run_id"], claims["board"],
+                 claims["tenant"], claims["project"], *self.OPEN_STATES))
             if cur.rowcount != 1:
-                raise CapabilityError("task scope, active state or run_id CAS failed")
+                raise CapabilityError(
+                    "scoped CAS matched no open row "
+                    f"(task/run/board/tenant/project, state in "
+                    f"{self.OPEN_STATES}); rowcount={cur.rowcount}")
             return f"{claims['task']}->{state}"
+
         return "ok"
 
 

@@ -1,8 +1,7 @@
 """Broker entry point. Launched as the REAL broker UID via setpriv.
 
 argv[1] is a JSON config:
-  {"boards": [{"board","db_path","sock_path","bound_uid","worker_gid",
-               "ledger_path" (legacy config field; ledger now in db_path)}],
+  {"boards": [{"board","db_path","sock_path","bound_uid","worker_gid"}],
    "public_key_hex": "...", "ready_file": "...", "stop_file": "..."}
 
 It holds only the issuer PUBLIC key -- never the signing key.
@@ -16,7 +15,7 @@ import time
 
 from lab.approach_c_broker import BoardBroker
 from lab.capability import Verifier
-from lab.nonce_ledger import NonceLedger
+from lab.nonce_ledger import BoardLedger
 
 
 def main() -> None:
@@ -27,7 +26,8 @@ def main() -> None:
         broker = BoardBroker(
             board=b["board"], db_path=b["db_path"], sock_path=b["sock_path"],
             bound_uid=b["bound_uid"], verifier=verifier,
-            ledger=NonceLedger(b["db_path"]), worker_gid=b["worker_gid"],
+            # The ledger lives INSIDE the board DB -- one file, one txn.
+            ledger=BoardLedger(b["db_path"]), worker_gid=b["worker_gid"],
             manage_dir=False,
         )
         broker.start()
