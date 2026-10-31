@@ -2,7 +2,7 @@
 
 argv[1] is a JSON config:
   {"boards": [{"board","db_path","sock_path","bound_uid","worker_gid",
-               "ledger_path"}],
+               "ledger_path" (legacy config field; ledger now in db_path)}],
    "public_key_hex": "...", "ready_file": "...", "stop_file": "..."}
 
 It holds only the issuer PUBLIC key -- never the signing key.
@@ -27,7 +27,7 @@ def main() -> None:
         broker = BoardBroker(
             board=b["board"], db_path=b["db_path"], sock_path=b["sock_path"],
             bound_uid=b["bound_uid"], verifier=verifier,
-            ledger=NonceLedger(b["ledger_path"]), worker_gid=b["worker_gid"],
+            ledger=NonceLedger(b["db_path"]), worker_gid=b["worker_gid"],
             manage_dir=False,
         )
         broker.start()
