@@ -1,0 +1,75 @@
+{"variant": "baseline", "run": 10, "passed": 4, "failures": 6, "errors": 0}
+test_complete_commits_effect_and_nonce (__main__.AtomicBroker.test_complete_commits_effect_and_nonce) ... ok
+test_effect_not_visible_before_nonce_commit (__main__.AtomicBroker.test_effect_not_visible_before_nonce_commit) ... FAIL
+test_failure_after_effect_rolls_back_effect_and_nonce (__main__.AtomicBroker.test_failure_after_effect_rolls_back_effect_and_nonce) ... FAIL
+test_fresh_nonce_cannot_block_finished_task (__main__.AtomicBroker.test_fresh_nonce_cannot_block_finished_task) ... FAIL
+test_fresh_nonce_cannot_complete_finished_task (__main__.AtomicBroker.test_fresh_nonce_cannot_complete_finished_task) ... FAIL
+test_missing_task_denied_without_consumption (__main__.AtomicBroker.test_missing_task_denied_without_consumption) ... ok
+test_same_token_replay_denied (__main__.AtomicBroker.test_same_token_replay_denied) ... ok
+test_signed_wrong_project_denied_without_consumption (__main__.AtomicBroker.test_signed_wrong_project_denied_without_consumption) ... FAIL
+test_signed_wrong_tenant_denied_without_consumption (__main__.AtomicBroker.test_signed_wrong_tenant_denied_without_consumption) ... FAIL
+test_stale_run_denied_without_consumption (__main__.AtomicBroker.test_stale_run_denied_without_consumption) ... ok
+
+======================================================================
+FAIL: test_effect_not_visible_before_nonce_commit (__main__.AtomicBroker.test_effect_not_visible_before_nonce_commit)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/626b3920b808/sel433-go-review/test_atomic_broker.py", line 91, in test_effect_not_visible_before_nonce_commit
+    self.assertEqual(seen,[('claimed',0)])
+AssertionError: Lists differ: [('done', 0)] != [('claimed', 0)]
+
+First differing element 0:
+('done', 0)
+('claimed', 0)
+
+- [('done', 0)]
++ [('claimed', 0)]
+
+======================================================================
+FAIL: test_failure_after_effect_rolls_back_effect_and_nonce (__main__.AtomicBroker.test_failure_after_effect_rolls_back_effect_and_nonce)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/626b3920b808/sel433-go-review/test_atomic_broker.py", line 80, in test_failure_after_effect_rolls_back_effect_and_nonce
+    self.assertEqual(self.state(),'claimed')
+AssertionError: 'done' != 'claimed'
+- done
++ claimed
+
+
+======================================================================
+FAIL: test_fresh_nonce_cannot_block_finished_task (__main__.AtomicBroker.test_fresh_nonce_cannot_block_finished_task)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/626b3920b808/sel433-go-review/test_atomic_broker.py", line 108, in test_fresh_nonce_cannot_block_finished_task
+    self.assertFalse(self.call(self.token(action='block'))['ok'])
+AssertionError: True is not false
+
+======================================================================
+FAIL: test_fresh_nonce_cannot_complete_finished_task (__main__.AtomicBroker.test_fresh_nonce_cannot_complete_finished_task)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/626b3920b808/sel433-go-review/test_atomic_broker.py", line 103, in test_fresh_nonce_cannot_complete_finished_task
+    self.assertFalse(reply['ok']);self.assertEqual(reply['reason'],'capability_rejected')
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: True is not false
+
+======================================================================
+FAIL: test_signed_wrong_project_denied_without_consumption (__main__.AtomicBroker.test_signed_wrong_project_denied_without_consumption)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/626b3920b808/sel433-go-review/test_atomic_broker.py", line 116, in test_signed_wrong_project_denied_without_consumption
+    self.assertFalse(self.call(self.token(project='otherProject'))['ok'])
+AssertionError: True is not false
+
+======================================================================
+FAIL: test_signed_wrong_tenant_denied_without_consumption (__main__.AtomicBroker.test_signed_wrong_tenant_denied_without_consumption)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/626b3920b808/sel433-go-review/test_atomic_broker.py", line 112, in test_signed_wrong_tenant_denied_without_consumption
+    self.assertFalse(self.call(self.token(tenant='otherTenant'))['ok'])
+AssertionError: True is not false
+
+----------------------------------------------------------------------
+Ran 10 tests in 0.104s
+
+FAILED (failures=6)
