@@ -70,6 +70,8 @@ class BoardBroker:
     def __init__(self, *, board: str, db_path: str, sock_path: str,
                  bound_uid: int, verifier: Verifier, ledger: NonceLedger,
                  worker_gid: int, manage_dir: bool = True) -> None:
+        if os.path.realpath(ledger.path) != os.path.realpath(db_path):
+            raise ValueError("nonce ledger and board effects must share one database")
         self.board = board
         self.db_path = db_path
         self.sock_path = sock_path
@@ -148,7 +150,7 @@ class BoardBroker:
                 return
 
             result = self.ledger.consume_and_apply(
-                claims, lambda _led: self._apply(claims))
+                claims, lambda tx: self._apply(claims, tx))
             send_frame(conn, {"ok": True, "action": action, "result": result,
                               "peer": {"pid": pid, "uid": uid, "gid": gid}})
         except CapabilityError as exc:
@@ -166,29 +168,35 @@ class BoardBroker:
             except OSError:
                 pass
 
-    def _apply(self, claims: dict) -> str:
-        """The effect. Runs only inside the ledger's write transaction, and
-        only the broker UID can reach this DB at all."""
-        conn = sqlite3.connect(self.db_path, timeout=10.0)
-        try:
-            if claims["action"] == "read_sentinel":
-                row = conn.execute(
-                    "SELECT v FROM board_identity WHERE k='sentinel'"
-                ).fetchone()
-                return row[0] if row else "<none>"
-            if claims["action"] in ("complete", "block"):
-                state = "done" if claims["action"] == "complete" else "blocked"
-                # Upstream run_id CAS preserved inside the broker.
-                cur = conn.execute(
-                    "UPDATE tasks SET state=? WHERE task_id=? AND run_id=?",
-                    (state, claims["task"], claims["run_id"]))
-                conn.commit()
-                if cur.rowcount != 1:
-                    raise CapabilityError("run_id CAS failed")
-                return f"{claims['task']}->{state}"
-            return "ok"
-        finally:
-            conn.close()
+    def _apply(self, claims: dict, conn: sqlite3.Connection) -> str:
+        """Use the ledger transaction's connection; never commit separately.
+
+        This lab's active state is ``claimed``. Native Hermes state mapping
+        must be implemented and reviewed independently in its adapter.
+        """
+        row = conn.execute(
+            "SELECT board, tenant, project_id, run_id, state FROM tasks "
+            "WHERE task_id=?", (claims["task"],)).fetchone()
+        expected = (self.board, claims["tenant"], claims["project"],
+                    claims["run_id"], "claimed")
+        if row != expected:
+            raise CapabilityError("task scope, active state or run_id CAS failed")
+        if claims["action"] == "read_sentinel":
+            row = conn.execute(
+                "SELECT v FROM board_identity WHERE k='sentinel'"
+            ).fetchone()
+            return row[0] if row else "<none>"
+        if claims["action"] in ("complete", "block"):
+            state = "done" if claims["action"] == "complete" else "blocked"
+            cur = conn.execute(
+                "UPDATE tasks SET state=? WHERE task_id=? AND board=? "
+                "AND tenant=? AND project_id=? AND run_id=? AND state='claimed'",
+                (state, claims["task"], self.board, claims["tenant"],
+                 claims["project"], claims["run_id"]))
+            if cur.rowcount != 1:
+                raise CapabilityError("task scope, active state or run_id CAS failed")
+            return f"{claims['task']}->{state}"
+        return "ok"
 
 
 def _reply(conn: socket.socket, reason: str, detail: str) -> None:
