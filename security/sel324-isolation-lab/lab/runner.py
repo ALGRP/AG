@@ -24,8 +24,11 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from typing import Any
 
+import sqlite3
+
 from lab import boards
-from lab.capability import Issuer
+from lab.approach_c_broker import BoardBroker
+from lab.capability import Issuer, Verifier
 
 PY = "/usr/bin/python3.12"
 LAB_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -69,6 +72,9 @@ BATTERY: dict[str, tuple[str, str]] = {
     "foreign_uid_socket":         (NEGATIVE, "Unrelated UID connects to board A's socket"),
     "early_peer_rejection":       (NEGATIVE, "Privileged non-bound UID passes the dir gate"),
     "oversized_frame":            (NEGATIVE, "8 MiB declared frame length"),
+    "atomic_rollback_on_effect_failure": (NEGATIVE, "Failure after the effect, before commit, leaves NOTHING applied"),
+    "fresh_nonce_on_completed_task": (NEGATIVE, "A brand-new nonce redoing an already-completed task"),
+    "cross_scope_tenant_project":  (NEGATIVE, "Valid signature, wrong tenant/project, enforced at the UPDATE"),
     "own_board_lifecycle":        (POSITIVE, "Legitimate task completion still works"),
     "concurrent_single_winner":   (POSITIVE, "8 concurrent uses of one capability -> exactly 1"),
     "flood_isolation":            (POSITIVE, "Board B serves 40/40 while A floods"),
@@ -240,9 +246,7 @@ def build_broker_layout(root: str) -> dict:
             "forbidden_db": b.db_path, "scratch": scratch,
             "issuer_key_path": key, "other_capability_path": cap,
             "probe_uid": WORKER_A_UID, "probe_gid": WORKER_A_GID,
-            "socks": socks, "state": state, "root": root,
-            "ledgers": {bd: os.path.join(state, f"ledger_{bd}.db")
-                        for bd in (boards.BOARD_A, boards.BOARD_B)}}
+            "socks": socks, "state": state, "root": root}
 
 
 # --------------------------------------------------------- broker control ---
@@ -267,13 +271,11 @@ class BrokerProcess:
                 {"board": boards.BOARD_A,
                  "db_path": self.layout["approved_db"],
                  "sock_path": self.layout["socks"][boards.BOARD_A],
-                 "bound_uid": WORKER_A_UID, "worker_gid": WORKER_A_GID,
-                 "ledger_path": self.layout["ledgers"][boards.BOARD_A]},
+                 "bound_uid": WORKER_A_UID, "worker_gid": WORKER_A_GID},
                 {"board": boards.BOARD_B,
                  "db_path": self.layout["forbidden_db"],
                  "sock_path": self.layout["socks"][boards.BOARD_B],
-                 "bound_uid": WORKER_B_UID, "worker_gid": WORKER_B_GID,
-                 "ledger_path": self.layout["ledgers"][boards.BOARD_B]},
+                 "bound_uid": WORKER_B_UID, "worker_gid": WORKER_B_GID},
             ],
         }
         # The ready/stop files live in a dir the broker UID must write to.
@@ -316,7 +318,10 @@ FS_CONTROLS = ["cross_board_db_read", "cross_board_wal_shm_read",
                "aba_rename_swap", "direct_connect_bypass",
                "self_board_tamper"]
 
-BROKER_ONLY = ["forged_signature", "leaked_capability_wrong_peer",
+BROKER_ONLY = ["atomic_rollback_on_effect_failure",
+               "fresh_nonce_on_completed_task",
+               "cross_scope_tenant_project",
+               "forged_signature", "leaked_capability_wrong_peer",
                "expired_capability", "duplicate_json_member",
                "cross_board_capability", "replay_same_nonce",
                "replay_after_restart", "foreign_uid_socket",
@@ -466,6 +471,55 @@ def run_broker_battery(layout: dict, issuer: Issuer, broker: BrokerProcess,
         "ALLOWED" if winners == 1 else "BLOCKED",
         f"winners={winners}/8 (exactly 1 required)")
 
+    # ---- findings from the ALGRP/AG#5 review, 31.10.2026 ----------------
+    # (a) Atomicity. Injected failure AFTER the effect, BEFORE the commit.
+    # Checked in-process because proving it through the socket would require
+    # a failure-injection action in the broker, i.e. a backdoor.
+    from lab.nonce_ledger import BoardLedger, nonce_spent
+    db_a = layout["approved_db"]
+    probe_task, probe_run = f"t_{boards.BOARD_A}_1", f"run_{boards.BOARD_A}_1"
+    _set_task_state(db_a, probe_task, "claimed")
+    atomic_tok = json.loads(mint(action="complete"))["payload"]
+    atomic_claims = json.loads(atomic_tok)
+    ledger = BoardLedger(db_a)
+    broker_probe = BoardBroker(
+        board=boards.BOARD_A, db_path=db_a, sock_path="/dev/null",
+        bound_uid=WORKER_A_UID, verifier=Verifier(issuer.public_bytes()),
+        ledger=ledger, worker_gid=WORKER_A_GID, manage_dir=False)
+    try:
+        ledger.consume_and_apply(
+            atomic_claims,
+            lambda txn: broker_probe._apply(txn, atomic_claims),
+            after_effect_hook=lambda: (_ for _ in ()).throw(
+                RuntimeError("injected crash after effect, before commit")),
+        )
+        add("atomic_rollback_on_effect_failure", "ALLOWED",
+            "the injected failure did not propagate")
+    except RuntimeError:
+        state_after = _get_task_state(db_a, probe_task)
+        spent = nonce_spent(db_a, atomic_claims["nonce"])
+        if state_after == "claimed" and not spent:
+            add("atomic_rollback_on_effect_failure", "BLOCKED",
+                "rolled back together: task still 'claimed', nonce unspent "
+                "(capability safely retryable)")
+        else:
+            add("atomic_rollback_on_effect_failure", "ALLOWED",
+                f"partial commit: state={state_after!r} nonce_spent={spent}")
+
+    # (b) A FRESH nonce must not be able to redo an already-completed task.
+    _set_task_state(db_a, probe_task, "claimed")
+    r = _call(sock_a, mint(action="complete"))          # legitimate -> done
+    first_state = _get_task_state(db_a, probe_task)
+    r2 = _call(sock_a, mint(action="complete"))          # new nonce, same task
+    add("fresh_nonce_on_completed_task", *_oc(
+        r2, prefix=f"first={r.get('outcome')}/state={first_state!r} "))
+
+    # (c) Valid signature and correct peer/board, but a foreign tenant and
+    # project. Signature verification passes; the scoped CAS must refuse.
+    _set_task_state(db_a, probe_task, "claimed")
+    add("cross_scope_tenant_project", *_oc(_call(sock_a, mint(
+        action="complete", tenant="OTHER_TENANT", project="p_other"))))
+
     # availability: A floods while B must still be served 40/40
     b_tokens = [issuer.mint(sub_uid=WORKER_B_UID, board=boards.BOARD_B,
                             task=f"t_{boards.BOARD_B}_1",
@@ -484,6 +538,26 @@ def run_broker_battery(layout: dict, issuer: Issuer, broker: BrokerProcess,
 
 def _oc(r: dict, prefix: str = "") -> tuple[str, str]:
     return r.get("outcome", "ERROR"), prefix + r.get("detail", "")
+
+
+def _set_task_state(db_path: str, task: str, state: str) -> None:
+    conn = sqlite3.connect(db_path)
+    try:
+        conn.execute("UPDATE tasks SET state=? WHERE task_id=?",
+                     (state, task))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _get_task_state(db_path: str, task: str) -> str | None:
+    conn = sqlite3.connect(db_path)
+    try:
+        row = conn.execute("SELECT state FROM tasks WHERE task_id=?",
+                           (task,)).fetchone()
+        return row[0] if row else None
+    finally:
+        conn.close()
 
 
 # ---------------------------------------------------------------- report ----

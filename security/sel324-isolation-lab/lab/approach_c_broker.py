@@ -27,7 +27,7 @@ import threading
 import traceback
 
 from lab.capability import Verifier, CapabilityError
-from lab.nonce_ledger import NonceLedger, ReplayError
+from lab.nonce_ledger import BoardLedger, ReplayError
 
 MAX_FRAME = 64 * 1024
 ALLOWED_ACTIONS = {"complete", "block", "heartbeat", "read_sentinel"}
@@ -68,7 +68,7 @@ class BoardBroker:
     """Serves exactly one board on exactly one socket, for exactly one UID."""
 
     def __init__(self, *, board: str, db_path: str, sock_path: str,
-                 bound_uid: int, verifier: Verifier, ledger: NonceLedger,
+                 bound_uid: int, verifier: Verifier, ledger: BoardLedger,
                  worker_gid: int, manage_dir: bool = True) -> None:
         self.board = board
         self.db_path = db_path
@@ -148,7 +148,7 @@ class BoardBroker:
                 return
 
             result = self.ledger.consume_and_apply(
-                claims, lambda _led: self._apply(claims))
+                claims, lambda txn: self._apply(txn, claims))
             send_frame(conn, {"ok": True, "action": action, "result": result,
                               "peer": {"pid": pid, "uid": uid, "gid": gid}})
         except CapabilityError as exc:
@@ -166,29 +166,47 @@ class BoardBroker:
             except OSError:
                 pass
 
-    def _apply(self, claims: dict) -> str:
-        """The effect. Runs only inside the ledger's write transaction, and
-        only the broker UID can reach this DB at all."""
-        conn = sqlite3.connect(self.db_path, timeout=10.0)
-        try:
-            if claims["action"] == "read_sentinel":
-                row = conn.execute(
-                    "SELECT v FROM board_identity WHERE k='sentinel'"
-                ).fetchone()
-                return row[0] if row else "<none>"
-            if claims["action"] in ("complete", "block"):
-                state = "done" if claims["action"] == "complete" else "blocked"
-                # Upstream run_id CAS preserved inside the broker.
-                cur = conn.execute(
-                    "UPDATE tasks SET state=? WHERE task_id=? AND run_id=?",
-                    (state, claims["task"], claims["run_id"]))
-                conn.commit()
-                if cur.rowcount != 1:
-                    raise CapabilityError("run_id CAS failed")
-                return f"{claims['task']}->{state}"
-            return "ok"
-        finally:
-            conn.close()
+    # States a task may legitimately be moved OUT of. Anything already
+    # terminal is not re-transitionable, so a fresh nonce cannot redo it.
+    OPEN_STATES = ("claimed", "running")
+
+    def _apply(self, txn: sqlite3.Connection, claims: dict) -> str:
+        """The effect.
+
+        Runs on the LEDGER'S OWN connection, inside its BEGIN IMMEDIATE, and
+        never commits -- the ledger owns the commit. Only the broker UID can
+        reach this database at all.
+        """
+        if claims["action"] == "read_sentinel":
+            row = txn.execute(
+                "SELECT v FROM board_identity WHERE k='sentinel'").fetchone()
+            return row[0] if row else "<none>"
+
+        if claims["action"] in ("complete", "block"):
+            state = "done" if claims["action"] == "complete" else "blocked"
+            # Full-scope CAS: the capability's board, tenant and project must
+            # match the ROW, and the row must still be in an open state. A
+            # freshly minted nonce therefore cannot redo a finished task, and
+            # a cross-scope capability matches nothing and fails closed.
+            placeholders = ",".join("?" * len(self.OPEN_STATES))
+            cur = txn.execute(
+                f"""UPDATE tasks SET state=?
+                     WHERE task_id=?
+                       AND run_id=?
+                       AND board=?
+                       AND tenant=?
+                       AND project_id=?
+                       AND state IN ({placeholders})""",
+                (state, claims["task"], claims["run_id"], claims["board"],
+                 claims["tenant"], claims["project"], *self.OPEN_STATES))
+            if cur.rowcount != 1:
+                raise CapabilityError(
+                    "scoped CAS matched no open row "
+                    f"(task/run/board/tenant/project, state in "
+                    f"{self.OPEN_STATES}); rowcount={cur.rowcount}")
+            return f"{claims['task']}->{state}"
+
+        return "ok"
 
 
 def _reply(conn: socket.socket, reason: str, detail: str) -> None:

@@ -64,7 +64,10 @@ It is evidence about the **architecture**, not acceptance of any deployment.
    the ABA moot by construction; it is not a demonstration that a
    same-trust-domain ABA was defeated.
 7. **Author's own work.** Nothing here is independent review (SEL-333) or
-   independent security acceptance (SEL-326).
+   independent security acceptance (SEL-326). The review on ALGRP/AG#5
+   demonstrated the point concretely: it found two real defects in approach
+   C's effect layer that this author's own 25-control battery had missed.
+   See **Correction** in the README.
 
 ## How to run
 

@@ -1,0 +1,1020 @@
+{
+  "meta": {
+    "python": "3.12.3",
+    "run_id": "20261031T111332Z",
+    "scope": "LOCAL_ONLY synthetic boards; no installed Hermes, no real board DB, no credentials, no network",
+    "sqlite": "3.45.1",
+    "started_utc": "2026-10-31 11:13:32",
+    "uname": "Linux vm 6.18.44-fc-v185"
+  },
+  "results": [
+    {
+      "approach": "A",
+      "control": "cross_board_db_read",
+      "detail": "read /tmp/sel324_lab/A/kanban/agos-continuous/kanban.db",
+      "expected": "BLOCKED",
+      "outcome": "ALLOWED",
+      "sentinel": "FORBIDDEN_B",
+      "verdict": "FAIL"
+    },
+    {
+      "approach": "A",
+      "control": "cross_board_wal_shm_read",
+      "detail": "opened sidecars: ['-wal', '-shm']",
+      "expected": "BLOCKED",
+      "outcome": "ALLOWED",
+      "sentinel": null,
+      "verdict": "FAIL"
+    },
+    {
+      "approach": "A",
+      "control": "env_override_db_path",
+      "detail": "env-supplied path honoured",
+      "expected": "BLOCKED",
+      "outcome": "ALLOWED",
+      "sentinel": "FORBIDDEN_B",
+      "verdict": "FAIL"
+    },
+    {
+      "approach": "A",
+      "control": "issuer_key_read",
+      "detail": "read issuer private key at /tmp/sel324_lab/A/issuer.key",
+      "expected": "BLOCKED",
+      "outcome": "ALLOWED",
+      "sentinel": null,
+      "verdict": "FAIL"
+    },
+    {
+      "approach": "A",
+      "control": "other_capability_file_read",
+      "detail": "read peer capability at /tmp/sel324_lab/A/cap_board_b.json",
+      "expected": "BLOCKED",
+      "outcome": "ALLOWED",
+      "sentinel": null,
+      "verdict": "FAIL"
+    },
+    {
+      "approach": "A",
+      "control": "leaf_symlink",
+      "detail": "guard denied: database pathname is a symlink",
+      "expected": "BLOCKED",
+      "outcome": "BLOCKED",
+      "sentinel": null,
+      "verdict": "PASS"
+    },
+    {
+      "approach": "A",
+      "control": "ancestor_symlink",
+      "detail": "guard denied: ancestor is a symlink: /tmp/sel324_lab/A/scratch/anc_link",
+      "expected": "BLOCKED",
+      "outcome": "BLOCKED",
+      "sentinel": null,
+      "verdict": "PASS"
+    },
+    {
+      "approach": "A",
+      "control": "hardlink_to_forbidden",
+      "detail": "guard denied: database has 2 hard links",
+      "expected": "BLOCKED",
+      "outcome": "BLOCKED",
+      "sentinel": null,
+      "verdict": "PASS"
+    },
+    {
+      "approach": "A",
+      "control": "aba_rename_swap",
+      "detail": "post-open re-check passed while the fd read the forbidden inode",
+      "expected": "BLOCKED",
+      "outcome": "ALLOWED",
+      "sentinel": "FORBIDDEN_B",
+      "verdict": "FAIL"
+    },
+    {
+      "approach": "A",
+      "control": "direct_connect_bypass",
+      "detail": "guard bypassed entirely",
+      "expected": "BLOCKED",
+      "outcome": "ALLOWED",
+      "sentinel": "FORBIDDEN_B",
+      "verdict": "FAIL"
+    },
+    {
+      "approach": "A",
+      "control": "self_board_tamper",
+      "detail": "forged own-board state to done/forged_by_worker",
+      "expected": "BLOCKED",
+      "outcome": "ALLOWED",
+      "sentinel": null,
+      "verdict": "FAIL"
+    },
+    {
+      "approach": "A",
+      "control": "read_proc_environ",
+      "detail": "PermissionError: [Errno 13] Permission denied: '/proc/390/environ'",
+      "expected": "BLOCKED",
+      "outcome": "BLOCKED",
+      "sentinel": null,
+      "verdict": "PASS"
+    },
+    {
+      "approach": "A",
+      "control": "own_board_lifecycle",
+      "detail": "own board readable",
+      "expected": "ALLOWED",
+      "outcome": "ALLOWED",
+      "sentinel": "APPROVED_A",
+      "verdict": "PASS"
+    },
+    {
+      "approach": "A",
+      "control": "atomic_rollback_on_effect_failure",
+      "detail": "no broker in this approach",
+      "expected": "BLOCKED",
+      "outcome": "NA",
+      "sentinel": null,
+      "verdict": "NA"
+    },
+    {
+      "approach": "A",
+      "control": "fresh_nonce_on_completed_task",
+      "detail": "no broker in this approach",
+      "expected": "BLOCKED",
+      "outcome": "NA",
+      "sentinel": null,
+      "verdict": "NA"
+    },
+    {
+      "approach": "A",
+      "control": "cross_scope_tenant_project",
+      "detail": "no broker in this approach",
+      "expected": "BLOCKED",
+      "outcome": "NA",
+      "sentinel": null,
+      "verdict": "NA"
+    },
+    {
+      "approach": "A",
+      "control": "forged_signature",
+      "detail": "no broker in this approach",
+      "expected": "BLOCKED",
+      "outcome": "NA",
+      "sentinel": null,
+      "verdict": "NA"
+    },
+    {
+      "approach": "A",
+      "control": "leaked_capability_wrong_peer",
+      "detail": "no broker in this approach",
+      "expected": "BLOCKED",
+      "outcome": "NA",
+      "sentinel": null,
+      "verdict": "NA"
+    },
+    {
+      "approach": "A",
+      "control": "expired_capability",
+      "detail": "no broker in this approach",
+      "expected": "BLOCKED",
+      "outcome": "NA",
+      "sentinel": null,
+      "verdict": "NA"
+    },
+    {
+      "approach": "A",
+      "control": "duplicate_json_member",
+      "detail": "no broker in this approach",
+      "expected": "BLOCKED",
+      "outcome": "NA",
+      "sentinel": null,
+      "verdict": "NA"
+    },
+    {
+      "approach": "A",
+      "control": "cross_board_capability",
+      "detail": "no broker in this approach",
+      "expected": "BLOCKED",
+      "outcome": "NA",
+      "sentinel": null,
+      "verdict": "NA"
+    },
+    {
+      "approach": "A",
+      "control": "replay_same_nonce",
+      "detail": "no broker in this approach",
+      "expected": "BLOCKED",
+      "outcome": "NA",
+      "sentinel": null,
+      "verdict": "NA"
+    },
+    {
+      "approach": "A",
+      "control": "replay_after_restart",
+      "detail": "no broker in this approach",
+      "expected": "BLOCKED",
+      "outcome": "NA",
+      "sentinel": null,
+      "verdict": "NA"
+    },
+    {
+      "approach": "A",
+      "control": "foreign_uid_socket",
+      "detail": "no broker in this approach",
+      "expected": "BLOCKED",
+      "outcome": "NA",
+      "sentinel": null,
+      "verdict": "NA"
+    },
+    {
+      "approach": "A",
+      "control": "early_peer_rejection",
+      "detail": "no broker in this approach",
+      "expected": "BLOCKED",
+      "outcome": "NA",
+      "sentinel": null,
+      "verdict": "NA"
+    },
+    {
+      "approach": "A",
+      "control": "oversized_frame",
+      "detail": "no broker in this approach",
+      "expected": "BLOCKED",
+      "outcome": "NA",
+      "sentinel": null,
+      "verdict": "NA"
+    },
+    {
+      "approach": "A",
+      "control": "concurrent_single_winner",
+      "detail": "no broker in this approach",
+      "expected": "ALLOWED",
+      "outcome": "NA",
+      "sentinel": null,
+      "verdict": "NA"
+    },
+    {
+      "approach": "A",
+      "control": "flood_isolation",
+      "detail": "no broker in this approach",
+      "expected": "ALLOWED",
+      "outcome": "NA",
+      "sentinel": null,
+      "verdict": "NA"
+    },
+    {
+      "approach": "B",
+      "control": "cross_board_db_read",
+      "detail": "read /tmp/sel324_lab/B/kanban/agos-continuous/kanban.db",
+      "expected": "BLOCKED",
+      "outcome": "ALLOWED",
+      "sentinel": "FORBIDDEN_B",
+      "verdict": "FAIL"
+    },
+    {
+      "approach": "B",
+      "control": "cross_board_wal_shm_read",
+      "detail": "opened sidecars: ['-wal', '-shm']",
+      "expected": "BLOCKED",
+      "outcome": "ALLOWED",
+      "sentinel": null,
+      "verdict": "FAIL"
+    },
+    {
+      "approach": "B",
+      "control": "env_override_db_path",
+      "detail": "env-supplied path honoured",
+      "expected": "BLOCKED",
+      "outcome": "ALLOWED",
+      "sentinel": "FORBIDDEN_B",
+      "verdict": "FAIL"
+    },
+    {
+      "approach": "B",
+      "control": "issuer_key_read",
+      "detail": "read issuer private key at /tmp/sel324_lab/B/issuer.key",
+      "expected": "BLOCKED",
+      "outcome": "ALLOWED",
+      "sentinel": null,
+      "verdict": "FAIL"
+    },
+    {
+      "approach": "B",
+      "control": "other_capability_file_read",
+      "detail": "read peer capability at /tmp/sel324_lab/B/cap_board_b.json",
+      "expected": "BLOCKED",
+      "outcome": "ALLOWED",
+      "sentinel": null,
+      "verdict": "FAIL"
+    },
+    {
+      "approach": "B",
+      "control": "leaf_symlink",
+      "detail": "SQLITE_OPEN_NOFOLLOW rc=14: unable to open database file",
+      "expected": "BLOCKED",
+      "outcome": "BLOCKED",
+      "sentinel": null,
+      "verdict": "PASS"
+    },
+    {
+      "approach": "B",
+      "control": "ancestor_symlink",
+      "detail": "ancestor symlink traversed despite O_NOFOLLOW",
+      "expected": "BLOCKED",
+      "outcome": "ALLOWED",
+      "sentinel": "FORBIDDEN_B",
+      "verdict": "FAIL"
+    },
+    {
+      "approach": "B",
+      "control": "hardlink_to_forbidden",
+      "detail": "guard denied: database has 2 hard links",
+      "expected": "BLOCKED",
+      "outcome": "BLOCKED",
+      "sentinel": null,
+      "verdict": "PASS"
+    },
+    {
+      "approach": "B",
+      "control": "aba_rename_swap",
+      "detail": "fd stayed bound to the vetted inode",
+      "expected": "BLOCKED",
+      "outcome": "BLOCKED",
+      "sentinel": "APPROVED_A",
+      "verdict": "PASS"
+    },
+    {
+      "approach": "B",
+      "control": "direct_connect_bypass",
+      "detail": "guard bypassed entirely",
+      "expected": "BLOCKED",
+      "outcome": "ALLOWED",
+      "sentinel": "FORBIDDEN_B",
+      "verdict": "FAIL"
+    },
+    {
+      "approach": "B",
+      "control": "self_board_tamper",
+      "detail": "forged own-board state to done/forged_by_worker",
+      "expected": "BLOCKED",
+      "outcome": "ALLOWED",
+      "sentinel": null,
+      "verdict": "FAIL"
+    },
+    {
+      "approach": "B",
+      "control": "read_proc_environ",
+      "detail": "PermissionError: [Errno 13] Permission denied: '/proc/405/environ'",
+      "expected": "BLOCKED",
+      "outcome": "BLOCKED",
+      "sentinel": null,
+      "verdict": "PASS"
+    },
+    {
+      "approach": "B",
+      "control": "own_board_lifecycle",
+      "detail": "own board readable",
+      "expected": "ALLOWED",
+      "outcome": "ALLOWED",
+      "sentinel": "APPROVED_A",
+      "verdict": "PASS"
+    },
+    {
+      "approach": "B",
+      "control": "atomic_rollback_on_effect_failure",
+      "detail": "no broker in this approach",
+      "expected": "BLOCKED",
+      "outcome": "NA",
+      "sentinel": null,
+      "verdict": "NA"
+    },
+    {
+      "approach": "B",
+      "control": "fresh_nonce_on_completed_task",
+      "detail": "no broker in this approach",
+      "expected": "BLOCKED",
+      "outcome": "NA",
+      "sentinel": null,
+      "verdict": "NA"
+    },
+    {
+      "approach": "B",
+      "control": "cross_scope_tenant_project",
+      "detail": "no broker in this approach",
+      "expected": "BLOCKED",
+      "outcome": "NA",
+      "sentinel": null,
+      "verdict": "NA"
+    },
+    {
+      "approach": "B",
+      "control": "forged_signature",
+      "detail": "no broker in this approach",
+      "expected": "BLOCKED",
+      "outcome": "NA",
+      "sentinel": null,
+      "verdict": "NA"
+    },
+    {
+      "approach": "B",
+      "control": "leaked_capability_wrong_peer",
+      "detail": "no broker in this approach",
+      "expected": "BLOCKED",
+      "outcome": "NA",
+      "sentinel": null,
+      "verdict": "NA"
+    },
+    {
+      "approach": "B",
+      "control": "expired_capability",
+      "detail": "no broker in this approach",
+      "expected": "BLOCKED",
+      "outcome": "NA",
+      "sentinel": null,
+      "verdict": "NA"
+    },
+    {
+      "approach": "B",
+      "control": "duplicate_json_member",
+      "detail": "no broker in this approach",
+      "expected": "BLOCKED",
+      "outcome": "NA",
+      "sentinel": null,
+      "verdict": "NA"
+    },
+    {
+      "approach": "B",
+      "control": "cross_board_capability",
+      "detail": "no broker in this approach",
+      "expected": "BLOCKED",
+      "outcome": "NA",
+      "sentinel": null,
+      "verdict": "NA"
+    },
+    {
+      "approach": "B",
+      "control": "replay_same_nonce",
+      "detail": "no broker in this approach",
+      "expected": "BLOCKED",
+      "outcome": "NA",
+      "sentinel": null,
+      "verdict": "NA"
+    },
+    {
+      "approach": "B",
+      "control": "replay_after_restart",
+      "detail": "no broker in this approach",
+      "expected": "BLOCKED",
+      "outcome": "NA",
+      "sentinel": null,
+      "verdict": "NA"
+    },
+    {
+      "approach": "B",
+      "control": "foreign_uid_socket",
+      "detail": "no broker in this approach",
+      "expected": "BLOCKED",
+      "outcome": "NA",
+      "sentinel": null,
+      "verdict": "NA"
+    },
+    {
+      "approach": "B",
+      "control": "early_peer_rejection",
+      "detail": "no broker in this approach",
+      "expected": "BLOCKED",
+      "outcome": "NA",
+      "sentinel": null,
+      "verdict": "NA"
+    },
+    {
+      "approach": "B",
+      "control": "oversized_frame",
+      "detail": "no broker in this approach",
+      "expected": "BLOCKED",
+      "outcome": "NA",
+      "sentinel": null,
+      "verdict": "NA"
+    },
+    {
+      "approach": "B",
+      "control": "concurrent_single_winner",
+      "detail": "no broker in this approach",
+      "expected": "ALLOWED",
+      "outcome": "NA",
+      "sentinel": null,
+      "verdict": "NA"
+    },
+    {
+      "approach": "B",
+      "control": "flood_isolation",
+      "detail": "no broker in this approach",
+      "expected": "ALLOWED",
+      "outcome": "NA",
+      "sentinel": null,
+      "verdict": "NA"
+    },
+    {
+      "approach": "D",
+      "control": "cross_board_db_read",
+      "detail": "OperationalError: unable to open database file",
+      "expected": "BLOCKED",
+      "outcome": "BLOCKED",
+      "sentinel": null,
+      "verdict": "PASS"
+    },
+    {
+      "approach": "D",
+      "control": "cross_board_wal_shm_read",
+      "detail": "no -wal/-shm sidecar readable",
+      "expected": "BLOCKED",
+      "outcome": "BLOCKED",
+      "sentinel": null,
+      "verdict": "PASS"
+    },
+    {
+      "approach": "D",
+      "control": "env_override_db_path",
+      "detail": "OperationalError: unable to open database file",
+      "expected": "BLOCKED",
+      "outcome": "BLOCKED",
+      "sentinel": null,
+      "verdict": "PASS"
+    },
+    {
+      "approach": "D",
+      "control": "issuer_key_read",
+      "detail": "PermissionError: [Errno 13] Permission denied: '/tmp/sel324_lab/D/issuer.key'",
+      "expected": "BLOCKED",
+      "outcome": "BLOCKED",
+      "sentinel": null,
+      "verdict": "PASS"
+    },
+    {
+      "approach": "D",
+      "control": "other_capability_file_read",
+      "detail": "PermissionError: [Errno 13] Permission denied: '/tmp/sel324_lab/D/cap_board_b.json'",
+      "expected": "BLOCKED",
+      "outcome": "BLOCKED",
+      "sentinel": null,
+      "verdict": "PASS"
+    },
+    {
+      "approach": "D",
+      "control": "leaf_symlink",
+      "detail": "OperationalError: unable to open database file",
+      "expected": "BLOCKED",
+      "outcome": "BLOCKED",
+      "sentinel": null,
+      "verdict": "PASS"
+    },
+    {
+      "approach": "D",
+      "control": "ancestor_symlink",
+      "detail": "OperationalError: unable to open database file",
+      "expected": "BLOCKED",
+      "outcome": "BLOCKED",
+      "sentinel": null,
+      "verdict": "PASS"
+    },
+    {
+      "approach": "D",
+      "control": "hardlink_to_forbidden",
+      "detail": "cannot create hard link: [Errno 13] Permission denied: '/tmp/sel324_lab/D/kanban/agos-continuous/kanban.db' -> '/tmp/sel324_lab/D/scratch-a/hard_alias.db'",
+      "expected": "BLOCKED",
+      "outcome": "BLOCKED",
+      "sentinel": null,
+      "verdict": "PASS"
+    },
+    {
+      "approach": "D",
+      "control": "aba_rename_swap",
+      "detail": "cannot stage ABA (no write access): [Errno 13] Permission denied: '/tmp/sel324_lab/D/kanban/agos-continuous/kanban.db'",
+      "expected": "BLOCKED",
+      "outcome": "BLOCKED",
+      "sentinel": null,
+      "verdict": "PASS"
+    },
+    {
+      "approach": "D",
+      "control": "direct_connect_bypass",
+      "detail": "OperationalError: unable to open database file",
+      "expected": "BLOCKED",
+      "outcome": "BLOCKED",
+      "sentinel": null,
+      "verdict": "PASS"
+    },
+    {
+      "approach": "D",
+      "control": "self_board_tamper",
+      "detail": "forged own-board state to done/forged_by_worker",
+      "expected": "BLOCKED",
+      "outcome": "ALLOWED",
+      "sentinel": null,
+      "verdict": "FAIL"
+    },
+    {
+      "approach": "D",
+      "control": "read_proc_environ",
+      "detail": "PermissionError: [Errno 13] Permission denied: '/proc/422/environ'",
+      "expected": "BLOCKED",
+      "outcome": "BLOCKED",
+      "sentinel": null,
+      "verdict": "PASS"
+    },
+    {
+      "approach": "D",
+      "control": "own_board_lifecycle",
+      "detail": "own board readable",
+      "expected": "ALLOWED",
+      "outcome": "ALLOWED",
+      "sentinel": "APPROVED_A",
+      "verdict": "PASS"
+    },
+    {
+      "approach": "D",
+      "control": "atomic_rollback_on_effect_failure",
+      "detail": "no broker in this approach",
+      "expected": "BLOCKED",
+      "outcome": "NA",
+      "sentinel": null,
+      "verdict": "NA"
+    },
+    {
+      "approach": "D",
+      "control": "fresh_nonce_on_completed_task",
+      "detail": "no broker in this approach",
+      "expected": "BLOCKED",
+      "outcome": "NA",
+      "sentinel": null,
+      "verdict": "NA"
+    },
+    {
+      "approach": "D",
+      "control": "cross_scope_tenant_project",
+      "detail": "no broker in this approach",
+      "expected": "BLOCKED",
+      "outcome": "NA",
+      "sentinel": null,
+      "verdict": "NA"
+    },
+    {
+      "approach": "D",
+      "control": "forged_signature",
+      "detail": "no broker in this approach",
+      "expected": "BLOCKED",
+      "outcome": "NA",
+      "sentinel": null,
+      "verdict": "NA"
+    },
+    {
+      "approach": "D",
+      "control": "leaked_capability_wrong_peer",
+      "detail": "no broker in this approach",
+      "expected": "BLOCKED",
+      "outcome": "NA",
+      "sentinel": null,
+      "verdict": "NA"
+    },
+    {
+      "approach": "D",
+      "control": "expired_capability",
+      "detail": "no broker in this approach",
+      "expected": "BLOCKED",
+      "outcome": "NA",
+      "sentinel": null,
+      "verdict": "NA"
+    },
+    {
+      "approach": "D",
+      "control": "duplicate_json_member",
+      "detail": "no broker in this approach",
+      "expected": "BLOCKED",
+      "outcome": "NA",
+      "sentinel": null,
+      "verdict": "NA"
+    },
+    {
+      "approach": "D",
+      "control": "cross_board_capability",
+      "detail": "no broker in this approach",
+      "expected": "BLOCKED",
+      "outcome": "NA",
+      "sentinel": null,
+      "verdict": "NA"
+    },
+    {
+      "approach": "D",
+      "control": "replay_same_nonce",
+      "detail": "no broker in this approach",
+      "expected": "BLOCKED",
+      "outcome": "NA",
+      "sentinel": null,
+      "verdict": "NA"
+    },
+    {
+      "approach": "D",
+      "control": "replay_after_restart",
+      "detail": "no broker in this approach",
+      "expected": "BLOCKED",
+      "outcome": "NA",
+      "sentinel": null,
+      "verdict": "NA"
+    },
+    {
+      "approach": "D",
+      "control": "foreign_uid_socket",
+      "detail": "no broker in this approach",
+      "expected": "BLOCKED",
+      "outcome": "NA",
+      "sentinel": null,
+      "verdict": "NA"
+    },
+    {
+      "approach": "D",
+      "control": "early_peer_rejection",
+      "detail": "no broker in this approach",
+      "expected": "BLOCKED",
+      "outcome": "NA",
+      "sentinel": null,
+      "verdict": "NA"
+    },
+    {
+      "approach": "D",
+      "control": "oversized_frame",
+      "detail": "no broker in this approach",
+      "expected": "BLOCKED",
+      "outcome": "NA",
+      "sentinel": null,
+      "verdict": "NA"
+    },
+    {
+      "approach": "D",
+      "control": "concurrent_single_winner",
+      "detail": "no broker in this approach",
+      "expected": "ALLOWED",
+      "outcome": "NA",
+      "sentinel": null,
+      "verdict": "NA"
+    },
+    {
+      "approach": "D",
+      "control": "flood_isolation",
+      "detail": "no broker in this approach",
+      "expected": "ALLOWED",
+      "outcome": "NA",
+      "sentinel": null,
+      "verdict": "NA"
+    },
+    {
+      "approach": "C",
+      "control": "cross_board_db_read",
+      "detail": "OperationalError: unable to open database file",
+      "expected": "BLOCKED",
+      "outcome": "BLOCKED",
+      "sentinel": null,
+      "verdict": "PASS"
+    },
+    {
+      "approach": "C",
+      "control": "cross_board_wal_shm_read",
+      "detail": "no -wal/-shm sidecar readable",
+      "expected": "BLOCKED",
+      "outcome": "BLOCKED",
+      "sentinel": null,
+      "verdict": "PASS"
+    },
+    {
+      "approach": "C",
+      "control": "env_override_db_path",
+      "detail": "OperationalError: unable to open database file",
+      "expected": "BLOCKED",
+      "outcome": "BLOCKED",
+      "sentinel": null,
+      "verdict": "PASS"
+    },
+    {
+      "approach": "C",
+      "control": "issuer_key_read",
+      "detail": "PermissionError: [Errno 13] Permission denied: '/tmp/sel324_lab/C/state/issuer.key'",
+      "expected": "BLOCKED",
+      "outcome": "BLOCKED",
+      "sentinel": null,
+      "verdict": "PASS"
+    },
+    {
+      "approach": "C",
+      "control": "other_capability_file_read",
+      "detail": "PermissionError: [Errno 13] Permission denied: '/tmp/sel324_lab/C/state/cap_board_b.json'",
+      "expected": "BLOCKED",
+      "outcome": "BLOCKED",
+      "sentinel": null,
+      "verdict": "PASS"
+    },
+    {
+      "approach": "C",
+      "control": "leaf_symlink",
+      "detail": "OperationalError: unable to open database file",
+      "expected": "BLOCKED",
+      "outcome": "BLOCKED",
+      "sentinel": null,
+      "verdict": "PASS"
+    },
+    {
+      "approach": "C",
+      "control": "ancestor_symlink",
+      "detail": "OperationalError: unable to open database file",
+      "expected": "BLOCKED",
+      "outcome": "BLOCKED",
+      "sentinel": null,
+      "verdict": "PASS"
+    },
+    {
+      "approach": "C",
+      "control": "hardlink_to_forbidden",
+      "detail": "cannot create hard link: [Errno 13] Permission denied: '/tmp/sel324_lab/C/kanban/agos-continuous/kanban.db' -> '/tmp/sel324_lab/C/scratch-a/hard_alias.db'",
+      "expected": "BLOCKED",
+      "outcome": "BLOCKED",
+      "sentinel": null,
+      "verdict": "PASS"
+    },
+    {
+      "approach": "C",
+      "control": "aba_rename_swap",
+      "detail": "cannot stage ABA (no write access): [Errno 13] Permission denied: '/tmp/sel324_lab/C/kanban/agos-control/kanban.db'",
+      "expected": "BLOCKED",
+      "outcome": "BLOCKED",
+      "sentinel": null,
+      "verdict": "PASS"
+    },
+    {
+      "approach": "C",
+      "control": "direct_connect_bypass",
+      "detail": "OperationalError: unable to open database file",
+      "expected": "BLOCKED",
+      "outcome": "BLOCKED",
+      "sentinel": null,
+      "verdict": "PASS"
+    },
+    {
+      "approach": "C",
+      "control": "self_board_tamper",
+      "detail": "OperationalError: unable to open database file",
+      "expected": "BLOCKED",
+      "outcome": "BLOCKED",
+      "sentinel": null,
+      "verdict": "PASS"
+    },
+    {
+      "approach": "C",
+      "control": "read_proc_environ",
+      "detail": "PermissionError: [Errno 13] Permission denied: '/proc/439/environ'",
+      "expected": "BLOCKED",
+      "outcome": "BLOCKED",
+      "sentinel": null,
+      "verdict": "PASS"
+    },
+    {
+      "approach": "C",
+      "control": "own_board_lifecycle",
+      "detail": "broker applied t_agos-control_1->done",
+      "expected": "ALLOWED",
+      "outcome": "ALLOWED",
+      "sentinel": null,
+      "verdict": "PASS"
+    },
+    {
+      "approach": "C",
+      "control": "forged_signature",
+      "detail": "capability_rejected: invalid signature",
+      "expected": "BLOCKED",
+      "outcome": "BLOCKED",
+      "sentinel": null,
+      "verdict": "PASS"
+    },
+    {
+      "approach": "C",
+      "control": "leaked_capability_wrong_peer",
+      "detail": "capability_rejected: peer uid mismatch: token binds 512, kernel reports 511",
+      "expected": "BLOCKED",
+      "outcome": "BLOCKED",
+      "sentinel": null,
+      "verdict": "PASS"
+    },
+    {
+      "approach": "C",
+      "control": "expired_capability",
+      "detail": "capability_rejected: capability expired",
+      "expected": "BLOCKED",
+      "outcome": "BLOCKED",
+      "sentinel": null,
+      "verdict": "PASS"
+    },
+    {
+      "approach": "C",
+      "control": "duplicate_json_member",
+      "detail": "capability_rejected: duplicate JSON member: board",
+      "expected": "BLOCKED",
+      "outcome": "BLOCKED",
+      "sentinel": null,
+      "verdict": "PASS"
+    },
+    {
+      "approach": "C",
+      "control": "cross_board_capability",
+      "detail": "capability_rejected: board mismatch: token binds agos-continuous, socket serves agos-control",
+      "expected": "BLOCKED",
+      "outcome": "BLOCKED",
+      "sentinel": null,
+      "verdict": "PASS"
+    },
+    {
+      "approach": "C",
+      "control": "replay_same_nonce",
+      "detail": "first=ALLOWED replay_rejected: nonce already consumed: a238001b0e1b...",
+      "expected": "BLOCKED",
+      "outcome": "BLOCKED",
+      "sentinel": null,
+      "verdict": "PASS"
+    },
+    {
+      "approach": "C",
+      "control": "replay_after_restart",
+      "detail": "replay_rejected: nonce already consumed: 67e0a6cb77d0...",
+      "expected": "BLOCKED",
+      "outcome": "BLOCKED",
+      "sentinel": null,
+      "verdict": "PASS"
+    },
+    {
+      "approach": "C",
+      "control": "foreign_uid_socket",
+      "detail": "socket refused: PermissionError: [Errno 13] Permission denied",
+      "expected": "BLOCKED",
+      "outcome": "BLOCKED",
+      "sentinel": null,
+      "verdict": "PASS"
+    },
+    {
+      "approach": "C",
+      "control": "early_peer_rejection",
+      "detail": "peer_uid_not_bound: uid 0 may not use the agos-control socket",
+      "expected": "BLOCKED",
+      "outcome": "BLOCKED",
+      "sentinel": null,
+      "verdict": "PASS"
+    },
+    {
+      "approach": "C",
+      "control": "oversized_frame",
+      "detail": "framing_rejected: frame length out of policy: 8388608",
+      "expected": "BLOCKED",
+      "outcome": "BLOCKED",
+      "sentinel": null,
+      "verdict": "PASS"
+    },
+    {
+      "approach": "C",
+      "control": "concurrent_single_winner",
+      "detail": "winners=1/8 (exactly 1 required)",
+      "expected": "ALLOWED",
+      "outcome": "ALLOWED",
+      "sentinel": null,
+      "verdict": "PASS"
+    },
+    {
+      "approach": "C",
+      "control": "atomic_rollback_on_effect_failure",
+      "detail": "rolled back together: task still 'claimed', nonce unspent (capability safely retryable)",
+      "expected": "BLOCKED",
+      "outcome": "BLOCKED",
+      "sentinel": null,
+      "verdict": "PASS"
+    },
+    {
+      "approach": "C",
+      "control": "fresh_nonce_on_completed_task",
+      "detail": "first=ALLOWED/state='done' capability_rejected: scoped CAS matched no open row (task/run/board/tenant/project, state in ('claimed', 'running')); rowcount=0",
+      "expected": "BLOCKED",
+      "outcome": "BLOCKED",
+      "sentinel": null,
+      "verdict": "PASS"
+    },
+    {
+      "approach": "C",
+      "control": "cross_scope_tenant_project",
+      "detail": "capability_rejected: scoped CAS matched no open row (task/run/board/tenant/project, state in ('claimed', 'running')); rowcount=0",
+      "expected": "BLOCKED",
+      "outcome": "BLOCKED",
+      "sentinel": null,
+      "verdict": "PASS"
+    },
+    {
+      "approach": "C",
+      "control": "flood_isolation",
+      "detail": "board B served 40/40 under board A flood",
+      "expected": "ALLOWED",
+      "outcome": "ALLOWED",
+      "sentinel": null,
+      "verdict": "PASS"
+    }
+  ]
+}

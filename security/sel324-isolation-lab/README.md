@@ -14,16 +14,20 @@ operating-system UIDs**.
 | **A** | In-process pathname `stat` identity guard | Library code, same UID as the worker. The shape of the pinned `sel324_authz.py` / `_file_identity` candidate. |
 | **B** | fd-bound identity — `O_NOFOLLOW` + `fstat` + procfs reopen, plus `SQLITE_OPEN_NOFOLLOW` via the C API | Still library code, same UID. |
 | **D** | Per-board directory `0700`, owned by **that board's own worker UID** | The kernel. No guard in the path. |
-| **C** | Per-board Hermes instance + **UID broker** over a per-board unix socket, `SO_PEERCRED`, Ed25519 capability, durable single-use nonce | The kernel *and* a separate trust domain the worker cannot enter. The SEL-433 target. |
+| **C** | Per-board Hermes instance + **UID broker** over a per-board unix socket, `SO_PEERCRED`, Ed25519 capability, durable single-use nonce co-located with the board DB | The kernel *and* a separate trust domain the worker cannot enter. The SEL-433 target. |
 
 ## Headline results
 
 ```
-A  in-process stat guard ............ PASS  5   FAIL 8   NA 12
-B  fd-bound identity ................ PASS  5   FAIL 8   NA 12
-D  per-board UID, no broker ......... PASS 12   FAIL 1   NA 12
-C  per-board instance + UID broker ... PASS 25  FAIL 0   NA  0
+A  in-process stat guard ............ PASS  5   FAIL 8   NA 15
+B  fd-bound identity ................ PASS  5   FAIL 8   NA 15
+D  per-board UID, no broker ......... PASS 12   FAIL 1   NA 15
+C  per-board instance + UID broker ... PASS 28  FAIL 0   NA  0
 ```
+
+28 controls, not the original 25: three were added after the review on
+ALGRP/AG#5 found two real defects in approach C's effect path. See
+**Correction** below.
 
 Latest matrix and per-failure detail: [`evidence/`](evidence/).
 
@@ -64,11 +68,46 @@ Latest matrix and per-failure detail: [`evidence/`](evidence/).
    across a broker restart), single-winner concurrency under 8 racers, and
    40/40 availability for board B while board A floods.
 
+## Correction (31.10.2026, after review on ALGRP/AG#5)
+
+The first version of this lab claimed the nonce consume and the effect ran in
+one `BEGIN IMMEDIATE`. **That claim was false**, and a review caught it:
+
+1. **Not atomic.** `nonce_ledger.py` opened `BEGIN IMMEDIATE` on its *own*
+   database file, then `BoardBroker._apply` ignored that connection, opened a
+   second one to the board DB, and **committed board state before the ledger
+   committed**. Two separate SQLite files cannot share a transaction, so a
+   crash in between left the task `done` with the nonce **unspent** — i.e.
+   replayable.
+2. **Unscoped effect CAS.** `UPDATE tasks SET state=? WHERE task_id=? AND
+   run_id=?` carried no `state`, `board`, `tenant` or `project_id` predicate,
+   so a freshly minted nonce could redo an already-completed task, and a
+   capability bearing a foreign tenant/project was never checked against the
+   row.
+
+Both are fixed: the ledger is now a **table inside the board's own database**,
+so there is one file and one transaction and the effect runs on the ledger's
+connection without committing; and the CAS now requires task, run, board,
+tenant, project and an open state, with `rowcount == 1`.
+
+Three controls were added for exactly these cases (26–28), and
+`proofs/regression_proof_prefix_defect.py` reconstructs the pre-fix shape and
+confirms all three **detect** it (`3/3`), so they are not vacuous:
+
+```
+(a) atomic_rollback_on_effect_failure : state='done' nonce_spent=False -> DETECTS
+(b) fresh_nonce_on_completed_task     : redo_accepted=True             -> DETECTS
+(c) cross_scope_tenant_project        : foreign-scope accepted=True    -> DETECTS
+```
+
+The signature, peer-UID and replay findings in this lab were never in doubt;
+what was broken was the **effect layer** behind a validly verified capability.
+
 ## Layout
 
 ```
 lab/capability.py        Ed25519 capability: mint, verify, duplicate-member rejection
-lab/nonce_ledger.py      durable single-use nonce; consume + effect in one BEGIN IMMEDIATE
+lab/nonce_ledger.py      single-use nonce as a TABLE IN the board DB; nonce + effect in one real BEGIN IMMEDIATE on one file
 lab/approach_a_stat.py   A — pathname stat guard (with the TOCTOU hooks)
 lab/approach_b_fdbound.py B — O_NOFOLLOW/fstat/procfs + SQLITE_OPEN_NOFOLLOW via ctypes
 lab/approach_c_broker.py C — per-board broker, SO_PEERCRED, fail-closed request path
@@ -78,6 +117,7 @@ lab/probe.py             the attacker/worker, run as a REAL separate UID
 lab/runner.py            builds all four layouts, runs the battery, emits the matrix
 lab/boards.py            synthetic two-board fixtures
 evidence/run_<UTC>/      results.json + RESULTS.md per run
+proofs/                  reconstructs the pre-fix defect to show the new controls catch it
 ```
 
 ## What this does not settle
