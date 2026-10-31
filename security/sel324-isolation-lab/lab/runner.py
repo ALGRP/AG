@@ -407,6 +407,10 @@ def run_broker_battery(layout: dict, issuer: Issuer, broker: BrokerProcess,
                    "sock_path": sock_a, "capability": tok})
     add("own_board_lifecycle", r.get("outcome", "ERROR"), r.get("detail", ""))
 
+    # Subsequent valid heartbeat/replay controls need an active fixture.
+    # Keep terminal-task rejection strict; reset only synthetic lab state.
+    _set_task_state(layout["approved_db"], f"t_{boards.BOARD_A}_1", "claimed")
+
     # forged signature
     env = json.loads(mint())
     env["sig"] = "00" * 64

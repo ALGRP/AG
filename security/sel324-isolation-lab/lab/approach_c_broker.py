@@ -70,6 +70,8 @@ class BoardBroker:
     def __init__(self, *, board: str, db_path: str, sock_path: str,
                  bound_uid: int, verifier: Verifier, ledger: BoardLedger,
                  worker_gid: int, manage_dir: bool = True) -> None:
+        if os.path.realpath(ledger.path) != os.path.realpath(db_path):
+            raise ValueError("nonce ledger and board effects must share one database")
         self.board = board
         self.db_path = db_path
         self.sock_path = sock_path
@@ -177,6 +179,16 @@ class BoardBroker:
         never commits -- the ledger owns the commit. Only the broker UID can
         reach this database at all.
         """
+        # Preserve PR #6's task binding for EVERY action, including heartbeat
+        # and sentinel reads. The transition CAS below repeats the predicates.
+        row = txn.execute(
+            "SELECT board, tenant, project_id, run_id, state FROM tasks "
+            "WHERE task_id=?", (claims["task"],)).fetchone()
+        expected = (self.board, claims["tenant"], claims["project"],
+                    claims["run_id"])
+        if (claims["board"] != self.board or row is None
+                or tuple(row[:4]) != expected or row[4] not in self.OPEN_STATES):
+            raise CapabilityError("task scope, active state or run_id CAS failed")
         if claims["action"] == "read_sentinel":
             row = txn.execute(
                 "SELECT v FROM board_identity WHERE k='sentinel'").fetchone()

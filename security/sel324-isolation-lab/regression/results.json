@@ -1,0 +1,30 @@
+{
+  "source_commit": "76a9638983d4955af3062d10a249f38195c43367",
+  "runtime": "Linux-6.18.57-x86_64-with-glibc2.39",
+  "python": "3.12.14",
+  "results": {
+    "baseline": {
+      "exit": 1,
+      "summary": {
+        "variant": "baseline",
+        "run": 11,
+        "passed": 4,
+        "failures": 7,
+        "errors": 0
+      }
+    },
+    "candidate": {
+      "exit": 0,
+      "summary": {
+        "variant": "candidate",
+        "run": 11,
+        "passed": 11,
+        "failures": 0,
+        "errors": 0
+      }
+    }
+  },
+  "peer_identity": "TEST_INJECTED_NOT_OS_ISOLATION",
+  "live_changed": false,
+  "independent_accepted": false
+}

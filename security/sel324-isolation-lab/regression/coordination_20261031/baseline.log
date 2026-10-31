@@ -1,0 +1,187 @@
+{"variant": "baseline", "run": 16, "passed": 5, "failures": 11, "errors": 0, "assertion_failures": 18}
+test_complete_commits_effect_and_nonce (__main__.AtomicBroker.test_complete_commits_effect_and_nonce) ... ok
+test_effect_not_visible_before_nonce_commit (__main__.AtomicBroker.test_effect_not_visible_before_nonce_commit) ... FAIL
+test_eight_distinct_capabilities_have_one_task_winner (__main__.AtomicBroker.test_eight_distinct_capabilities_have_one_task_winner) ... FAIL
+test_failure_after_effect_rolls_back_effect_and_nonce (__main__.AtomicBroker.test_failure_after_effect_rolls_back_effect_and_nonce) ... FAIL
+test_fresh_nonce_cannot_block_finished_task (__main__.AtomicBroker.test_fresh_nonce_cannot_block_finished_task) ... FAIL
+test_fresh_nonce_cannot_complete_finished_task (__main__.AtomicBroker.test_fresh_nonce_cannot_complete_finished_task) ... FAIL
+test_heartbeat_checks_task_scope_run_and_terminal_state (__main__.AtomicBroker.test_heartbeat_checks_task_scope_run_and_terminal_state) ... 
+  test_heartbeat_checks_task_scope_run_and_terminal_state (__main__.AtomicBroker.test_heartbeat_checks_task_scope_run_and_terminal_state) (changes={'tenant': 'wrong'}) ... FAIL
+  test_heartbeat_checks_task_scope_run_and_terminal_state (__main__.AtomicBroker.test_heartbeat_checks_task_scope_run_and_terminal_state) (changes={'project': 'wrong'}) ... FAIL
+  test_heartbeat_checks_task_scope_run_and_terminal_state (__main__.AtomicBroker.test_heartbeat_checks_task_scope_run_and_terminal_state) (changes={'run_id': 'stale'}) ... FAIL
+  test_heartbeat_checks_task_scope_run_and_terminal_state (__main__.AtomicBroker.test_heartbeat_checks_task_scope_run_and_terminal_state) (changes={'task': 'missing'}) ... FAIL
+test_heartbeat_checks_task_scope_run_and_terminal_state (__main__.AtomicBroker.test_heartbeat_checks_task_scope_run_and_terminal_state) ... FAIL
+test_mismatched_ledger_configuration_rejected (__main__.AtomicBroker.test_mismatched_ledger_configuration_rejected) ... FAIL
+test_missing_task_denied_without_consumption (__main__.AtomicBroker.test_missing_task_denied_without_consumption) ... ok
+test_running_task_can_complete (__main__.AtomicBroker.test_running_task_can_complete) ... ok
+test_same_token_replay_denied (__main__.AtomicBroker.test_same_token_replay_denied) ... ok
+test_sentinel_read_requires_active_scoped_task (__main__.AtomicBroker.test_sentinel_read_requires_active_scoped_task) ... 
+  test_sentinel_read_requires_active_scoped_task (__main__.AtomicBroker.test_sentinel_read_requires_active_scoped_task) (changes={'tenant': 'wrong'}) ... FAIL
+  test_sentinel_read_requires_active_scoped_task (__main__.AtomicBroker.test_sentinel_read_requires_active_scoped_task) (changes={'task': 'missing'}) ... FAIL
+  test_sentinel_read_requires_active_scoped_task (__main__.AtomicBroker.test_sentinel_read_requires_active_scoped_task) (changes={'run_id': 'stale'}) ... FAIL
+test_sentinel_read_requires_active_scoped_task (__main__.AtomicBroker.test_sentinel_read_requires_active_scoped_task) ... FAIL
+test_signed_wrong_project_denied_without_consumption (__main__.AtomicBroker.test_signed_wrong_project_denied_without_consumption) ... FAIL
+test_signed_wrong_tenant_denied_without_consumption (__main__.AtomicBroker.test_signed_wrong_tenant_denied_without_consumption) ... FAIL
+test_stale_run_denied_without_consumption (__main__.AtomicBroker.test_stale_run_denied_without_consumption) ... ok
+test_wrong_board_row_rejected_without_consumption (__main__.AtomicBroker.test_wrong_board_row_rejected_without_consumption) ... FAIL
+
+======================================================================
+FAIL: test_effect_not_visible_before_nonce_commit (__main__.AtomicBroker.test_effect_not_visible_before_nonce_commit)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/d68b93092e8d/coordination/security/sel324-isolation-lab/regression/test_atomic_broker.py", line 102, in test_effect_not_visible_before_nonce_commit
+    self.assertEqual(seen,[('claimed',0)])
+AssertionError: Lists differ: [('done', 0)] != [('claimed', 0)]
+
+First differing element 0:
+('done', 0)
+('claimed', 0)
+
+- [('done', 0)]
++ [('claimed', 0)]
+
+======================================================================
+FAIL: test_eight_distinct_capabilities_have_one_task_winner (__main__.AtomicBroker.test_eight_distinct_capabilities_have_one_task_winner)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/d68b93092e8d/coordination/security/sel324-isolation-lab/regression/test_atomic_broker.py", line 192, in test_eight_distinct_capabilities_have_one_task_winner
+    self.assertEqual(winners,1)
+AssertionError: 8 != 1
+
+======================================================================
+FAIL: test_failure_after_effect_rolls_back_effect_and_nonce (__main__.AtomicBroker.test_failure_after_effect_rolls_back_effect_and_nonce)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/d68b93092e8d/coordination/security/sel324-isolation-lab/regression/test_atomic_broker.py", line 91, in test_failure_after_effect_rolls_back_effect_and_nonce
+    self.assertEqual(self.state(),'claimed')
+AssertionError: 'done' != 'claimed'
+- done
++ claimed
+
+
+======================================================================
+FAIL: test_fresh_nonce_cannot_block_finished_task (__main__.AtomicBroker.test_fresh_nonce_cannot_block_finished_task)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/d68b93092e8d/coordination/security/sel324-isolation-lab/regression/test_atomic_broker.py", line 119, in test_fresh_nonce_cannot_block_finished_task
+    self.assertFalse(self.call(self.token(action='block'))['ok'])
+AssertionError: True is not false
+
+======================================================================
+FAIL: test_fresh_nonce_cannot_complete_finished_task (__main__.AtomicBroker.test_fresh_nonce_cannot_complete_finished_task)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/d68b93092e8d/coordination/security/sel324-isolation-lab/regression/test_atomic_broker.py", line 114, in test_fresh_nonce_cannot_complete_finished_task
+    self.assertFalse(reply['ok']);self.assertEqual(reply['reason'],'capability_rejected')
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: True is not false
+
+======================================================================
+FAIL: test_heartbeat_checks_task_scope_run_and_terminal_state (__main__.AtomicBroker.test_heartbeat_checks_task_scope_run_and_terminal_state) (changes={'tenant': 'wrong'})
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/d68b93092e8d/coordination/security/sel324-isolation-lab/regression/test_atomic_broker.py", line 150, in test_heartbeat_checks_task_scope_run_and_terminal_state
+    self.assertFalse(self.call(self.token(action='heartbeat',**changes))['ok'])
+AssertionError: True is not false
+
+======================================================================
+FAIL: test_heartbeat_checks_task_scope_run_and_terminal_state (__main__.AtomicBroker.test_heartbeat_checks_task_scope_run_and_terminal_state) (changes={'project': 'wrong'})
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/d68b93092e8d/coordination/security/sel324-isolation-lab/regression/test_atomic_broker.py", line 150, in test_heartbeat_checks_task_scope_run_and_terminal_state
+    self.assertFalse(self.call(self.token(action='heartbeat',**changes))['ok'])
+AssertionError: True is not false
+
+======================================================================
+FAIL: test_heartbeat_checks_task_scope_run_and_terminal_state (__main__.AtomicBroker.test_heartbeat_checks_task_scope_run_and_terminal_state) (changes={'run_id': 'stale'})
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/d68b93092e8d/coordination/security/sel324-isolation-lab/regression/test_atomic_broker.py", line 150, in test_heartbeat_checks_task_scope_run_and_terminal_state
+    self.assertFalse(self.call(self.token(action='heartbeat',**changes))['ok'])
+AssertionError: True is not false
+
+======================================================================
+FAIL: test_heartbeat_checks_task_scope_run_and_terminal_state (__main__.AtomicBroker.test_heartbeat_checks_task_scope_run_and_terminal_state) (changes={'task': 'missing'})
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/d68b93092e8d/coordination/security/sel324-isolation-lab/regression/test_atomic_broker.py", line 150, in test_heartbeat_checks_task_scope_run_and_terminal_state
+    self.assertFalse(self.call(self.token(action='heartbeat',**changes))['ok'])
+AssertionError: True is not false
+
+======================================================================
+FAIL: test_heartbeat_checks_task_scope_run_and_terminal_state (__main__.AtomicBroker.test_heartbeat_checks_task_scope_run_and_terminal_state)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/d68b93092e8d/coordination/security/sel324-isolation-lab/regression/test_atomic_broker.py", line 153, in test_heartbeat_checks_task_scope_run_and_terminal_state
+    self.assertFalse(self.call(self.token(action='heartbeat'))['ok'])
+AssertionError: True is not false
+
+======================================================================
+FAIL: test_mismatched_ledger_configuration_rejected (__main__.AtomicBroker.test_mismatched_ledger_configuration_rejected)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/d68b93092e8d/coordination/security/sel324-isolation-lab/regression/test_atomic_broker.py", line 140, in test_mismatched_ledger_configuration_rejected
+    with self.assertRaises(ValueError):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: ValueError not raised
+
+======================================================================
+FAIL: test_sentinel_read_requires_active_scoped_task (__main__.AtomicBroker.test_sentinel_read_requires_active_scoped_task) (changes={'tenant': 'wrong'})
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/d68b93092e8d/coordination/security/sel324-isolation-lab/regression/test_atomic_broker.py", line 159, in test_sentinel_read_requires_active_scoped_task
+    self.assertFalse(self.call(self.token(action='read_sentinel',**changes))['ok'])
+AssertionError: True is not false
+
+======================================================================
+FAIL: test_sentinel_read_requires_active_scoped_task (__main__.AtomicBroker.test_sentinel_read_requires_active_scoped_task) (changes={'task': 'missing'})
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/d68b93092e8d/coordination/security/sel324-isolation-lab/regression/test_atomic_broker.py", line 159, in test_sentinel_read_requires_active_scoped_task
+    self.assertFalse(self.call(self.token(action='read_sentinel',**changes))['ok'])
+AssertionError: True is not false
+
+======================================================================
+FAIL: test_sentinel_read_requires_active_scoped_task (__main__.AtomicBroker.test_sentinel_read_requires_active_scoped_task) (changes={'run_id': 'stale'})
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/d68b93092e8d/coordination/security/sel324-isolation-lab/regression/test_atomic_broker.py", line 159, in test_sentinel_read_requires_active_scoped_task
+    self.assertFalse(self.call(self.token(action='read_sentinel',**changes))['ok'])
+AssertionError: True is not false
+
+======================================================================
+FAIL: test_sentinel_read_requires_active_scoped_task (__main__.AtomicBroker.test_sentinel_read_requires_active_scoped_task)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/d68b93092e8d/coordination/security/sel324-isolation-lab/regression/test_atomic_broker.py", line 162, in test_sentinel_read_requires_active_scoped_task
+    self.assertEqual(self.count(),1)
+AssertionError: 4 != 1
+
+======================================================================
+FAIL: test_signed_wrong_project_denied_without_consumption (__main__.AtomicBroker.test_signed_wrong_project_denied_without_consumption)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/d68b93092e8d/coordination/security/sel324-isolation-lab/regression/test_atomic_broker.py", line 127, in test_signed_wrong_project_denied_without_consumption
+    self.assertFalse(self.call(self.token(project='otherProject'))['ok'])
+AssertionError: True is not false
+
+======================================================================
+FAIL: test_signed_wrong_tenant_denied_without_consumption (__main__.AtomicBroker.test_signed_wrong_tenant_denied_without_consumption)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/d68b93092e8d/coordination/security/sel324-isolation-lab/regression/test_atomic_broker.py", line 123, in test_signed_wrong_tenant_denied_without_consumption
+    self.assertFalse(self.call(self.token(tenant='otherTenant'))['ok'])
+AssertionError: True is not false
+
+======================================================================
+FAIL: test_wrong_board_row_rejected_without_consumption (__main__.AtomicBroker.test_wrong_board_row_rejected_without_consumption)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/d68b93092e8d/coordination/security/sel324-isolation-lab/regression/test_atomic_broker.py", line 173, in test_wrong_board_row_rejected_without_consumption
+    self.assertFalse(self.call(self.token())['ok'])
+AssertionError: True is not false
+
+----------------------------------------------------------------------
+Ran 16 tests in 0.377s
+
+FAILED (failures=18)
