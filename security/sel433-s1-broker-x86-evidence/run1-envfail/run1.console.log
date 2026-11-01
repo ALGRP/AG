@@ -1,0 +1,21 @@
+== lab_regression_16
+pyo3_runtime.PanicException: Python API call failed
+== lab_uid_28
+pyo3_runtime.PanicException: Python API call failed
+== s1_unit
+pyo3_runtime.PanicException: Python API call failed
+== s1_battery
+pyo3_runtime.PanicException: Python API call failed
+== s1_mutation
+[KILLED] clock_regression_ignored: unit= battery=
+== systemd_verify
+VERIFY_OK
+== systemd_security
+→ Overall exposure level for agos-hermes-worker@i.service: 2.0 OK :-)
+G0=HOLD
+S1_ACCEPTED=NO
+INDEPENDENT_ACCEPTED=NO
+LIVE_CHANGED=NO
+SUITES_ALL_PASS=NO
+evidence: /tmp/claude-0/-home-user-AG/8a8f55a0-9fcd-5d1d-b00e-b06a490ae034/scratchpad/sel433-x86/run1
+RUN_ALL_EXIT=1

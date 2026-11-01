@@ -1,0 +1,7 @@
+lab_regression_16 exit=0
+lab_uid_28 exit=0
+s1_unit exit=0
+s1_battery exit=1
+s1_mutation exit=0
+systemd_verify exit=0
+systemd_security exit=0
