@@ -1,0 +1,57 @@
+[PASS] sqlite_wal_shm/broker_write_path_works: {"ok": true, "action": "heartbeat", "result": {"task_id": "a_hb", "run_id": 1, "claim_expires": 1793495253}, "peer": {"pid": 5693, "uid": 511, "gid": 511}}
+[PASS] sqlite_wal_shm/journal_mode_wal: ["wal", "wal"]
+[PASS] sqlite_wal_shm/wal_shm_created_broker_owned_0600: {"agos-continuous/kanban.db": [450, "0o600"], "agos-continuous/kanban.db-wal": [450, "0o600"], "agos-continuous/kanban.db-shm": [450, "0o600"], "agos-control/kanban.db": [450, "0o600"], "agos-control/kanban.db-wal": [450, "0o600"], "agos-control/kanban.db-shm": [450, "0o600"]}
+[PASS] sqlite_wal_shm/worker_a_cannot_read_write_or_plant_db_wal_shm: {"agos-continuous/kanban.db": ["EACCES", "EACCES"], "agos-continuous/kanban.db-wal": ["EACCES", "EACCES"], "agos-continuous/kanban.db-shm": ["EACCES", "EACCES"], "agos-control/kanban.db": ["EACCES", "EACCES"], "agos-control/kanban.db-wal": ["EACCES", "EACCES"], "agos-control/kanban.db-shm": ["EACCES
+[PASS] sqlite_wal_shm/worker_b_cannot_read_write_or_plant_db_wal_shm: {"agos-continuous/kanban.db": ["EACCES", "EACCES"], "agos-continuous/kanban.db-wal": ["EACCES", "EACCES"], "agos-continuous/kanban.db-shm": ["EACCES", "EACCES"], "agos-control/kanban.db": ["EACCES", "EACCES"], "agos-control/kanban.db-wal": ["EACCES", "EACCES"], "agos-control/kanban.db-shm": ["EACCES
+[PASS] sqlite_wal_shm/outsider_cannot_read_write_or_plant_db_wal_shm: {"agos-continuous/kanban.db": ["EACCES", "EACCES"], "agos-continuous/kanban.db-wal": ["EACCES", "EACCES"], "agos-continuous/kanban.db-shm": ["EACCES", "EACCES"], "agos-control/kanban.db": ["EACCES", "EACCES"], "agos-control/kanban.db-wal": ["EACCES", "EACCES"], "agos-control/kanban.db-shm": ["EACCES
+[PASS] sqlite_wal_shm/env_override_HERMES_KANBAN_DB_cannot_reach_any_db: {"agos-continuous/kanban.db": "DENIED:OperationalError:unable to open database file", "agos-control/kanban.db": "DENIED:OperationalError:unable to open database file"}
+[PASS] user_isolation/worker_a_cannot_connect_board_b_socket: {"ok": false, "reason": "EACCES"}
+[PASS] user_isolation/outsider_cannot_connect_any_socket: {"ok": false, "reason": "EACCES"}
+[PASS] user_isolation/wrong_uid_in_worker_group_rejected_by_peer_uid: {"ok": false, "reason": "peer_uid_not_bound", "detail": "uid 520 may not use the agos-continuous socket"}
+[PASS] user_isolation/worker_cannot_read_broker_config_state_backups: {"cfg": "EACCES", "state": "EACCES", "backups": "EACCES"}
+[PASS] user_isolation/worker_cannot_read_broker_or_peer_environ_mem: {"/proc/5690/environ": "EACCES", "/proc/5690/mem": "EACCES", "/proc/5705/environ": "EACCES", "/proc/5705/mem": "EACCES"}
+[PASS] authorization/negative_capabilities_rejected: {"forged_signature_same_kid": "capability_rejected", "leaked_board_b_capability": "capability_rejected", "own_uid_but_board_b_claim": "capability_rejected", "cross_tenant": "capability_rejected", "cross_project": "capability_rejected", "stale_run_id": "capability_rejected", "foreign_task": "capabili
+[PASS] authorization/rejections_consume_no_nonce_and_change_no_task: {"nonces_before": 1, "after": 1}
+[PASS] authorization/oversized_frame_rejected: {"ok": false, "reason": "framing_rejected", "detail": "frame length out of policy: 1048576"}
+[PASS] authorization/valid_complete_accepted: ["OK"]
+[PASS] authorization/complete_closes_run_row: [["completed", 1]]
+[PASS] nonce/replay_same_capability_rejected: ["OK", "replay_rejected"]
+[PASS] nonce/nonce_history_row_persisted: [["applied", 60, "k1"]]
+[PASS] nonce/same_capability_8_concurrent_one_winner: 1
+[PASS] nonce/distinct_capabilities_8_concurrent_one_task_winner: 1
+[PASS] nonce/reserve_mode_complete_then_replay: {"r": ["OK", "replay_rejected"], "rows": [["applied"]]}
+[PASS] restart/sigterm_graceful_exit_and_socket_cleanup: {"first": ["OK"], "rc": 0, "sockets_removed": true}
+[PASS] restart/replay_after_restart_rejected: ["replay_rejected"]
+[PASS] restart/sigkill_mid_atomic_txn_rolls_back_effect_and_nonce: {"reply": ["EOF:unexpected EOF mid-frame"], "rc": -9, "status/nonce/integrity": ["running", 0, "ok"]}
+[PASS] restart/restart_replaces_stale_socket_after_sigkill: {"stale_socket_left_by_kill": true}
+[PASS] restart/same_capability_retry_after_atomic_crash_then_single_use: ["OK", "replay_rejected"]
+[PASS] restart/reserve_crash_before_effect_fails_closed_then_fresh_cap_works: {"rc": -9, "after_crash": ["running", [["reserved"]]], "retry_same_then_fresh": ["replay_rejected", "OK"]}
+[PASS] restart/reserve_crash_after_effect_no_replay_no_double_effect: {"rc": -9, "after_crash": ["done", [["reserved"]]], "retry_same_then_fresh": ["replay_rejected", "capability_rejected"], "ended_runs": 1}
+[PASS] restart/key_rotation_revoked_k1_rejected_k2_accepted: ["capability_rejected", "OK"]
+[PASS] preflight/preflight_ok_on_correct_layout: {"preflight": "OK", "boards": ["agos-continuous", "agos-control"]}
+[PASS] preflight/preflight_refuses_db_mode_0644: {"rc": 3, "stderr": "{\"preflight\": \"FAIL\", \"problems\": [\"agos-continuous db mode 0o644 grants group/other: /tmp/sel433-s1-heeejc1p/var/lib/agos/kanban/agos-continuous/kanban.db\"]}\n"}
+[PASS] preflight/preflight_refuses_db_owned_by_worker: {"rc": 3, "stderr": "{\"preflight\": \"FAIL\", \"problems\": [\"agos-continuous db owner 511 != broker 450: /tmp/sel433-s1-heeejc1p/var/lib/agos/kanban/agos-continuous/kanban.db\"]}\n"}
+[PASS] preflight/preflight_refuses_db_dir_0755: {"rc": 3, "stderr": "{\"preflight\": \"FAIL\", \"problems\": [\"agos-continuous db dir mode 0o755 grants group/other: /tmp/sel433-s1-heeejc1p/var/lib/agos/kanban/agos-continuous\"]}\n"}
+[PASS] preflight/preflight_refuses_socket_dir_0755: {"rc": 3, "stderr": "{\"preflight\": \"FAIL\", \"problems\": [\"agos-continuous: socket dir mode 0o755 != 0o750\"]}\n"}
+[PASS] preflight/preflight_refuses_socket_dir_wrong_group: {"rc": 3, "stderr": "{\"preflight\": \"FAIL\", \"problems\": [\"agos-continuous: socket dir group 512 != worker gid 511\"]}\n"}
+[PASS] preflight/preflight_refuses_config_group_writable: {"rc": 3, "stderr": "{\"preflight\": \"FAIL\", \"problems\": [\"config writable by group/other\"]}\n"}
+[PASS] preflight/preflight_refuses_interrupted_restore_marker: {"rc": 3, "stderr": "{\"preflight\": \"FAIL\", \"problems\": [\"agos-continuous: interrupted restore marker present; finish or roll back the restore first\"]}\n"}
+[PASS] preflight/preflight_refuses_running_as_root: {"rc": 3}
+[PASS] backup_restore_rollback/negative_control_naive_copy_loses_wal_commits: {"naive_copy": "ERR:no such table: t", "backup_api": 100}
+[PASS] backup_restore_rollback/backup_refused_while_broker_serving: {"rc": 1}
+[PASS] backup_restore_rollback/backup_consistent_private_with_manifest: {"rc": 0, "nonce_rows": 8, "stderr": ""}
+[PASS] backup_restore_rollback/negative_control_restore_without_watermark_reopens_spent_nonce: {"spent_after_backup": ["OK"], "replay_on_unwatermarked_copy": true}
+[PASS] backup_restore_rollback/restore_refuses_tampered_backup: {"rc": 1}
+[PASS] backup_restore_rollback/interrupted_restore_every_step_blocks_start_then_resumes_clean: {"after_intent": {"wal_before": true, "interrupted": true, "daemon_refused": true, "resume_rc": 0, "foreign_wal_applied": 0, "integrity": "ok", "leftovers": []}, "mid_stage": {"wal_before": true, "interrupted": true, "daemon_refused": true, "resume_rc": 0, "foreign_wal_applied": 0, "integrity": "ok"
+[PASS] backup_restore_rollback/restored_db_broker_owned_0600: {"": [450, "0o600"]}
+[PASS] backup_restore_rollback/restore_watermark_blocks_pre_restore_capability_fresh_one_works: ["freshness_rejected", "OK"]
+[PASS] backup_restore_rollback/ownership_rollback_restores_legacy_owner_and_modes: {"nodes": 4, "restored_equal": true}
+[PASS] hermes_adapter/dispatcher_env_has_no_db_path_and_cap_file_private: {"env_keys": ["HERMES_KANBAN_BOARD", "HERMES_KANBAN_BROKER_SOCK", "HERMES_KANBAN_CAPABILITY_FILE", "HERMES_KANBAN_RUN_ID", "HERMES_KANBAN_TASK", "OTHER", "PATH"], "cap_owner": 511, "cap_mode": "0o600"}
+[PASS] hermes_adapter/adapter_lifecycle_via_broker_with_hostile_db_env: {"ignored_db_env": true, "hb1": {"ok": true, "task_id": "a_adapter", "run_id": 8, "claim_expires": 1793495272}, "hb2": {"ok": true, "task_id": "a_adapter", "run_id": 8, "claim_expires": 1793495272}, "hb3": {"error": "heartbeat capabilities exhausted; dispatcher must renew the bundle"}, "other_task":
+[PASS] hermes_adapter/other_worker_cannot_read_capability_bundle: {"a_cap": "EACCES"}
+[PASS] hermes_adapter/adapter_has_no_direct_db_fallback: broker mode requires HERMES_KANBAN_BROKER_SOCK and HERMES_KANBAN_CAPABILITY_FILE; refusing direct DB access
+[PASS] hermes_adapter/dispatcher_refuses_non_worker_private_cap_dir: REFUSED
+[PASS] availability/board_b_40_of_40_under_board_a_flood: {"b": {"ok": 40, "secs": 0.15}, "a": {"held": 200, "own_extra": "busy"}}
+[PASS] availability/flooding_worker_gets_busy_not_hang: {"held": 200, "own_extra": "busy"}
+[PASS] sqlite_wal_shm/integrity_check_both_boards_after_battery: {"agos-continuous": "ok", "agos-control": "ok"}
+{"run": 56, "passed": 56, "failed": 0, "S1_ACCEPTED": false, "INDEPENDENT_ACCEPTED": false, "LIVE_CHANGED": false}

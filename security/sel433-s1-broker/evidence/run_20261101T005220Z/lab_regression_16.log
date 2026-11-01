@@ -1,0 +1,22 @@
+test_complete_commits_effect_and_nonce (__main__.AtomicBroker.test_complete_commits_effect_and_nonce) ... ok
+test_effect_not_visible_before_nonce_commit (__main__.AtomicBroker.test_effect_not_visible_before_nonce_commit) ... ok
+test_eight_distinct_capabilities_have_one_task_winner (__main__.AtomicBroker.test_eight_distinct_capabilities_have_one_task_winner) ... ok
+test_failure_after_effect_rolls_back_effect_and_nonce (__main__.AtomicBroker.test_failure_after_effect_rolls_back_effect_and_nonce) ... ok
+test_fresh_nonce_cannot_block_finished_task (__main__.AtomicBroker.test_fresh_nonce_cannot_block_finished_task) ... ok
+test_fresh_nonce_cannot_complete_finished_task (__main__.AtomicBroker.test_fresh_nonce_cannot_complete_finished_task) ... ok
+test_heartbeat_checks_task_scope_run_and_terminal_state (__main__.AtomicBroker.test_heartbeat_checks_task_scope_run_and_terminal_state) ... ok
+test_mismatched_ledger_configuration_rejected (__main__.AtomicBroker.test_mismatched_ledger_configuration_rejected) ... ok
+test_missing_task_denied_without_consumption (__main__.AtomicBroker.test_missing_task_denied_without_consumption) ... ok
+test_running_task_can_complete (__main__.AtomicBroker.test_running_task_can_complete) ... ok
+test_same_token_replay_denied (__main__.AtomicBroker.test_same_token_replay_denied) ... ok
+test_sentinel_read_requires_active_scoped_task (__main__.AtomicBroker.test_sentinel_read_requires_active_scoped_task) ... ok
+test_signed_wrong_project_denied_without_consumption (__main__.AtomicBroker.test_signed_wrong_project_denied_without_consumption) ... ok
+test_signed_wrong_tenant_denied_without_consumption (__main__.AtomicBroker.test_signed_wrong_tenant_denied_without_consumption) ... ok
+test_stale_run_denied_without_consumption (__main__.AtomicBroker.test_stale_run_denied_without_consumption) ... ok
+test_wrong_board_row_rejected_without_consumption (__main__.AtomicBroker.test_wrong_board_row_rejected_without_consumption) ... ok
+
+----------------------------------------------------------------------
+Ran 16 tests in 0.339s
+
+OK
+{"variant": "candidate", "run": 16, "passed": 16, "failures": 0, "errors": 0, "assertion_failures": 0}

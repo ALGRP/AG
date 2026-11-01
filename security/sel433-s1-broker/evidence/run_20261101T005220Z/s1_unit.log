@@ -1,0 +1,35 @@
+test_kid_swap_to_other_key_fails_signature (__main__.Capability.test_kid_swap_to_other_key_fails_signature) ... ok
+test_noncanonical_run_id_rejected (__main__.Capability.test_noncanonical_run_id_rejected) ... ok
+test_revoked_kid_rejected (__main__.Capability.test_revoked_kid_rejected) ... ok
+test_rotated_key_accepted_alongside_old (__main__.Capability.test_rotated_key_accepted_alongside_old) ... ok
+test_unknown_kid_rejected (__main__.Capability.test_unknown_kid_rejected) ... ok
+test_vendored_capability_is_byte_identical_to_s1_verified_lab_file (__main__.Capability.test_vendored_capability_is_byte_identical_to_s1_verified_lab_file) ... ok
+test_spawn_env_refuses_unscoped_task_and_loose_key (__main__.DispatcherHook.test_spawn_env_refuses_unscoped_task_and_loose_key) ... ok
+test_spawn_env_strips_db_and_bundle_verifies (__main__.DispatcherHook.test_spawn_env_strips_db_and_bundle_verifies) ... ok
+test_atomic_failure_after_effect_rolls_back_both (__main__.Ledger.test_atomic_failure_after_effect_rolls_back_both) ... ok
+test_clock_regression_fails_closed (__main__.Ledger.test_clock_regression_fails_closed) ... ok
+test_eight_distinct_capabilities_one_winner (__main__.Ledger.test_eight_distinct_capabilities_one_winner) ... ok
+test_prune_keeps_recent_and_reserved (__main__.Ledger.test_prune_keeps_recent_and_reserved) ... ok
+test_reserve_mode_effect_failure_burns_nonce (__main__.Ledger.test_reserve_mode_effect_failure_burns_nonce) ... ok
+test_reserve_mode_precheck_failure_does_not_consume (__main__.Ledger.test_reserve_mode_precheck_failure_does_not_consume) ... ok
+test_restore_watermark_rejects_older_capability (__main__.Ledger.test_restore_watermark_rejects_older_capability) ... ok
+test_refuses_root_and_duplicate_uids (__main__.Preflight.test_refuses_root_and_duplicate_uids) ... ok
+test_action_allow_list (__main__.RequestPath.test_action_allow_list) ... ok
+test_args_schema (__main__.RequestPath.test_args_schema) ... ok
+test_block_then_no_complete (__main__.RequestPath.test_block_then_no_complete) ... ok
+test_board_tenant_pin (__main__.RequestPath.test_board_tenant_pin) ... ok
+test_complete_ok_updates_task_and_run (__main__.RequestPath.test_complete_ok_updates_task_and_run) ... ok
+test_duplicate_request_member (__main__.RequestPath.test_duplicate_request_member) ... ok
+test_fresh_nonce_cannot_redo_finished_task (__main__.RequestPath.test_fresh_nonce_cannot_redo_finished_task) ... ok
+test_heartbeat_extends_claim (__main__.RequestPath.test_heartbeat_extends_claim) ... ok
+test_mismatched_store_rejected (__main__.RequestPath.test_mismatched_store_rejected) ... ok
+test_replay_rejected (__main__.RequestPath.test_replay_rejected) ... ok
+test_scope_rejections_do_not_consume_nonce (__main__.RequestPath.test_scope_rejections_do_not_consume_nonce) ... ok
+test_unexpected_request_member (__main__.RequestPath.test_unexpected_request_member) ... ok
+test_wrong_peer_rejected_before_parsing (__main__.RequestPath.test_wrong_peer_rejected_before_parsing) ... ok
+
+----------------------------------------------------------------------
+Ran 29 tests in 1.483s
+
+OK
+{"suite": "sel433-s1-unit", "run": 29, "failures": 0, "errors": 0}

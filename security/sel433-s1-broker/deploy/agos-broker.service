@@ -1,0 +1,61 @@
+# SEL-433 S1 STAGING TEMPLATE -- NOT INSTALLED. Installing it, creating the
+# accounts and enabling it are separate Owner-approved S1 steps. G0=HOLD.
+[Unit]
+Description=AGOS per-board kanban broker (SEL-433, staging)
+Documentation=file:///opt/agos-broker/README.md
+After=local-fs.target systemd-tmpfiles-setup.service
+ConditionPathExists=/etc/agos-broker/broker.json
+
+[Service]
+Type=notify
+NotifyAccess=main
+User=agosbroker
+Group=agosbroker
+# Needed only to chgrp each board socket node to its worker group.
+SupplementaryGroups=agosw-agos-continuous agosw-agos-control
+Environment=PYTHONPATH=/opt/agos-broker PYTHONDONTWRITEBYTECODE=1
+ExecStartPre=/usr/bin/python3 -B -s -m agos_broker.daemon --config /etc/agos-broker/broker.json --check
+ExecStart=/usr/bin/python3 -B -s -m agos_broker.daemon --config /etc/agos-broker/broker.json
+KillSignal=SIGTERM
+TimeoutStopSec=20
+Restart=on-failure
+RestartSec=2
+UMask=0077
+
+# Filesystem: only the board DBs, the socket tree and the backup dir are writable.
+ProtectSystem=strict
+ReadWritePaths=/var/lib/agos/kanban /run/agos-broker /var/backups/agos
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+DevicePolicy=closed
+# No network at all; filesystem AF_UNIX sockets still work.
+PrivateNetwork=yes
+IPAddressDeny=any
+RestrictAddressFamilies=AF_UNIX
+# Privilege surface
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictSUIDSGID=yes
+LockPersonality=yes
+RestrictRealtime=yes
+RestrictNamespaces=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+ProcSubset=pid
+RemoveIPC=yes
+PrivateUsers=no
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+# S1 OPEN: verify cryptography/cffi under W^X before enabling.
+MemoryDenyWriteExecute=yes
+
+[Install]
+WantedBy=multi-user.target

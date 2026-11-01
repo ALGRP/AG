@@ -1,0 +1,110 @@
+diff --git a/gateway/session_kanban.py b/gateway/session_kanban.py
+index 711fb7a0..8dc0ecab 100644
+--- a/gateway/session_kanban.py
++++ b/gateway/session_kanban.py
+@@ -161,10 +161,16 @@ def bind_worker_context(frame):
+     if frame['policy']['source'] != 'kanban':
+         raise ValueError('invalid_kanban_policy')
+     env = {'HERMES_KANBAN_TASK': context['task_id'], 'HERMES_KANBAN_BOARD': context['board'],
+-        'HERMES_KANBAN_DB': context['db'], 'HERMES_KANBAN_RUN_ID': str(context['run_id']),
++        'HERMES_KANBAN_RUN_ID': str(context['run_id']),
+         'HERMES_KANBAN_CLAIM_LOCK': context['claim_lock'], 'HERMES_KANBAN_WORKSPACE': context['workspace'],
+         'HERMES_KANBAN_WORKSPACES_ROOT': context['workspaces_root'], 'HERMES_PROFILE': context['profile'],
+         'HERMES_SESSION_SOURCE': 'kanban'}
++    # SEL-433: broker-mode contexts carry a socket + capability file, never a DB path.
++    if context.get('broker_sock'):
++        env['HERMES_KANBAN_BROKER_SOCK'] = context['broker_sock']
++        env['HERMES_KANBAN_CAPABILITY_FILE'] = context['capability_file']
++    else:
++        env['HERMES_KANBAN_DB'] = context['db']
+     for key, value in (('HERMES_KANBAN_BRANCH', context['branch']), ('HERMES_TENANT', context['tenant'])):
+         if value:
+             env[key] = value
+diff --git a/hermes_cli/kanban_db_dispatch.py b/hermes_cli/kanban_db_dispatch.py
+index 72a779c7..42eed415 100644
+--- a/hermes_cli/kanban_db_dispatch.py
++++ b/hermes_cli/kanban_db_dispatch.py
+@@ -2844,7 +2844,16 @@ def _default_spawn(task: Task, workspace: str, *, board: Optional[str] = None) -
+             env[var] = override
+     # Pin the board DB + workspaces root so the worker's kanban paths still
+     # match after `hermes -p` rewrites HERMES_HOME (symlink / Docker layouts).
+-    env["HERMES_KANBAN_DB"] = str(_kb.kanban_db_path(board=board))
++    if os.environ.get("HERMES_KANBAN_BROKER_MODE") == "1":
++        # SEL-433: broker mode -- the worker UID gets a socket path and a
++        # single-run capability file, never the board DB path.
++        from hermes_adapter import dispatch as _broker_dispatch
++        env = _broker_dispatch.spawn_env(
++            env, board=_kb._normalize_board_slug(board) or _kb.get_current_board(),
++            task_id=task.id, run_id=task.current_run_id, tenant=task.tenant,
++            project=task.project_id)
++    else:
++        env["HERMES_KANBAN_DB"] = str(_kb.kanban_db_path(board=board))
+     env["HERMES_KANBAN_WORKSPACES_ROOT"] = str(_kb.workspaces_root(board=board))
+     # Board slug — defense-in-depth pin if a path is resolved without the
+     # DB / workspaces env vars.
+diff --git a/tools/kanban_tools.py b/tools/kanban_tools.py
+index c8b64c09..9029e5f7 100644
+--- a/tools/kanban_tools.py
++++ b/tools/kanban_tools.py
+@@ -308,6 +308,18 @@ def _require_orchestrator_tool(tool_name: str) -> None:
+             "kanban_heartbeat, or kanban_comment for their assigned task.")
+ 
+ 
++def _broker_mode() -> bool:
++    """SEL-433: set by the dispatcher instead of HERMES_KANBAN_DB."""
++    return bool(os.environ.get("HERMES_KANBAN_BROKER_SOCK"))
++
++
++def _broker_lifecycle(tool_name: str, args: dict) -> str:
++    from hermes_adapter import client as _bc
++    return {"kanban_complete": _bc.handle_kanban_complete,
++            "kanban_block": _bc.handle_kanban_block,
++            "kanban_heartbeat": _bc.handle_kanban_heartbeat}[tool_name](args)
++
++
+ @contextmanager
+ def _board(board: Optional[str], *, quiet_close: bool = False):
+     """``with _board(slug) as (kb, conn)``; lazy import so the module loads in non-kanban
+@@ -315,6 +327,10 @@ def _board(board: Optional[str], *, quiet_close: bool = False):
+     overrides it per call. ``quiet_close`` swallows close() errors (best-effort bridges)."""
+     from hermes_cli import kanban_db as kb
+     from hermes_cli import kanban_db_connect as kbc
++    if _broker_mode():
++        # SEL-433: fail closed -- a broker-mode worker never opens a board DB
++        # (the OS denies it anyway: 0700 broker-owned directory).
++        raise _Reject("broker mode: direct kanban DB access is disabled for workers")
+     conn = kbc.connect(board=board)
+     try:
+         yield kb, conn
+@@ -740,6 +756,11 @@ def _handle_complete(args: dict, **kw) -> str:
+     _check(summary or result, "provide at least one of: summary (preferred), result")
+     _require_dict_metadata(metadata)
+     metadata = _stamp_worker_session_metadata(tid, metadata)
++    if _broker_mode():
++        # SEL-333 OPEN: metadata/artifacts/created_cards and the goal judge
++        # gate are not yet carried over the broker protocol.
++        return _broker_lifecycle("kanban_complete",
++                                 {"task_id": tid, "summary": summary, "result": result})
+     with _board(args.get("board")) as (kb, conn):
+         # Goal-mode pre-completion judge gate (Issue #38367). Prevent workers from bypassing the auxiliary
+         # judge by calling kanban_complete before acceptance criteria are met. Only enforce when a judge is
+@@ -815,6 +836,10 @@ def _handle_block(args: dict, **kw) -> str:
+     reason = _redact(
+         _require_text(args, "reason", "reason is required — explain what input you need"))
+     kind = args.get("kind")
++    if _broker_mode():
++        # SEL-333 OPEN: block kind validation + goal-mode block gate must move
++        # broker-side before goal-mode boards use broker mode.
++        return _broker_lifecycle("kanban_block", {"task_id": tid, "reason": reason})
+     with _board(args.get("board")) as (kb, conn):
+         _check(kind is None or kind in kb.VALID_BLOCK_KINDS,
+                f"kind must be one of {sorted(kb.VALID_BLOCK_KINDS)} (or omit it)")
+@@ -935,6 +960,8 @@ def _handle_heartbeat(args: dict, **kw) -> str:
+     Without the claim half, a worker blocked in one long tool call would still
+     be reclaimed by ``release_stale_claims``."""
+     tid = _worker_guard("kanban_heartbeat", args)
++    if _broker_mode():
++        return _broker_lifecycle("kanban_heartbeat", {"task_id": tid, "note": args.get("note")})
+     from hermes_cli import kanban_db_dispatch as kbd
+     with _board(args.get("board")) as (kb, conn):
+         # The dispatcher pins HERMES_KANBAN_CLAIM_LOCK at spawn; the default
