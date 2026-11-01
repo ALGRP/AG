@@ -1,0 +1,110 @@
+{
+  "mutants": 9,
+  "killed": 9,
+  "results": [
+    {
+      "mutant": "no_early_peer_uid_reject",
+      "killed": true,
+      "unit_rc": 1,
+      "unit": "{\"suite\": \"sel433-s1-unit\", \"run\": 29, \"failures\": 1, \"errors\": 0}",
+      "battery_rc": 1,
+      "battery": "{\"run\": 56, \"passed\": 55, \"failed\": 1, \"S1_ACCEPTED\": false, \"INDEPENDENT_ACCEPTED\": false, \"LIVE_CHANGED\": false}",
+      "battery_fails": [
+        "[FAIL] user_isolation/wrong_uid_in_worker_group_rejected_by_peer_uid: {\"ok\": false, \"reason\": \"capability_rejected\", \"detail\": \"peer uid mismatch: token binds 5"
+      ]
+    },
+    {
+      "mutant": "no_nonce_insert_replay_possible",
+      "killed": true,
+      "unit_rc": 1,
+      "unit": "{\"suite\": \"sel433-s1-unit\", \"run\": 29, \"failures\": 1, \"errors\": 0}",
+      "battery_rc": 1,
+      "battery": "{\"run\": 56, \"passed\": 51, \"failed\": 5, \"S1_ACCEPTED\": false, \"INDEPENDENT_ACCEPTED\": false, \"LIVE_CHANGED\": false}",
+      "battery_fails": [
+        "[FAIL] nonce/replay_same_capability_rejected: [\"OK\", \"OK\"]",
+        "[FAIL] nonce/same_capability_8_concurrent_one_winner: 8",
+        "[FAIL] restart/replay_after_restart_rejected: [\"OK\"]",
+        "[FAIL] restart/same_capability_retry_after_atomic_crash_then_single_use: [\"OK\", \"capability_rejected\"]",
+        "[FAIL] hermes_adapter/adapter_lifecycle_via_broker_with_hostile_db_env: {\"ignored_db_env\": true, \"hb1\": {\"ok\": true, \"task_id\": \"a_adapter\", \"run_id\": 8, \"claim"
+      ]
+    },
+    {
+      "mutant": "no_restore_watermark",
+      "killed": true,
+      "unit_rc": 0,
+      "unit": "{\"suite\": \"sel433-s1-unit\", \"run\": 29, \"failures\": 0, \"errors\": 0}",
+      "battery_rc": 1,
+      "battery": "{\"run\": 56, \"passed\": 55, \"failed\": 1, \"S1_ACCEPTED\": false, \"INDEPENDENT_ACCEPTED\": false, \"LIVE_CHANGED\": false}",
+      "battery_fails": [
+        "[FAIL] backup_restore_rollback/restore_watermark_blocks_pre_restore_capability_fresh_one_works: [\"OK\", \"OK\"]"
+      ]
+    },
+    {
+      "mutant": "restore_keeps_foreign_wal",
+      "killed": true,
+      "unit_rc": 0,
+      "unit": "{\"suite\": \"sel433-s1-unit\", \"run\": 29, \"failures\": 0, \"errors\": 0}",
+      "battery_rc": 1,
+      "battery": "{\"run\": 56, \"passed\": 55, \"failed\": 1, \"S1_ACCEPTED\": false, \"INDEPENDENT_ACCEPTED\": false, \"LIVE_CHANGED\": false}",
+      "battery_fails": [
+        "[FAIL] backup_restore_rollback/interrupted_restore_every_step_blocks_start_then_resumes_clean: {\"after_intent\": {\"wal_before\": true, \"interrupted\": true, \"daemo"
+      ]
+    },
+    {
+      "mutant": "commit_effect_before_nonce",
+      "killed": true,
+      "unit_rc": 1,
+      "unit": "{\"suite\": \"sel433-s1-unit\", \"run\": 29, \"failures\": 4, \"errors\": 0}",
+      "battery_rc": 1,
+      "battery": "{\"run\": 56, \"passed\": 53, \"failed\": 3, \"S1_ACCEPTED\": false, \"INDEPENDENT_ACCEPTED\": false, \"LIVE_CHANGED\": false}",
+      "battery_fails": [
+        "[FAIL] authorization/rejections_consume_no_nonce_and_change_no_task: {\"nonces_before\": 1, \"after\": 4}",
+        "[FAIL] restart/sigkill_mid_atomic_txn_rolls_back_effect_and_nonce: {\"reply\": [\"EOF:unexpected EOF mid-frame\"], \"rc\": -9, \"status/nonce/integrity\": [\"running\", 1",
+        "[FAIL] restart/same_capability_retry_after_atomic_crash_then_single_use: [\"replay_rejected\", \"replay_rejected\"]"
+      ]
+    },
+    {
+      "mutant": "no_scope_check_and_no_cas_tenant",
+      "killed": true,
+      "unit_rc": 1,
+      "unit": "{\"suite\": \"sel433-s1-unit\", \"run\": 29, \"failures\": 2, \"errors\": 0}",
+      "battery_rc": 1,
+      "battery": "{\"run\": 56, \"passed\": 54, \"failed\": 2, \"S1_ACCEPTED\": false, \"INDEPENDENT_ACCEPTED\": false, \"LIVE_CHANGED\": false}",
+      "battery_fails": [
+        "[FAIL] authorization/negative_capabilities_rejected: {\"forged_signature_same_kid\": \"capability_rejected\", \"leaked_board_b_capability\": \"capability_rejected\", \"o",
+        "[FAIL] authorization/rejections_consume_no_nonce_and_change_no_task: {\"nonces_before\": 1, \"after\": 2}"
+      ]
+    },
+    {
+      "mutant": "socket_dir_mode_not_checked",
+      "killed": true,
+      "unit_rc": 0,
+      "unit": "{\"suite\": \"sel433-s1-unit\", \"run\": 29, \"failures\": 0, \"errors\": 0}",
+      "battery_rc": 1,
+      "battery": "{\"run\": 56, \"passed\": 55, \"failed\": 1, \"S1_ACCEPTED\": false, \"INDEPENDENT_ACCEPTED\": false, \"LIVE_CHANGED\": false}",
+      "battery_fails": [
+        "[FAIL] preflight/preflight_refuses_socket_dir_0755: {\"rc\": 0, \"stderr\": \"\"}"
+      ]
+    },
+    {
+      "mutant": "adapter_leaks_db_env",
+      "killed": true,
+      "unit_rc": 1,
+      "unit": "{\"suite\": \"sel433-s1-unit\", \"run\": 29, \"failures\": 1, \"errors\": 0}",
+      "battery_rc": 1,
+      "battery": "{\"run\": 56, \"passed\": 55, \"failed\": 1, \"S1_ACCEPTED\": false, \"INDEPENDENT_ACCEPTED\": false, \"LIVE_CHANGED\": false}",
+      "battery_fails": [
+        "[FAIL] hermes_adapter/dispatcher_env_has_no_db_path_and_cap_file_private: {\"env_keys\": [\"HERMES_KANBAN_BOARD\", \"HERMES_KANBAN_BROKER_SOCK\", \"HERMES_KANBAN_CAPAB"
+      ]
+    },
+    {
+      "mutant": "clock_regression_ignored",
+      "killed": true,
+      "unit_rc": 1,
+      "unit": "{\"suite\": \"sel433-s1-unit\", \"run\": 29, \"failures\": 1, \"errors\": 0}",
+      "battery_rc": 0,
+      "battery": "{\"run\": 56, \"passed\": 56, \"failed\": 0, \"S1_ACCEPTED\": false, \"INDEPENDENT_ACCEPTED\": false, \"LIVE_CHANGED\": false}",
+      "battery_fails": []
+    }
+  ]
+}

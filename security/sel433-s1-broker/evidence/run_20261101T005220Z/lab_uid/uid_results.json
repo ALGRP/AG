@@ -1,0 +1,283 @@
+{
+  "INDEPENDENT_ACCEPTED": false,
+  "LIVE_CHANGED": false,
+  "S1_ACCEPTED": false,
+  "failed": 0,
+  "passed": 28,
+  "python": "3.13.18",
+  "results": [
+    {
+      "approach": "C",
+      "control": "cross_board_db_read",
+      "detail": "OperationalError: unable to open database file",
+      "expected": "BLOCKED",
+      "outcome": "BLOCKED",
+      "sentinel": null,
+      "verdict": "PASS"
+    },
+    {
+      "approach": "C",
+      "control": "cross_board_wal_shm_read",
+      "detail": "no -wal/-shm sidecar readable",
+      "expected": "BLOCKED",
+      "outcome": "BLOCKED",
+      "sentinel": null,
+      "verdict": "PASS"
+    },
+    {
+      "approach": "C",
+      "control": "env_override_db_path",
+      "detail": "OperationalError: unable to open database file",
+      "expected": "BLOCKED",
+      "outcome": "BLOCKED",
+      "sentinel": null,
+      "verdict": "PASS"
+    },
+    {
+      "approach": "C",
+      "control": "issuer_key_read",
+      "detail": "PermissionError: [Errno 13] Permission denied: '/tmp/sel433-coordination-13pfffrd/C/state/issuer.key'",
+      "expected": "BLOCKED",
+      "outcome": "BLOCKED",
+      "sentinel": null,
+      "verdict": "PASS"
+    },
+    {
+      "approach": "C",
+      "control": "other_capability_file_read",
+      "detail": "PermissionError: [Errno 13] Permission denied: '/tmp/sel433-coordination-13pfffrd/C/state/cap_board_b.json'",
+      "expected": "BLOCKED",
+      "outcome": "BLOCKED",
+      "sentinel": null,
+      "verdict": "PASS"
+    },
+    {
+      "approach": "C",
+      "control": "leaf_symlink",
+      "detail": "OperationalError: unable to open database file",
+      "expected": "BLOCKED",
+      "outcome": "BLOCKED",
+      "sentinel": null,
+      "verdict": "PASS"
+    },
+    {
+      "approach": "C",
+      "control": "ancestor_symlink",
+      "detail": "OperationalError: unable to open database file",
+      "expected": "BLOCKED",
+      "outcome": "BLOCKED",
+      "sentinel": null,
+      "verdict": "PASS"
+    },
+    {
+      "approach": "C",
+      "control": "hardlink_to_forbidden",
+      "detail": "cannot create hard link: [Errno 13] Permission denied: '/tmp/sel433-coordination-13pfffrd/C/kanban/agos-continuous/kanban.db' -> '/tmp/sel433-coordination-13pfffrd/C/scratch-a/hard_alias.db'",
+      "expected": "BLOCKED",
+      "outcome": "BLOCKED",
+      "sentinel": null,
+      "verdict": "PASS"
+    },
+    {
+      "approach": "C",
+      "control": "aba_rename_swap",
+      "detail": "cannot stage ABA (no write access): [Errno 13] Permission denied: '/tmp/sel433-coordination-13pfffrd/C/kanban/agos-control/kanban.db'",
+      "expected": "BLOCKED",
+      "outcome": "BLOCKED",
+      "sentinel": null,
+      "verdict": "PASS"
+    },
+    {
+      "approach": "C",
+      "control": "direct_connect_bypass",
+      "detail": "OperationalError: unable to open database file",
+      "expected": "BLOCKED",
+      "outcome": "BLOCKED",
+      "sentinel": null,
+      "verdict": "PASS"
+    },
+    {
+      "approach": "C",
+      "control": "self_board_tamper",
+      "detail": "OperationalError: unable to open database file",
+      "expected": "BLOCKED",
+      "outcome": "BLOCKED",
+      "sentinel": null,
+      "verdict": "PASS"
+    },
+    {
+      "approach": "C",
+      "control": "read_proc_environ",
+      "detail": "PermissionError: [Errno 13] Permission denied: '/proc/5361/environ'",
+      "expected": "BLOCKED",
+      "outcome": "BLOCKED",
+      "sentinel": null,
+      "verdict": "PASS"
+    },
+    {
+      "approach": "C",
+      "control": "own_board_lifecycle",
+      "detail": "broker applied t_agos-control_1->done",
+      "expected": "ALLOWED",
+      "outcome": "ALLOWED",
+      "sentinel": null,
+      "verdict": "PASS"
+    },
+    {
+      "approach": "C",
+      "control": "forged_signature",
+      "detail": "capability_rejected: invalid signature",
+      "expected": "BLOCKED",
+      "outcome": "BLOCKED",
+      "sentinel": null,
+      "verdict": "PASS"
+    },
+    {
+      "approach": "C",
+      "control": "leaked_capability_wrong_peer",
+      "detail": "capability_rejected: peer uid mismatch: token binds 512, kernel reports 511",
+      "expected": "BLOCKED",
+      "outcome": "BLOCKED",
+      "sentinel": null,
+      "verdict": "PASS"
+    },
+    {
+      "approach": "C",
+      "control": "expired_capability",
+      "detail": "capability_rejected: capability expired",
+      "expected": "BLOCKED",
+      "outcome": "BLOCKED",
+      "sentinel": null,
+      "verdict": "PASS"
+    },
+    {
+      "approach": "C",
+      "control": "duplicate_json_member",
+      "detail": "capability_rejected: duplicate JSON member: board",
+      "expected": "BLOCKED",
+      "outcome": "BLOCKED",
+      "sentinel": null,
+      "verdict": "PASS"
+    },
+    {
+      "approach": "C",
+      "control": "cross_board_capability",
+      "detail": "capability_rejected: board mismatch: token binds agos-continuous, socket serves agos-control",
+      "expected": "BLOCKED",
+      "outcome": "BLOCKED",
+      "sentinel": null,
+      "verdict": "PASS"
+    },
+    {
+      "approach": "C",
+      "control": "replay_same_nonce",
+      "detail": "first=ALLOWED replay_rejected: nonce already consumed: 432bae878b5e...",
+      "expected": "BLOCKED",
+      "outcome": "BLOCKED",
+      "sentinel": null,
+      "verdict": "PASS"
+    },
+    {
+      "approach": "C",
+      "control": "replay_after_restart",
+      "detail": "replay_rejected: nonce already consumed: e5f5768a83e3...",
+      "expected": "BLOCKED",
+      "outcome": "BLOCKED",
+      "sentinel": null,
+      "verdict": "PASS"
+    },
+    {
+      "approach": "C",
+      "control": "foreign_uid_socket",
+      "detail": "socket refused: PermissionError: [Errno 13] Permission denied",
+      "expected": "BLOCKED",
+      "outcome": "BLOCKED",
+      "sentinel": null,
+      "verdict": "PASS"
+    },
+    {
+      "approach": "C",
+      "control": "early_peer_rejection",
+      "detail": "peer_uid_not_bound: uid 0 may not use the agos-control socket",
+      "expected": "BLOCKED",
+      "outcome": "BLOCKED",
+      "sentinel": null,
+      "verdict": "PASS"
+    },
+    {
+      "approach": "C",
+      "control": "oversized_frame",
+      "detail": "framing_rejected: frame length out of policy: 8388608",
+      "expected": "BLOCKED",
+      "outcome": "BLOCKED",
+      "sentinel": null,
+      "verdict": "PASS"
+    },
+    {
+      "approach": "C",
+      "control": "concurrent_single_winner",
+      "detail": "winners=1/8 (exactly 1 required)",
+      "expected": "ALLOWED",
+      "outcome": "ALLOWED",
+      "sentinel": null,
+      "verdict": "PASS"
+    },
+    {
+      "approach": "C",
+      "control": "atomic_rollback_on_effect_failure",
+      "detail": "rolled back together: task still 'claimed', nonce unspent (capability safely retryable)",
+      "expected": "BLOCKED",
+      "outcome": "BLOCKED",
+      "sentinel": null,
+      "verdict": "PASS"
+    },
+    {
+      "approach": "C",
+      "control": "fresh_nonce_on_completed_task",
+      "detail": "first=ALLOWED/state='done' capability_rejected: task scope, active state or run_id CAS failed",
+      "expected": "BLOCKED",
+      "outcome": "BLOCKED",
+      "sentinel": null,
+      "verdict": "PASS"
+    },
+    {
+      "approach": "C",
+      "control": "cross_scope_tenant_project",
+      "detail": "capability_rejected: task scope, active state or run_id CAS failed",
+      "expected": "BLOCKED",
+      "outcome": "BLOCKED",
+      "sentinel": null,
+      "verdict": "PASS"
+    },
+    {
+      "approach": "C",
+      "control": "flood_isolation",
+      "detail": "board B served 40/40 under board A flood",
+      "expected": "ALLOWED",
+      "outcome": "ALLOWED",
+      "sentinel": null,
+      "verdict": "PASS"
+    }
+  ],
+  "run": 28,
+  "scope": "disposable Linux synthetic broker lab, no system accounts",
+  "source_sha256": {
+    "lab/__init__.py": "c4314e3b51dd3edd141c8e2f6c2ef11d80efe0c31230646ea6582f3654b9497b",
+    "lab/approach_a_stat.py": "17a8ba84e364ffca964b87701efa9b141005c03b09e636d4792f68e3ab74295b",
+    "lab/approach_b_fdbound.py": "b96600673f9a68ae032871eac64fd4ba246b00fbf7f3f9ac725fc056e3cc452d",
+    "lab/approach_c_broker.py": "bb6698a0bcd58b691f75226899b49ed81abab9ff85737a031913b08d52a45f3d",
+    "lab/approach_d_diruid.py": "2358649be2cd567352995785c5509b895c692927a28e7d19976308bc6bda5930",
+    "lab/boards.py": "2f1740f2143a06e35f6947631a757383118515c9c4c8ad2927875be50ace3787",
+    "lab/broker_main.py": "2b275bd5269cf041aef56b96dde11860e37a8d66792cd342e7b65469dca83d8c",
+    "lab/capability.py": "67f116461eb28dbc10d1e8c0ec4593fc23b7e712614a6eae81b7a7f055ce2062",
+    "lab/nonce_ledger.py": "cb8aa4a03a73e665e2919296ea530ac14a091b00193d1437f7cb0278b78c3cf9",
+    "lab/probe.py": "a01c3dde9f277f846062a2b638d0799279d52efb4fee70e51c382eaf9f65ef8b",
+    "lab/runner.py": "b511a267ddd8940f87ac7b4bdc535db62b452583f896d9d0a2f8323a0e9bd724"
+  },
+  "uids": {
+    "broker": 450,
+    "outsider": 520,
+    "worker_a": 511,
+    "worker_b": 512
+  }
+}

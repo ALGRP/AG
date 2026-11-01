@@ -1,0 +1,20 @@
+{
+  "issuer": {
+    "iss": "agos-dispatcher",
+    "keys": {"k1": "<ED25519_PUBLIC_KEY_HEX__PUBLIC_ONLY>"},
+    "revoked_kids": []
+  },
+  "limits": {"max_inflight_per_board": 16, "read_timeout": 5},
+  "boards": [
+    {"board": "agos-continuous",
+     "db_path": "/var/lib/agos/kanban/agos-continuous/kanban.db",
+     "sock_path": "/run/agos-broker/agos-continuous/broker.sock",
+     "bound_uid": 511, "worker_gid": 511, "tenant": "AGOS_SYNTHETIC",
+     "backend": "lab_native"},
+    {"board": "agos-control",
+     "db_path": "/var/lib/agos/kanban/agos-control/kanban.db",
+     "sock_path": "/run/agos-broker/agos-control/broker.sock",
+     "bound_uid": 512, "worker_gid": 512, "tenant": "AGOS_SYNTHETIC_CTRL",
+     "backend": "lab_native_reserve"}
+  ]
+}

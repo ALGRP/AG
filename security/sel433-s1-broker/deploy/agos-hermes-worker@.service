@@ -1,0 +1,40 @@
+# SEL-433 S1/S2 STAGING TEMPLATE -- NOT INSTALLED, NOT RUNNABLE BY DESIGN.
+# ExecStart is /usr/bin/false until the pinned Hermes worker command is
+# reviewed in SEL-333 (S2). Instance name = board slug.
+[Unit]
+Description=AGOS Hermes worker for board %i (SEL-433, staging)
+After=agos-broker.service
+Requires=agos-broker.service
+
+[Service]
+Type=simple
+User=agosw-%i
+Group=agosw-%i
+Environment=HERMES_KANBAN_BROKER_SOCK=/run/agos-broker/%i/broker.sock
+UnsetEnvironment=HERMES_KANBAN_DB
+ExecStart=/usr/bin/false
+UMask=0077
+ProtectSystem=strict
+ReadWritePaths=/var/lib/agos-worker/%i
+InaccessiblePaths=/var/lib/agos/kanban /etc/agos-broker /var/backups/agos /var/lib/agos-broker
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+RestrictSUIDSGID=yes
+LockPersonality=yes
+RestrictNamespaces=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+# Network policy for the worker (model API egress) is an S2 decision.
+
+[Install]
+WantedBy=multi-user.target
