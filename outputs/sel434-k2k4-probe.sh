@@ -26,7 +26,9 @@ def tree(node, prefix, depth=0):
         for k, v in node.items():
             t = type(v).__name__
             n = f" (len={len(v)})" if isinstance(v, (list, dict)) else ""
-            print(f"{'  '*depth}{prefix}{k}: <{t}>{n}")
+            ks = str(k)
+            if sum(c.isdigit() for c in ks) >= 5 or len(ks) > 40: ks = "<MASKED-KEY>"
+            print(f"{'  '*depth}{prefix}{ks}: <{t}>{n}")
             if isinstance(v, dict): tree(v, "", depth+1)
 print("top-level keys:", sorted(d.keys()))
 for path in (["platforms"], ["telegram"], ["gateway"]):
