@@ -62,7 +62,7 @@ for t in reservations source_events outbox_jobs target_syncs telegram_updates te
     say "--- $t"; q "select 'toplam='||count(*) from public.$t"
   fi
   for s in status state kind type channel target event_type source; do
-    case ",$cols," in *",$s,"*) q "select '  $s='||coalesce($s::text,'NULL')||' adet='||count(*) from public.$t group by 1 order by count(*) desc limit 8";; esac
+    case ",$cols," in *",$s,"*) q "select '  $s='||coalesce($s::text,'NULL')||' adet='||count(*) from public.$t group by $s order by count(*) desc limit 8";; esac
   done
 done
 
