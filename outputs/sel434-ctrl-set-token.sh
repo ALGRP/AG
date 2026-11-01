@@ -6,7 +6,11 @@
 set -euo pipefail
 SSH=(ssh -o IdentitiesOnly=yes -i "$HOME/.ssh/agos-hermes-admin" agosadmin@62.238.35.60)
 printf 'Yeni token (gizli): '; read -rs TK; echo
-[[ "$TK" =~ ^[0-9]{6,}:[A-Za-z0-9_-]{30,}$ ]] || { unset TK; echo "HATA: token formatı beklenmedik; hiçbir şey gönderilmedi"; exit 2; }
+TK=$(printf '%s' "$TK" | tr -d ' \t\r\n"'"'"'')
+if ! [[ "$TK" =~ ^[0-9]{6,}:[A-Za-z0-9_-]{30,}$ ]]; then
+  L=${#TK}; C=$([[ "$TK" == *:* ]] && echo VAR || echo YOK); D=$([[ "$TK" =~ ^[0-9]+: ]] && echo EVET || echo HAYIR)
+  unset TK; echo "HATA: token formatı beklenmedik; hiçbir şey gönderilmedi (ipucu: uzunluk=$L, ':' $C, rakamla başlıyor=$D; beklenen ~45-46 karakter, örn. 123456789:AAH...)"; exit 2
+fi
 printf '%s' "$TK" | "${SSH[@]}" 'sudo /opt/hermes-ctrl/current/venv/bin/python -I -c '"'"'
 import sys, os, re, shutil, datetime
 tok = sys.stdin.read().strip()
