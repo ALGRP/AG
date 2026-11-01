@@ -5,10 +5,16 @@
 set -u
 CFG="$HOME/.hermes/profiles/agosorchestrator/config.yaml"
 HB="$(command -v hermes)"
-SB="$(head -1 "$HB" | sed -n 's/^#! *//p')"
-PY="$(echo "$SB" | awk '{print $1}')"
-case "$PY" in */env) PY="$(command -v "$(echo "$SB" | awk '{print $2}')")";; esac
-[ -n "$PY" ] && [ -x "$PY" ] || PY="$(command -v python3)"
+# Yalnız GERÇEK bir python yorumlayıcısı kabul edilir (hermes bash sarmalayıcısı olabilir).
+PY=""
+for c in "$HOME/.hermes/hermes-agent/venv/bin/python3" "$HOME/.hermes/hermes-agent/.venv/bin/python3" \
+         $(grep -oE '/[^" ]*/bin/python3?' "$HB" 2>/dev/null) "$(command -v python3)"; do
+  [ -n "$c" ] && [ -x "$c" ] || continue
+  case "$(basename "$c")" in python*) ;; *) continue;; esac
+  "$c" -c 'import sys; sys.exit(0 if sys.version_info[0]==3 else 1)' 2>/dev/null || continue
+  PY="$c"; break
+done
+[ -n "$PY" ] || { echo "Python yorumlayıcısı bulunamadı; durduruldu."; exit 2; }
 echo "hermes: $HB"; echo "python: $PY"
 "$PY" -I - "$CFG" <<'PYEOF'
 import sys
@@ -38,6 +44,16 @@ for path in (["platforms"], ["telegram"], ["gateway"]):
     for p in path: node = node.get(p) if isinstance(node, dict) else None
     print(f"--- {'.'.join(path)}: {'VAR' if node is not None else 'YOK'}")
     if isinstance(node, dict): tree(node, "")
+def find(node, path=()):
+    if isinstance(node, dict):
+        for k, v in node.items():
+            if str(k).upper().startswith(("TELEGRAM_", "GATEWAY_", "HERMES_")) or str(k) in ("allow_admin_from","user_allowed_commands","group_allow_admin_from","group_user_allowed_commands","dm_policy","group_policy","unauthorized_dm_behavior","multiplex_profiles"):
+                n = len([x for x in str(v).replace(";", ",").split(",") if x.strip()]) if isinstance(v, (str, int)) else (len(v) if isinstance(v, (list, dict)) else 0)
+                star = ("*" in str(v)) if isinstance(v, (str, list)) else False
+                print(f"  {'.'.join(path+(str(k),))}: <{type(v).__name__}> öğe={n} yıldız={'VAR' if star else 'YOK'}")
+            find(v, path+(str(k),))
+print("--- güvenlik anahtarları (konum/tür/sayı, değer yok):")
+find(d)
 a = d.get("approvals")
 print("--- approvals:", "VAR" if a is not None else "YOK")
 if isinstance(a, dict):
