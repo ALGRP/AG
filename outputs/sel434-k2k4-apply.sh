@@ -50,26 +50,41 @@ if OWNER not in envids: fail("Owner id .env allowlist'te yok")
 OTHER = sorted(envids - {OWNER})
 print(f"Owner id: doğrulandı (config=HOME_CHANNEL, .env içinde). Diğer allowlist id adedi: {len(OTHER)}")
 
-# --- Değişiklik (K2 + K4 → üst seviye telegram: bloğu; K3 → approvals.mode)
+# --- Değişiklik: METİN düzeyinde minimal düzenleme (biçim korunur), sonra anlamsal doğrulama
+import yaml as _pyyaml
 if "telegram" in data: fail("config.yaml'da zaten üst seviye 'telegram:' bloğu var; elle incelenmeli")
 for k in ("dm_policy","group_policy","unauthorized_dm_behavior","allow_admin_from"):
     if k in data: fail(f"üst seviyede beklenmeyen '{k}' anahtarı var")
-from ruamel.yaml.comments import CommentedMap, CommentedSeq
-def seq(items):
-    s = CommentedSeq(items); s.fa.set_flow_style(); return s
-tg = CommentedMap()
-tg["dm_policy"] = "allowlist"                 # K4
-tg["unauthorized_dm_behavior"] = "ignore"     # K4
-tg["group_policy"] = "disabled"               # K4
-tg["allow_admin_from"] = seq([OWNER])         # K2
-tg["user_allowed_commands"] = seq([])         # K2
-tg["group_allow_admin_from"] = seq([OWNER])   # K2
-tg["group_user_allowed_commands"] = seq([])   # K2
-data["telegram"] = tg
 if not isinstance(data.get("approvals"), dict): fail("approvals bölümü yok")
 old_mode = data["approvals"].get("mode")
-data["approvals"]["mode"] = "manual"          # K3
-buf = io.StringIO(); y.dump(data, buf); new_text = buf.getvalue()
+lines = orig_text.split("\n")
+try: ai = lines.index("approvals:")
+except ValueError: fail("üst seviye 'approvals:' satırı bulunamadı")
+hits = []
+for i in range(ai + 1, len(lines)):
+    l = lines[i]
+    if l and not l[0].isspace() and not l.startswith("#"): break
+    if re.fullmatch(r"  mode:\s*\S+\s*", l): hits.append(i)
+if len(hits) != 1: fail(f"approvals altında tek 'mode:' satırı beklenirdi (bulunan {len(hits)})")
+lines[hits[0]] = "  mode: manual"                                   # K3
+block = ["telegram:",
+         "  dm_policy: allowlist",                                  # K4
+         "  unauthorized_dm_behavior: ignore",                      # K4
+         "  group_policy: disabled",                                # K4
+         f"  allow_admin_from: ['{OWNER}']",                        # K2
+         "  user_allowed_commands: []",                             # K2
+         f"  group_allow_admin_from: ['{OWNER}']",                  # K2
+         "  group_user_allowed_commands: []"]                       # K2
+body = "\n".join(lines).rstrip("\n")
+new_text = body + "\n" + "\n".join(block) + "\n"
+# anlamsal kontrol: yeni = eski + yalnız beklenen değişiklikler
+before = _pyyaml.safe_load(orig_text); after = _pyyaml.safe_load(new_text)
+exp = dict(before); exp["approvals"] = dict(before["approvals"], mode="manual")
+exp["telegram"] = {"dm_policy": "allowlist", "unauthorized_dm_behavior": "ignore", "group_policy": "disabled",
+                   "allow_admin_from": [OWNER], "user_allowed_commands": [],
+                   "group_allow_admin_from": [OWNER], "group_user_allowed_commands": []}
+if after != exp: fail("anlamsal kontrol başarısız: yeni YAML beklenen değişiklikten fazlasını içeriyor")
+print("Anlamsal kontrol: yeni YAML = eski + yalnız K2/K3/K4 değişiklikleri (OK)")
 
 _TOK = re.compile(r"\d{6,}:[A-Za-z0-9_-]{20,}|[A-Za-z0-9_-]{32,}")
 mask = lambda s: _TOK.sub("<REDACTED>", s.replace(OWNER, "<OWNER>"))
@@ -102,18 +117,32 @@ for k in ("user_allowed_commands", "group_user_allowed_commands"):
     chk(f"{k} = [] (boş)", list(ex.get(k) or []) == [] and k in ex)
 try:
     import gateway.slash_access as sa
-    pol = sa.policy_from_extra(ex) if "policy_from_extra" in dir(sa) else None
-    if pol is not None and hasattr(pol, "is_admin"):
-        sig = inspect.signature(pol.is_admin)
+    fn = getattr(sa, "policy_from_extra", None)
+    if fn is None:
+        print("  [INFO] slash_access.policy_from_extra yok; gating doğrudan sınanmadı")
+    else:
+        pol = None
+        for args in ((ex,), (ex, "dm"), (ex, "telegram"), (ex, "telegram", "dm")):
+            try: pol = fn(*args); break
+            except TypeError: continue
+        adm_fn = getattr(pol, "is_admin", None) if pol is not None else None
         def adm(u):
-            try: return pol.is_admin(u)
-            except TypeError: return pol.is_admin(u, "dm")
+            for a in ((u,), (str(u),), (u, "dm"), (str(u), "dm")):
+                try: return bool(adm_fn(*a))
+                except TypeError: continue
+            raise TypeError("is_admin imzası")
+        if adm_fn is None: raise TypeError("policy")
         chk("slash gating: Owner admin", adm(owner) is True)
         for i, o in enumerate(others): chk(f"slash gating: diğer id #{i+1} admin DEĞİL", adm(o) is False)
-    else:
-        print("  [INFO] slash_access.policy_from_extra/is_admin bulunamadı; gating doğrudan sınanmadı")
 except Exception as e:
     print(f"  [INFO] slash gating sınaması atlandı: {type(e).__name__}")
+    for n in ("policy_from_extra",):
+        f = getattr(sa, n, None) if "sa" in dir() else None
+        if f: print(f"  [INFO] imza {n}{inspect.signature(f)}")
+    cls = [c for c in dir(sa) if "Policy" in c] if "sa" in dir() else []
+    for c in cls:
+        m = getattr(getattr(sa, c), "is_admin", None)
+        if m: print(f"  [INFO] imza {c}.is_admin{inspect.signature(m)}")
 print("VERIFY_RESULT=" + ("PASS" if ok else "FAIL"))
 sys.exit(0 if ok else 1)
 '''
