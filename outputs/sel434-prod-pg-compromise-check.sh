@@ -37,6 +37,8 @@ for pat in 'FROM PROGRAM' 'lo_import' 'lo_export' 'pg_read_server_files' 'pg_exe
 done
 say "--- parola hatası hedef rol adları (sayım):"
 printf '%s\n' "$L" | grep -oE 'password authentication failed for user "[^"]{1,40}"' | sed -E 's/.*user "([^"]*)"/\1/' | sort | uniq -c | sort -rn | head -10
+AU=$(docker exec "$C" sh -c 'printf %s "$POSTGRES_USER"' 2>/dev/null)
+say "uygulama_kullanicisi(<APP_USER>)_hedeflenen_deneme=$(printf '%s\n' "$L" | grep -cF "password authentication failed for user \"$AU\"")"
 say "--- günlere göre parola hatası (son 10 gün):"
 docker logs --timestamps "$C" 2>&1 | grep 'password authentication failed' | cut -c1-10 | sort | uniq -c | tail -10
 
