@@ -1,0 +1,21 @@
+== lab_regression_16
+{"variant": "candidate", "run": 16, "passed": 16, "failures": 0, "errors": 0, "assertion_failures": 0}
+== lab_uid_28
+{"run": 28, "passed": 28, "failed": 0, "S1_ACCEPTED": false, "INDEPENDENT_ACCEPTED": false, "LIVE_CHANGED": false}
+== s1_unit
+{"suite": "sel433-s1-unit", "run": 29, "failures": 0, "errors": 0}
+== s1_battery
+{"run": 56, "passed": 55, "failed": 1, "S1_ACCEPTED": false, "INDEPENDENT_ACCEPTED": false, "LIVE_CHANGED": false}
+== s1_mutation
+[KILLED] clock_regression_ignored: unit={"suite": "sel433-s1-unit", "run": 29, "failures": 1, "errors": 0} battery={"run": 56, "passed": 56, "failed": 0, "S1_ACCEPTED": false, "INDEPENDENT_ACCEPTED": false, "LIVE_CHANGED": false}
+== systemd_verify
+VERIFY_OK
+== systemd_security
+→ Overall exposure level for agos-hermes-worker@i.service: 2.0 OK :-)
+G0=HOLD
+S1_ACCEPTED=NO
+INDEPENDENT_ACCEPTED=NO
+LIVE_CHANGED=NO
+SUITES_ALL_PASS=NO
+evidence: /home/user/sel433-x86-evidence/run3
+RUN_ALL_EXIT=1

@@ -1,0 +1,376 @@
+{
+  "INDEPENDENT_ACCEPTED": false,
+  "LIVE_CHANGED": false,
+  "S1_ACCEPTED": false,
+  "failed": 1,
+  "kernel": "6.18.44-fc-v185",
+  "passed": 55,
+  "python": "3.11.18",
+  "results": [
+    {
+      "control": "broker_write_path_works",
+      "detail": "{\"ok\": true, \"action\": \"heartbeat\", \"result\": {\"task_id\": \"a_hb\", \"run_id\": 1, \"claim_expires\": 1793552721}, \"peer\": {\"pid\": 1708, \"uid\": 511, \"gid\": 511}}",
+      "section": "sqlite_wal_shm",
+      "verdict": "PASS"
+    },
+    {
+      "control": "journal_mode_wal",
+      "detail": "[\"wal\", \"wal\"]",
+      "section": "sqlite_wal_shm",
+      "verdict": "PASS"
+    },
+    {
+      "control": "wal_shm_created_broker_owned_0600",
+      "detail": "{\"agos-continuous/kanban.db\": [450, \"0o600\"], \"agos-continuous/kanban.db-wal\": [450, \"0o600\"], \"agos-continuous/kanban.db-shm\": [450, \"0o600\"], \"agos-control/kanban.db\": [450, \"0o600\"], \"agos-control/kanban.db-wal\": [450, \"0o600\"], \"agos-control/kanban.db-shm\": [450, \"0o600\"]}",
+      "section": "sqlite_wal_shm",
+      "verdict": "PASS"
+    },
+    {
+      "control": "worker_a_cannot_read_write_or_plant_db_wal_shm",
+      "detail": "{\"agos-continuous/kanban.db\": [\"EACCES\", \"EACCES\"], \"agos-continuous/kanban.db-wal\": [\"EACCES\", \"EACCES\"], \"agos-continuous/kanban.db-shm\": [\"EACCES\", \"EACCES\"], \"agos-control/kanban.db\": [\"EACCES\", \"EACCES\"], \"agos-control/kanban.db-wal\": [\"EACCES\", \"EACCES\"], \"agos-control/kanban.db-shm\": [\"EACCES\", \"EACCES\"], \"create\": \"EACCES\"}",
+      "section": "sqlite_wal_shm",
+      "verdict": "PASS"
+    },
+    {
+      "control": "worker_b_cannot_read_write_or_plant_db_wal_shm",
+      "detail": "{\"agos-continuous/kanban.db\": [\"EACCES\", \"EACCES\"], \"agos-continuous/kanban.db-wal\": [\"EACCES\", \"EACCES\"], \"agos-continuous/kanban.db-shm\": [\"EACCES\", \"EACCES\"], \"agos-control/kanban.db\": [\"EACCES\", \"EACCES\"], \"agos-control/kanban.db-wal\": [\"EACCES\", \"EACCES\"], \"agos-control/kanban.db-shm\": [\"EACCES\", \"EACCES\"], \"create\": \"EACCES\"}",
+      "section": "sqlite_wal_shm",
+      "verdict": "PASS"
+    },
+    {
+      "control": "outsider_cannot_read_write_or_plant_db_wal_shm",
+      "detail": "{\"agos-continuous/kanban.db\": [\"EACCES\", \"EACCES\"], \"agos-continuous/kanban.db-wal\": [\"EACCES\", \"EACCES\"], \"agos-continuous/kanban.db-shm\": [\"EACCES\", \"EACCES\"], \"agos-control/kanban.db\": [\"EACCES\", \"EACCES\"], \"agos-control/kanban.db-wal\": [\"EACCES\", \"EACCES\"], \"agos-control/kanban.db-shm\": [\"EACCES\", \"EACCES\"], \"create\": \"EACCES\"}",
+      "section": "sqlite_wal_shm",
+      "verdict": "PASS"
+    },
+    {
+      "control": "env_override_HERMES_KANBAN_DB_cannot_reach_any_db",
+      "detail": "{\"agos-continuous/kanban.db\": \"DENIED:OperationalError:unable to open database file\", \"agos-control/kanban.db\": \"DENIED:OperationalError:unable to open database file\"}",
+      "section": "sqlite_wal_shm",
+      "verdict": "PASS"
+    },
+    {
+      "control": "worker_a_cannot_connect_board_b_socket",
+      "detail": "{\"ok\": false, \"reason\": \"EACCES\"}",
+      "section": "user_isolation",
+      "verdict": "PASS"
+    },
+    {
+      "control": "outsider_cannot_connect_any_socket",
+      "detail": "{\"ok\": false, \"reason\": \"EACCES\"}",
+      "section": "user_isolation",
+      "verdict": "PASS"
+    },
+    {
+      "control": "wrong_uid_in_worker_group_rejected_by_peer_uid",
+      "detail": "{\"ok\": false, \"reason\": \"peer_uid_not_bound\", \"detail\": \"uid 520 may not use the agos-continuous socket\"}",
+      "section": "user_isolation",
+      "verdict": "PASS"
+    },
+    {
+      "control": "worker_cannot_read_broker_config_state_backups",
+      "detail": "{\"cfg\": \"EACCES\", \"state\": \"EACCES\", \"backups\": \"EACCES\"}",
+      "section": "user_isolation",
+      "verdict": "PASS"
+    },
+    {
+      "control": "worker_cannot_read_broker_or_peer_environ_mem",
+      "detail": "{\"/proc/1705/environ\": \"EACCES\", \"/proc/1705/mem\": \"EACCES\", \"/proc/1720/environ\": \"EACCES\", \"/proc/1720/mem\": \"EACCES\"}",
+      "section": "user_isolation",
+      "verdict": "PASS"
+    },
+    {
+      "control": "negative_capabilities_rejected",
+      "detail": "{\"forged_signature_same_kid\": \"capability_rejected\", \"leaked_board_b_capability\": \"capability_rejected\", \"own_uid_but_board_b_claim\": \"capability_rejected\", \"cross_tenant\": \"capability_rejected\", \"cross_project\": \"capability_rejected\", \"stale_run_id\": \"capability_rejected\", \"foreign_task\": \"capability_rejected\", \"expired\": \"capability_rejected\", \"duplicate_json_member\": \"capability_rejected\", \"action_not_allowed\": \"action_not_allowed\"}",
+      "section": "authorization",
+      "verdict": "PASS"
+    },
+    {
+      "control": "rejections_consume_no_nonce_and_change_no_task",
+      "detail": "{\"nonces_before\": 1, \"after\": 1}",
+      "section": "authorization",
+      "verdict": "PASS"
+    },
+    {
+      "control": "oversized_frame_rejected",
+      "detail": "{\"ok\": false, \"reason\": \"framing_rejected\", \"detail\": \"frame length out of policy: 1048576\"}",
+      "section": "authorization",
+      "verdict": "PASS"
+    },
+    {
+      "control": "valid_complete_accepted",
+      "detail": "[\"OK\"]",
+      "section": "authorization",
+      "verdict": "PASS"
+    },
+    {
+      "control": "complete_closes_run_row",
+      "detail": "[[\"completed\", 1]]",
+      "section": "authorization",
+      "verdict": "PASS"
+    },
+    {
+      "control": "replay_same_capability_rejected",
+      "detail": "[\"OK\", \"replay_rejected\"]",
+      "section": "nonce",
+      "verdict": "PASS"
+    },
+    {
+      "control": "nonce_history_row_persisted",
+      "detail": "[[\"applied\", 60, \"k1\"]]",
+      "section": "nonce",
+      "verdict": "PASS"
+    },
+    {
+      "control": "same_capability_8_concurrent_one_winner",
+      "detail": "1",
+      "section": "nonce",
+      "verdict": "PASS"
+    },
+    {
+      "control": "distinct_capabilities_8_concurrent_one_task_winner",
+      "detail": "1",
+      "section": "nonce",
+      "verdict": "PASS"
+    },
+    {
+      "control": "reserve_mode_complete_then_replay",
+      "detail": "{\"r\": [\"OK\", \"replay_rejected\"], \"rows\": [[\"applied\"]]}",
+      "section": "nonce",
+      "verdict": "PASS"
+    },
+    {
+      "control": "sigterm_graceful_exit_and_socket_cleanup",
+      "detail": "{\"first\": [\"OK\"], \"rc\": 0, \"sockets_removed\": true}",
+      "section": "restart",
+      "verdict": "PASS"
+    },
+    {
+      "control": "replay_after_restart_rejected",
+      "detail": "[\"replay_rejected\"]",
+      "section": "restart",
+      "verdict": "PASS"
+    },
+    {
+      "control": "sigkill_mid_atomic_txn_rolls_back_effect_and_nonce",
+      "detail": "{\"reply\": [\"EOF:unexpected EOF mid-frame\"], \"rc\": -9, \"status/nonce/integrity\": [\"running\", 0, \"ok\"]}",
+      "section": "restart",
+      "verdict": "PASS"
+    },
+    {
+      "control": "restart_replaces_stale_socket_after_sigkill",
+      "detail": "{\"stale_socket_left_by_kill\": true}",
+      "section": "restart",
+      "verdict": "PASS"
+    },
+    {
+      "control": "same_capability_retry_after_atomic_crash_then_single_use",
+      "detail": "[\"OK\", \"replay_rejected\"]",
+      "section": "restart",
+      "verdict": "PASS"
+    },
+    {
+      "control": "reserve_crash_before_effect_fails_closed_then_fresh_cap_works",
+      "detail": "{\"rc\": -9, \"after_crash\": [\"running\", [[\"reserved\"]]], \"retry_same_then_fresh\": [\"replay_rejected\", \"OK\"]}",
+      "section": "restart",
+      "verdict": "PASS"
+    },
+    {
+      "control": "reserve_crash_after_effect_no_replay_no_double_effect",
+      "detail": "{\"rc\": -9, \"after_crash\": [\"done\", [[\"reserved\"]]], \"retry_same_then_fresh\": [\"replay_rejected\", \"capability_rejected\"], \"ended_runs\": 1}",
+      "section": "restart",
+      "verdict": "PASS"
+    },
+    {
+      "control": "key_rotation_revoked_k1_rejected_k2_accepted",
+      "detail": "[\"capability_rejected\", \"OK\"]",
+      "section": "restart",
+      "verdict": "PASS"
+    },
+    {
+      "control": "preflight_ok_on_correct_layout",
+      "detail": "{\"preflight\": \"OK\", \"boards\": [\"agos-continuous\", \"agos-control\"]}",
+      "section": "preflight",
+      "verdict": "PASS"
+    },
+    {
+      "control": "preflight_refuses_db_mode_0644",
+      "detail": "{\"rc\": 3, \"stderr\": \"{\\\"preflight\\\": \\\"FAIL\\\", \\\"problems\\\": [\\\"agos-continuous db mode 0o644 grants group/other: /tmp/sel433-s1-j4xb5_5k/var/lib/agos/kanban/agos-continuous/kanban.db\\\"]}\\n\"}",
+      "section": "preflight",
+      "verdict": "PASS"
+    },
+    {
+      "control": "preflight_refuses_db_owned_by_worker",
+      "detail": "{\"rc\": 3, \"stderr\": \"{\\\"preflight\\\": \\\"FAIL\\\", \\\"problems\\\": [\\\"agos-continuous db owner 511 != broker 450: /tmp/sel433-s1-j4xb5_5k/var/lib/agos/kanban/agos-continuous/kanban.db\\\"]}\\n\"}",
+      "section": "preflight",
+      "verdict": "PASS"
+    },
+    {
+      "control": "preflight_refuses_db_dir_0755",
+      "detail": "{\"rc\": 3, \"stderr\": \"{\\\"preflight\\\": \\\"FAIL\\\", \\\"problems\\\": [\\\"agos-continuous db dir mode 0o755 grants group/other: /tmp/sel433-s1-j4xb5_5k/var/lib/agos/kanban/agos-continuous\\\"]}\\n\"}",
+      "section": "preflight",
+      "verdict": "PASS"
+    },
+    {
+      "control": "preflight_refuses_socket_dir_0755",
+      "detail": "{\"rc\": 3, \"stderr\": \"{\\\"preflight\\\": \\\"FAIL\\\", \\\"problems\\\": [\\\"agos-continuous: socket dir mode 0o755 != 0o750\\\"]}\\n\"}",
+      "section": "preflight",
+      "verdict": "PASS"
+    },
+    {
+      "control": "preflight_refuses_socket_dir_wrong_group",
+      "detail": "{\"rc\": 3, \"stderr\": \"{\\\"preflight\\\": \\\"FAIL\\\", \\\"problems\\\": [\\\"agos-continuous: socket dir group 512 != worker gid 511\\\"]}\\n\"}",
+      "section": "preflight",
+      "verdict": "PASS"
+    },
+    {
+      "control": "preflight_refuses_config_group_writable",
+      "detail": "{\"rc\": 3, \"stderr\": \"{\\\"preflight\\\": \\\"FAIL\\\", \\\"problems\\\": [\\\"config writable by group/other\\\"]}\\n\"}",
+      "section": "preflight",
+      "verdict": "PASS"
+    },
+    {
+      "control": "preflight_refuses_interrupted_restore_marker",
+      "detail": "{\"rc\": 3, \"stderr\": \"{\\\"preflight\\\": \\\"FAIL\\\", \\\"problems\\\": [\\\"agos-continuous: interrupted restore marker present; finish or roll back the restore first\\\"]}\\n\"}",
+      "section": "preflight",
+      "verdict": "PASS"
+    },
+    {
+      "control": "preflight_refuses_running_as_root",
+      "detail": "{\"rc\": 3}",
+      "section": "preflight",
+      "verdict": "PASS"
+    },
+    {
+      "control": "negative_control_naive_copy_loses_wal_commits",
+      "detail": "{\"naive_copy\": \"ERR:no such table: t\", \"backup_api\": 100}",
+      "section": "backup_restore_rollback",
+      "verdict": "PASS"
+    },
+    {
+      "control": "backup_refused_while_broker_serving",
+      "detail": "{\"rc\": 1}",
+      "section": "backup_restore_rollback",
+      "verdict": "PASS"
+    },
+    {
+      "control": "backup_consistent_private_with_manifest",
+      "detail": "{\"rc\": 0, \"nonce_rows\": 8, \"stderr\": \"\"}",
+      "section": "backup_restore_rollback",
+      "verdict": "PASS"
+    },
+    {
+      "control": "negative_control_restore_without_watermark_reopens_spent_nonce",
+      "detail": "{\"spent_after_backup\": [\"OK\"], \"replay_on_unwatermarked_copy\": true}",
+      "section": "backup_restore_rollback",
+      "verdict": "PASS"
+    },
+    {
+      "control": "restore_refuses_tampered_backup",
+      "detail": "{\"rc\": 1}",
+      "section": "backup_restore_rollback",
+      "verdict": "PASS"
+    },
+    {
+      "control": "interrupted_restore_every_step_blocks_start_then_resumes_clean",
+      "detail": "{\"after_intent\": {\"wal_before\": true, \"interrupted\": true, \"daemon_refused\": true, \"resume_rc\": 0, \"foreign_wal_applied\": 0, \"integrity\": \"ok\", \"leftovers\": []}, \"mid_stage\": {\"wal_before\": true, \"interrupted\": true, \"daemon_refused\": true, \"resume_rc\": 0, \"foreign_wal_applied\": 0, \"integrity\": \"ok\", \"leftovers\": []}, \"after_stage\": {\"wal_before\": true, \"interrupted\": true, \"daemon_refused\": true, \"resume_rc\": 0, \"foreign_wal_applied\": 0, \"integrity\": \"ok\", \"leftovers\": []}, \"after_wal_aside\": {\"wal_before\": true, \"interrupted\": true, \"daemon_refused\": true, \"resume_rc\": 0, \"foreign_wal_applied\": 0, \"integrity\": \"ok\", \"leftovers\": []}, \"after_aside\": {\"wal_before\": true, \"interrupted\": true, \"daemon_refused\": true, \"resume_rc\": 0, \"foreign_wal_applied\": 0, \"integrity\": \"ok\", \"leftovers\": []}, \"after_swap\": {\"wal_before\": true, \"interrupted\": true, \"daemon_refused\": true, \"resume_rc\": 0, \"foreign_wal_applied\": 0, \"integrity\": \"ok\", \"leftovers\": []}}",
+      "section": "backup_restore_rollback",
+      "verdict": "PASS"
+    },
+    {
+      "control": "restored_db_broker_owned_0600",
+      "detail": "{\"\": [450, \"0o600\"]}",
+      "section": "backup_restore_rollback",
+      "verdict": "PASS"
+    },
+    {
+      "control": "restore_watermark_blocks_pre_restore_capability_fresh_one_works",
+      "detail": "[\"freshness_rejected\", \"OK\"]",
+      "section": "backup_restore_rollback",
+      "verdict": "PASS"
+    },
+    {
+      "control": "ownership_rollback_restores_legacy_owner_and_modes",
+      "detail": "{\"nodes\": 4, \"restored_equal\": true}",
+      "section": "backup_restore_rollback",
+      "verdict": "PASS"
+    },
+    {
+      "control": "dispatcher_env_has_no_db_path_and_cap_file_private",
+      "detail": "{\"env_keys\": [\"HERMES_KANBAN_BOARD\", \"HERMES_KANBAN_BROKER_SOCK\", \"HERMES_KANBAN_CAPABILITY_FILE\", \"HERMES_KANBAN_RUN_ID\", \"HERMES_KANBAN_TASK\", \"OTHER\", \"PATH\"], \"cap_owner\": 511, \"cap_mode\": \"0o600\"}",
+      "section": "hermes_adapter",
+      "verdict": "PASS"
+    },
+    {
+      "control": "adapter_lifecycle_via_broker_with_hostile_db_env",
+      "detail": "{\"ignored_db_env\": true, \"hb1\": {\"ok\": true, \"task_id\": \"a_adapter\", \"run_id\": 8, \"claim_expires\": 1793552738}, \"hb2\": {\"ok\": true, \"task_id\": \"a_adapter\", \"run_id\": 8, \"claim_expires\": 1793552738}, \"hb3\": {\"error\": \"heartbeat capabilities exhausted; dispatcher must renew the bundle\"}, \"other_task\": {\"error\": \"worker is scoped to task a_adapter; refusing to mutate a_hb\"}, \"complete\": {\"ok\": true, \"task_id\": \"a_adapter\", \"run_id\": 8, \"status\": \"done\"}, \"complete_again\": {\"error\": \"broker refused: replay_rejected: nonce already spent: 6b408fee7637...\"}}",
+      "section": "hermes_adapter",
+      "verdict": "PASS"
+    },
+    {
+      "control": "other_worker_cannot_read_capability_bundle",
+      "detail": "{\"a_cap\": \"EACCES\"}",
+      "section": "hermes_adapter",
+      "verdict": "PASS"
+    },
+    {
+      "control": "adapter_has_no_direct_db_fallback",
+      "detail": "broker mode requires HERMES_KANBAN_BROKER_SOCK and HERMES_KANBAN_CAPABILITY_FILE; refusing direct DB access",
+      "section": "hermes_adapter",
+      "verdict": "PASS"
+    },
+    {
+      "control": "dispatcher_refuses_non_worker_private_cap_dir",
+      "detail": "REFUSED",
+      "section": "hermes_adapter",
+      "verdict": "PASS"
+    },
+    {
+      "control": "board_b_40_of_40_under_board_a_flood",
+      "detail": "{\"b\": {\"ok\": 40, \"secs\": 0.13}, \"a\": {\"held\": 200, \"own_extra\": \"OSERR:BrokenPipeError\"}}",
+      "section": "availability",
+      "verdict": "PASS"
+    },
+    {
+      "control": "flooding_worker_gets_busy_not_hang",
+      "detail": "{\"held\": 200, \"own_extra\": \"OSERR:BrokenPipeError\"}",
+      "section": "availability",
+      "verdict": "FAIL"
+    },
+    {
+      "control": "integrity_check_both_boards_after_battery",
+      "detail": "{\"agos-continuous\": \"ok\", \"agos-control\": \"ok\"}",
+      "section": "sqlite_wal_shm",
+      "verdict": "PASS"
+    }
+  ],
+  "run": 56,
+  "scope": "disposable Linux tree, numeric UIDs via setpriv, synthetic Hermes-shaped boards; no accounts, no systemd, no installed Hermes",
+  "source_sha256": {
+    "agos_broker/__init__.py": "c82bb9dd3c079b2d8fc9e97e10f8c58964bcb0fbed6472d4a26e992f0f3094d8",
+    "agos_broker/backends.py": "25dbff02571f9466453ec40c1bc489c5acc7b1a9889575d9795aa28f5a394657",
+    "agos_broker/backup.py": "31dfaae86b8e78e8178740f6335f40a55f726d3301f75aef24240a32fe1b1087",
+    "agos_broker/capability.py": "67f116461eb28dbc10d1e8c0ec4593fc23b7e712614a6eae81b7a7f055ce2062",
+    "agos_broker/config.py": "c05e2b73be0ae77f2cf98709048998418632c89737ec5e591dca5450e44c232f",
+    "agos_broker/daemon.py": "df04eaf83df969a50188c7a958c7715ba95a70d1f54921c9db23d300b5818045",
+    "agos_broker/keyring.py": "a22e98e3cc121cdcdd8abd57d16b16a8f2e7e9173897c8ae7688f649a0445954",
+    "agos_broker/ledger.py": "e19630475d0b7728c76a243ab9f2ba7081264d68224c9098701fcbe4d83d49d7",
+    "agos_broker/service.py": "11bfd99f0fd7977871d2080900a20fbb291fdc8340f968867427d5df4a2b9865",
+    "agos_broker/wire.py": "191fd42df2a56878853e7a55d2df51e48b442a6f399530afb5415a45dc3109b1",
+    "hermes_adapter/__init__.py": "6991836d0d6e8ecad9c7d70b79cf12203669b263e88796eba3f8063523236306",
+    "hermes_adapter/client.py": "6cd9deef08d10814f93b927a1020057aae3081b074abeed84b802940a4bf582d",
+    "hermes_adapter/dispatch.py": "055b704ba6d4d102a86de0c093d3c0f25f65c5c6bca9a3a7c70b23f940af314a",
+    "tests/crash_harness.py": "cf550c12b426deae5737494639ba3d65241ba4b0f38e888ed9f31b56e210073b",
+    "tests/mutation_check.py": "ab6e28dbd97c98da94c57e93f88933635729a76ba9b71d5352aefa1ea88db355",
+    "tests/run_s1_battery.py": "733d352a93a4d1792eeb4c71187679ffb085d0423b5a0d47d8d22554eb194fbf",
+    "tests/test_unit.py": "85f66565261f442c38d26bd0dbf4745d884d814997f8a7f34b234ff4fac89608"
+  },
+  "sqlite": "3.45.1",
+  "uid_map": "0 0 4294967295",
+  "uids": {
+    "broker": 450,
+    "outsider": 520,
+    "worker_a": 511,
+    "worker_b": 512
+  }
+}
