@@ -5,8 +5,10 @@
 set -u
 CFG="$HOME/.hermes/profiles/agosorchestrator/config.yaml"
 HB="$(command -v hermes)"
-PY="$(head -1 "$HB" | sed -n 's/^#! *//p' | awk '{print $1}')"
-[ -x "$PY" ] || PY=python3
+SB="$(head -1 "$HB" | sed -n 's/^#! *//p')"
+PY="$(echo "$SB" | awk '{print $1}')"
+case "$PY" in */env) PY="$(command -v "$(echo "$SB" | awk '{print $2}')")";; esac
+[ -n "$PY" ] && [ -x "$PY" ] || PY="$(command -v python3)"
 echo "hermes: $HB"; echo "python: $PY"
 "$PY" -I - "$CFG" <<'PYEOF'
 import sys
