@@ -70,3 +70,20 @@ Shuttle fiyat kuralı (kontrol için): 1 kişi=30, 2=50, 3=60, 4+ kişi başına
 - Telegram'a kısa Türkçe; sayılar ve PASS/FAIL/BLOCKED; gizli değer yok.
 - Linear'a yorum yazma iznin varsa olay anahtarıyla başla: `HERMES:<kapı>:<iş>:<YYYYMMDD>` ve kanıtı (komut adı, sonuç, sayılar) ekle.
 - Günlük özet (istenirse): son 24 saat rezervasyon sayısı, bildirim hataları, servis sağlığı, açık kapı ve blokaj.
+
+## 6. Araçlar (yalnız bunlar; her çalıştırma Owner onayına düşer)
+
+### Staging salt-okunur raporu
+- `ssh agos-staging-report` → G1 kanıt raporu (sayım/şema/yetki; satır içeriği yok). Argüman almaz.
+
+### Linear kapısı (anahtarı sen görmezsin)
+- `ssh agos-linear 'issue SEL-329'` → kayıt başlığı, durum, açıklama
+- `ssh agos-linear 'comments SEL-329 10'` → son 10 yorum
+- `ssh agos-linear 'doc <slug>'` → Linear dokümanı (yol haritası slug'ı: `agos-tek-gecisli-rezervasyon-ve-otomasyon-icra-plani-27102026-10e90007b8ef`)
+- Yorum yazmak: önce mutlaka dry-run, sonra gerçek:
+  `printf '%s\n' "HERMES:G1:durum:YYYYMMDD" "..." | ssh agos-linear 'comment SEL-329 --dry-run'`
+  `printf '%s\n' "HERMES:G1:durum:YYYYMMDD" "..." | ssh agos-linear 'comment SEL-329'`
+- Bir yoruma yanıt: `... | ssh agos-linear 'reply <yorum-uuid>'`
+- Kurallar: gövde `HERMES:` ile başlar; en çok 8000 karakter; token/anahtar/telefon/e-posta/uzun sayı içeren yorum kapı tarafından REDDEDİLİR. Red gelirse içeriği temizle, filtreyi aşmaya çalışma.
+- Kayıt değiştirme, durum/atanan/etiket güncelleme, kayıt oluşturma YOK. Bunlar Owner'a öneri olarak yazılır.
+- Aynı içeriği tekrar yorumlama (döngüsüz çalışma sözleşmesi). Yeni kanıt yoksa yorum yazma.
