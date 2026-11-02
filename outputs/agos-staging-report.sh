@@ -8,7 +8,7 @@ export LC_ALL=C PATH=/usr/sbin:/usr/bin:/sbin:/bin
 C=agos-staging-postgres
 say(){ printf '%s\n' "$*"; }
 sec(){ printf '\n== %s ==\n' "$*"; }
-say "AGOS_STAGING_REPORT v1  zaman=$(date -u +%FT%TZ)  host=$(hostname)  LIVE_CHANGED=NO"
+say "AGOS_STAGING_REPORT v2  zaman=$(date -u +%FT%TZ)  host=$(hostname)  LIVE_CHANGED=NO"
 say "veri_sinifi=GERCEK_MUSTERI_VERISI (yalnız sayım/şema/yetki raporlanır)"
 docker inspect "$C" >/dev/null 2>&1 || { say "konteyner=YOK"; exit 0; }
 
@@ -47,13 +47,17 @@ AUe=$(esc "$AU"); ADe=$(esc "$AD")
 mask(){ if [ -n "$AUe" ] && [ -n "$ADe" ]; then sed -e "s/\b$AUe\b/<APP_USER>/g" -e "s/\b$ADe\b/<APP_DB>/g"; else sed 's/.*/<MASKE_HATASI>/'; fi; }
 q(){ docker exec -e PGOPTIONS='-c default_transaction_read_only=on' -e Q="$2" "$C" sh -c 'psql -X -At -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "'"$1"'" -c "$Q"' 2>&1 | mask; }
 if ! q "$AD" 'select 1' | grep -qx 1; then say "db_erisim=HATA"; exit 0; fi
+# Veri sorguları (tablo sayımları, istatistikler) least-privilege rol ile: agos_readonly (NOLOGIN, yalnız SELECT)
+RO=0; [ "$(q "$AD" "select count(*) from pg_roles where rolname='agos_readonly' and not rolsuper and not rolcanlogin")" = 1 ] && RO=1
+qro(){ if [ "$RO" = 1 ]; then docker exec -e PGOPTIONS='-c default_transaction_read_only=on' -e Q="$1" "$C" sh -c 'psql -X -q -At -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "${POSTGRES_DB:-postgres}" -c "SET ROLE agos_readonly" -c "$Q"' 2>&1 | mask; else q "$AD" "$1"; fi; }
+if [ "$RO" = 1 ]; then say "veri_sorgu_rolu=$(qro "select current_user||' su='||(select rolsuper from pg_roles where rolname=current_user)")"; else say "veri_sorgu_rolu=<APP_USER> (agos_readonly YOK; superuser ile READ ONLY)"; fi
 say "--- roller (ad | superuser | login | createrole | createdb | bypassrls):"
 q "$AD" "select rolname||' | su='||rolsuper||' | login='||rolcanlogin||' | createrole='||rolcreaterole||' | createdb='||rolcreatedb||' | bypassrls='||rolbypassrls from pg_roles where rolname !~ '^pg_' order by 1" | sed 's/^/  /'
-say "salt_okunur_rol_sayisi=$(q "$AD" "select count(*) from pg_roles r where rolcanlogin and not rolsuper and not exists (select 1 from information_schema.role_table_grants g where g.grantee=r.rolname and g.privilege_type in ('INSERT','UPDATE','DELETE','TRUNCATE'))")"
+say "salt_okunur_rol(agos_readonly)=$([ "$RO" = 1 ] && echo VAR || echo YOK)  salt_okunur_login_rol_sayisi=$(q "$AD" "select count(*) from pg_roles r where rolcanlogin and not rolsuper and not exists (select 1 from information_schema.role_table_grants g where g.grantee=r.rolname and g.privilege_type in ('INSERT','UPDATE','DELETE','TRUNCATE'))")"
 say "--- veritabanları:"; q "$AD" "select datname from pg_database where not datistemplate order by 1" | sed 's/^/  /'
 say "--- tablolar ve KESİN satır sayıları (<APP_DB>.public):"
 for t in $(q "$AD" "select tablename from pg_tables where schemaname='public' order by 1"); do
-  printf '  %-28s %s\n' "$t" "$(q "$AD" "select count(*) from public.\"$t\"")"
+  printf '  %-28s %s\n' "$t" "$(qro "select count(*) from public.\"$t\"")"
 done
 say "--- tablo yetkileri özeti (grantee | yetki | tablo sayısı):"
 q "$AD" "select grantee||' | '||privilege_type||' | '||count(*) from information_schema.role_table_grants where table_schema='public' group by grantee, privilege_type order by 1" | sed 's/^/  /'
