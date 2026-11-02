@@ -4,13 +4,13 @@
 # Amaç: hangi veritabanı hangi servis tarafından yazılıyor, şema/idempotency/outbox yapısı ne — G2 kararı için.
 # Yalnız: tablo adları, KESİN sayımlar, kolon adları/tipleri, kısıtlar, indeksler, son kayıt zamanı,
 #         kaynak/domain/kanal kolonlarında değer DAĞILIMI (yalnız alan adı/kanal türünde kısa değerler).
-# Satır içeriği, müşteri adı/telefon/e-posta, parola, env DEĞERİ YAZDIRILMAZ. Kullanıcı/db adları maskelenir.
+# Satır içeriği, müşteri adı/telefon/e-posta, parola, env DEĞERİ YAZDIRILMAZ. Değerlerdeki 6+ haneli sayılar (Telegram/telefon) <NUM> olur. Kullanıcı/db adları maskelenir.
 set -uo pipefail
 export LC_ALL=C PATH=/usr/sbin:/usr/bin:/sbin:/bin
 say(){ printf '%s\n' "$*"; }
 sec(){ printf '\n== %s ==\n' "$*"; }
 [ "$(id -u)" = 0 ] || { say "HATA: root olarak çalıştırın (docker exec gerekli)"; exit 1; }
-say "SEL327_SOURCE_MAP v1  zaman=$(date -u +%FT%TZ)  host=$(hostname)  LIVE_CHANGED=NO"
+say "SEL327_SOURCE_MAP v2  zaman=$(date -u +%FT%TZ)  host=$(hostname)  LIVE_CHANGED=NO"
 
 # Rezervasyon tablosu olan tüm postgres konteynerlerini bul (n8n'in kendi DB'si hariç tutulmaz; ayrıca işaretlenir)
 CANDS=""
@@ -66,9 +66,9 @@ for C in $CANDS; do
     tc=$(q "select column_name from information_schema.columns where table_schema='public' and table_name='$T' and column_name in ('created_at','received_at','inserted_at','updated_at') order by array_position(array['created_at','received_at','inserted_at','updated_at'],column_name::text) limit 1")
     [ -n "$tc" ] && say "--- $T: zaman ($tc) min/max: $(q "select coalesce(to_char(min(\"$tc\"),'YYYY-MM-DD'),'-')||' / '||coalesce(to_char(max(\"$tc\"),'YYYY-MM-DD HH24:MI'),'-')||'  son7g='||count(*) filter (where \"$tc\" > now()-interval '7 days') from public.\"$T\"")"
     # yalnız kaynak/kanal/durum türü kolonlarda değer dağılımı (kısa, PII olmayan değerler; 40 karakterden uzun olanlar gizlenir)
-    for col in $(q "select column_name from information_schema.columns where table_schema='public' and table_name='$T' and data_type in ('text','character varying','USER-DEFINED') and column_name ~ '^(source|source_domain|domain|site|channel|brand|tenant|tenant_id|project|status|state|event_type|type|target|locale|schema_version|service_type|trip_type)$' order by 1"); do
+    for col in $(q "select column_name from information_schema.columns where table_schema='public' and table_name='$T' and data_type in ('text','character varying','USER-DEFINED') and column_name ~ '^(source|source_system|source_account_id|source_domain|domain|site|channel|brand|tenant|tenant_id|project|status|state|workflow_status|booking_confirmation_status|processing_status|event_type|type|target|locale|schema_version|service_type|transfer_type|trip_type|owner_company|requester)$' order by 1"); do
       say "--- $T.$col dağılımı (ilk 15):"
-      q "select v||' = '||n from (select case when length(coalesce(\"$col\"::text,'NULL'))>40 then '<uzun-değer-gizlendi>' else coalesce(\"$col\"::text,'NULL') end as v, count(*) as n from public.\"$T\" group by 1 order by 2 desc limit 15) x" | sed 's/^/    /'
+      q "select v||' = '||n from (select case when length(coalesce(\"$col\"::text,'NULL'))>40 then '<uzun-değer-gizlendi>' else regexp_replace(coalesce(\"$col\"::text,'NULL'),'[0-9]{6,}','<NUM>','g') end as v, count(*) as n from public.\"$T\" group by 1 order by 2 desc limit 15) x" | sed 's/^/    /'
     done
   done
   say "--- fonksiyonlar (public, ad):"
