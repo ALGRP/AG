@@ -5,7 +5,7 @@ description: "AGOS 5 web sitesinde rezervasyon kaynağı takibi, site başına W
 
 # AGOS SEO, site kaynağı ve yayın kuralları
 
-Linear: SEL-439 (bu iş), SEL-438 (alanyagroup.com SEO + llms.txt), SEL-281 (site başına rezervasyon), SEL-315/319 (SEO otopilot ve yayın kapıları),
+Linear: SEL-439 (bu iş), SEL-442 (kayıt düzeni: piramit, oturum kapanışı, Master Index §6), SEL-441 (AGNET-SEO standardı), SEL-438 (alanyagroup.com SEO + llms.txt), SEL-281 (site başına rezervasyon), SEL-315/319 (SEO otopilot ve yayın kapıları),
 SEL-151/233 (silo ve landing standardı), doküman "AGOS Web & Growth OS — Transfer / Taxi / Uber Silo Architecture".
 Linear'daki güncel metin bu dosyadan farklıysa **Linear geçerlidir**. Yetki sınırı için önce agos-roadmap bölüm 0.
 
@@ -43,24 +43,31 @@ Her kayıtta zorunlu alanlar:
 
 **Telegram bildirimi** her rezervasyonda ilk satırda kaynağı gösterir. Örnek: `🌐 antalyaflughafen.com · web_form · de`. Domain alanı boş gelen kayıt `KAYNAK=BİLİNMİYOR` diye raporlanır ve sayılır. Hermes boş alanı tahminle doldurmaz.
 
-## 2. Site rolleri (öneri — Owner onaylayınca kesinleşir)
+## 2. Site rolleri (Owner onaylı — AGNET-SEO v1.0 / SEL-441 ve AGLOCAL-OWNERSHIP-MAP v1.1)
 
-| Kod | Site | Önerilen odak |
-|---|---|---|
-| AG | alanyagroup.com | Ana marka: Alanya/Gazipaşa merkezli tüm hizmetler, otel sayfaları, çok dilli |
-| AGT | antalyagettransfer.com | Antalya Havalimanı → bölge transferi (EN ağırlıklı) |
-| AFH | antalyaflughafen.com | Almanca konuşan ziyaretçi (DE): Flughafen-Transfer |
-| AAT | antalyaairporttransfers.net | İngiltere/İrlanda ve uluslararası İngilizce; otel listeleri |
-| SLT | safelinetravel.com | Rusça/Doğu Avrupa (RU/PL) ya da VIP/özel transfer markası |
+Kaynak: Owner onaylı AGNET-SEO v1.0 (SEL-441) ve AGLOCAL-OWNERSHIP-MAP v1.1 (SEL-363). Bu tablo onlarla çelişirse **harita kazanır**.
 
-Kural: iki sitenin aynı dil ve aynı niyetle aynı sayfayı yayınlaması yasak. Çakışma varsa biri canonical sahibi olur, diğeri o sayfayı yayınlamaz.
+| Kod | Site | Rol | Dil |
+|---|---|---|---|
+| AG | alanyagroup.com | Ana marka ve operatör: Alanya + Gazipaşa (GZP) otoritesi, TR/RU tüm transfer niyetleri, merkezi rezervasyon | EN, TR, RU |
+| AGT | antalyagettransfer.com | Antalya Havalimanı (AYT) genel, Antalya merkez, Side/Manavgat | EN |
+| AAT | antalyaairporttransfers.net | Belek/Kadriye + Kemer koridoru (genel AYT niyeti AGT'dedir) | EN |
+| AFH | antalyaflughafen.com | Öncelikli altı bölgenin tüm transfer niyetleri | DE |
+| SLT | safelinetravel.com | Tur, aktivite, bölge keşfi; transfer SEO'sunu tekrar etmez | EN |
+
+Kurallar:
+- İki site aynı dil ve aynı niyetle sayfa yayınlayamaz. Sayfanın `owner_id`'si haritada o domaine ait değilse sayfa açılmaz; sahip URL'ye link verilir.
+- Siteler arası benzerlik eşiği: 5-gram Jaccard en çok %15 (AGNET-SEO §10).
+- Footer'da marka beyanı zorunludur (AGNET-SEO §2).
+- Siteler arası link sayısı ve `rel` kuralları AGNET-SEO §3'e göre uygulanır.
 
 ## 3. Site başına WhatsApp
 
-- **Numara:** müşterinin yazdığı numara, bugün rezervasyon alan mevcut WhatsApp hattıdır (`whatsapp-baileys` kaynağı).
-  - Site başına ayrı numara şimdilik açılmaz: ayrı SIM, ayrı oturum ve ayrı ban riski getirir.
+- **Numara (Owner kararı D-WA-20261102-01):** dört uydu site ortak hattı kullanır; numara SEL-439 kararında yazılıdır.
+  - Site başına ayrı numara açılmaz.
+  - Hermes raporlarında numara yalnız `****1234` biçiminde görünür.
   - WhatsApp Business Cloud API numarası, Owner kararıyla yalnız rezervasyon sonrası teyit içindir (agos-notification-automations bölüm 1).
-- **Kaynak etiketi:** her sitedeki buton `wa.me` linkidir ve ön-dolu metnin başında site kodu bulunur. Örnek: `[AFH] Hallo, ich möchte einen Transfer buchen`. Bu kod ilk mesajla gelir; intake bunu `source_domain` ve `source_channel=whatsapp_click` olarak kaydeder.
+- **Kaynak etiketi:** her sitedeki buton `wa.me` linkidir ve ön-dolu metnin başında site kodu bulunur. Örnek: `[AFH] antalyaflughafen.com/flughafentransfer-antalya-kemer/ – Hallo, ich möchte einen Transfer buchen.` Kod ile birlikte sayfa yolu da yazılır. Bu kod ilk mesajla gelir; intake bunu `source_domain` ve `source_channel=whatsapp_click` olarak kaydeder.
   - Kod yoksa kayıt `whatsapp_direct` olur.
   - Müşteri kodu silerse kaynak bilinmez. Bu normaldir; tahmin edilmez.
   - Butonun kendisi de analitik olayı üretir (`whatsapp_click`, site, sayfa).

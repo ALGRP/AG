@@ -6,6 +6,7 @@
 # 3) sitemap ↔ yayındaki html sayfa farkı
 # 4) AGT ve AAT: aynı slug'lı sayfaların metin benzerliği (yinelenen içerik riski)
 # 5) WhatsApp linki: uydu sitelerin herhangi bir sayfasında var mı?
+# 6) AGNET-SEO §2 marka beyanı footer'da var mı? (5-gram Jaccard eşiği %15: AGNET-SEO §10)
 # Müşteri verisi, token, telefon yazdırılmaz.
 set -uo pipefail
 export LC_ALL=C PATH=/usr/sbin:/usr/bin:/sbin:/bin
@@ -15,7 +16,7 @@ sec(){ printf '\n== %s ==\n' "$*"; }
 SITES="alanyagroup.com antalyagettransfer.com antalyaflughafen.com antalyaairporttransfers.net safelinetravel.com"
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 get(){ curl -sS -L --max-time 20 -A "AGOS-readiness-check/1.0" -o "$2" -w '%{http_code}' "$1" 2>/dev/null || echo 000; }
-say "SEL439_S0B v1  zaman=$(date -u +%FT%TZ)  LIVE_CHANGED=NO"
+say "SEL439_S0B v2  zaman=$(date -u +%FT%TZ)  LIVE_CHANGED=NO"
 
 sec "1) robots.txt: kimler engelli"
 for D in $SITES; do
@@ -64,6 +65,8 @@ cq "select string_agg(distinct k, ' ') from reservations, jsonb_object_keys(publ
 sec "3) sitemap ↔ yayındaki html sayfa"
 REL=/opt/agos/releases/ag-multidomain-static-20261022-booking-settings/public
 for D in antalyagettransfer.com antalyaflughafen.com antalyaairporttransfers.net safelinetravel.com; do
+  get "https://$D/" "$T/$D.live" >/dev/null
+  say "  $D: canlı ana sayfa = $REL/$D/index.html ? $( [ "$(sha256sum < "$T/$D.live" | cut -c1-12)" = "$(sha256sum < "$REL/$D/index.html" 2>/dev/null | cut -c1-12)" ] && echo AYNI || echo FARKLI-bu-klasör-canlı-kaynak-olmayabilir )"
   get "https://$D/sitemap.xml" "$T/$D.sm" >/dev/null
   grep -oE '<loc>[^<]+' "$T/$D.sm" | sed -E 's#<loc>https?://[^/]+##; s#/index\.html$#/#' | sort -u > "$T/$D.smurls"
   ( cd "$REL/$D" 2>/dev/null && find . -name '*.html' | sed -E 's#^\.##; s#/index\.html$#/#; s#^$#/#' | sort -u ) > "$T/$D.files"
@@ -74,6 +77,11 @@ done
 sec "4) yinelenen içerik riski: aynı slug'lı sayfalarda metin benzerliği"
 python3 - "$REL" <<'PY'
 import os,re,sys,difflib,itertools
+def jac(x,y,n=5):
+    def g(t):
+        w=t.split(); return set(tuple(w[i:i+n]) for i in range(max(0,len(w)-n+1)))
+    A,B=g(x),g(y)
+    return len(A&B)/len(A|B) if A|B else 0.0
 R=sys.argv[1]; S=['antalyagettransfer.com','antalyaairporttransfers.net','safelinetravel.com','antalyaflughafen.com']
 def text(p):
     h=open(p,errors='ignore').read()
@@ -85,16 +93,24 @@ for a,b in itertools.combinations(pages,2):
     if not common: print("  %s ↔ %s: ortak slug=0" % (a,b)); continue
     rs=[difflib.SequenceMatcher(None,text(pages[a][c]).split(),text(pages[b][c]).split(),autojunk=False).ratio() for c in common]
     hi=sum(1 for r in rs if r>=0.8)
-    print("  %s ↔ %s: ortak slug=%d  ort.benzerlik=%.0f%%  ≥80%% benzer sayfa=%d" % (a,b,len(common),100*sum(rs)/len(rs),hi))
+    js=[jac(text(pages[a][c]),text(pages[b][c])) for c in common]
+    over=sum(1 for j in js if j>0.15)
+    print("  %s ↔ %s: ortak slug=%d  ort.benzerlik=%.0f%%  ≥80%% benzer=%d  5-gram Jaccard ort=%.0f%%  >15%% (AGNET eşiği aşan)=%d" % (a,b,len(common),100*sum(rs)/len(rs),hi,100*sum(js)/len(js),over))
 # ana sayfalar ayrıca
 hs={s:text(os.path.join(R,s,'index.html')) for s in pages if os.path.exists(os.path.join(R,s,'index.html'))}
 for a,b in itertools.combinations(hs,2):
-    print("  ana sayfa %s ↔ %s: benzerlik=%.0f%%" % (a,b,100*difflib.SequenceMatcher(None,hs[a].split(),hs[b].split(),autojunk=False).ratio()))
+    print("  ana sayfa %s ↔ %s: benzerlik=%.0f%%  5-gram Jaccard=%.0f%%" % (a,b,100*difflib.SequenceMatcher(None,hs[a].split(),hs[b].split(),autojunk=False).ratio(),100*jac(hs[a],hs[b])))
 PY
 
 sec "5) WhatsApp linki: uydu sitelerin tüm sayfaları"
 for D in antalyagettransfer.com antalyaflughafen.com antalyaairporttransfers.net safelinetravel.com; do
   say "  $D: wa.me/api.whatsapp içeren html=$(grep -rlisE 'wa\.me/|api\.whatsapp\.com' "$REL/$D" --include='*.html' 2>/dev/null | wc -l)  app.js içinde=$(grep -cisE 'wa\.me|whatsapp' "$REL/../public/$D/assets/app.js" "$REL/$D/assets/app.js" 2>/dev/null | awk -F: '{s+=$NF} END{print s+0}')"
+done
+
+sec "6) AGNET-SEO §2 marka beyanı (footer) ve AG linki — uydu ana sayfaları"
+for D in antalyagettransfer.com antalyaflughafen.com antalyaairporttransfers.net safelinetravel.com; do
+  f="$REL/$D/index.html"
+  say "  $D: beyan_metni=$(grep -ciE 'an Alanya Group brand|Marke der Alanya Group' "$f" 2>/dev/null)  alanyagroup.com_linki=$(grep -oiE '<a[^>]+alanyagroup\.com[^>]*>' "$f" 2>/dev/null | wc -l)  nofollow_olan=$(grep -oiE '<a[^>]+alanyagroup\.com[^>]*>' "$f" 2>/dev/null | grep -ci nofollow)  tüm html içinde beyan olan=$(grep -rliE 'an Alanya Group brand|Marke der Alanya Group' "$REL/$D" --include='*.html' 2>/dev/null | wc -l)/$(find "$REL/$D" -name '*.html' | wc -l)"
 done
 
 sec "son"

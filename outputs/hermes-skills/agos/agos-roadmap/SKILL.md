@@ -71,6 +71,17 @@ Shuttle fiyat kuralı (kontrol için): 1 kişi=30, 2=50, 3=60, 4+ kişi başına
 - Linear'a yorum yazma iznin varsa olay anahtarıyla başla: `HERMES:<kapı>:<iş>:<YYYYMMDD>` ve kanıtı (komut adı, sonuç, sayılar) ekle.
 - Günlük özet (istenirse): son 24 saat rezervasyon sayısı, bildirim hataları, servis sağlığı, açık kapı ve blokaj.
 
+## 5b. Kayıt düzeni (SEL-442 — AGOS Master Index protokolü §4)
+
+Her iş bu sırayla kaydedilir:
+
+1. **BAŞLAT:** Önce SEL-442, Master Index ve ilgili L3 issue okunur. Aynı işin SEL kaydı varsa yenisi açılmaz.
+2. **Piramit:** L0 Owner → L1 SEL-442 / Master Index → L2 proje/mimari → L3 SEL görevi → L4 kanıt (komut adı, SHA, sayım).
+3. **Durum etiketleri:** PLANLANDI / LOCAL_ONLY / FAKE_TESTED / NATIVE_TESTED / IN_REVIEW / INDEPENDENT_ACCEPTED / LIVE_VERIFIED / HOLD / DONE. Bu katmanlar birbirine yükseltilmez.
+4. **Karar satırı:** Karar ID | tarih | alan | kaynak | öneri mi Owner kararı mı | SEL | kanıt | durum | engel | tek sonraki adım | sorumlu | güvenlik kapısı.
+5. **Kapanış:** önce L3 issue'ya yorum, sonra Master Index §6'ya yalnız yeni oturum girdisi eklenir. Hermes indeks dokümanını değiştiremez; girdi metnini Owner'a öneri olarak yazar.
+6. Her kaydın sonunda `LIVE_CHANGED=YES/NO` bulunur. Yarım işin tek sonraki adımı boş bırakılmaz.
+
 ## 6. Araçlar (yalnız bunlar; her çalıştırma Owner onayına düşer)
 
 ### Staging salt-okunur raporu
