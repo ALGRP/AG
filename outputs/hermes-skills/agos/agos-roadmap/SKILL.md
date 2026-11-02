@@ -28,7 +28,7 @@ farkı Owner'a bildir, kendi başına bu dosyayı değiştirme.
 - Orkestrasyon: n8n, canonical booking/outbox olaylarını işler.
 - Atama: gerçek sürücü/araç uygunluğu, vardiya, kapasite, çakışma ve operatör yetkisi kontrol edilmeden gerçek atama YOK.
 - Müşteri iletişimi: draft → onaylı test numarası → gerçek provider SENT/DELIVERED/ACK → ayrı canlı onay. Fake outbox `NOT_SENT` teslim değildir.
-- Ayrıntılar için ilgili beceriler: agos-notification-automations, agos-pool-finance, agos-pricing-matrix, agos-governance, agos-reviews.
+- Ayrıntılar için ilgili beceriler: agos-notification-automations, agos-pool-finance, agos-pricing-matrix, agos-governance, agos-reviews, agos-seo-publishing (SEO, Search Console, landing/silo, yayın takvimi, llms.txt, site başına WhatsApp kaynağı).
 
 ## 2. Kapılar (sıra önemlidir; kanıt olmadan DONE yok)
 
@@ -41,7 +41,7 @@ farkı Owner'a bildir, kendi başına bu dosyayı değiştirme.
 | G5 | Araç/sürücü atama ve operasyon paneli | SEL-195 | Öneri/inceleme; canlı atama YOK |
 | G6 | Voucher ve WhatsApp/Telegram teslim | SEL-137, SEL-179 | Taslak ve test planı; gerçek gönderim YOK |
 | G0+Release | Güvenlik bağımsız kabulü, kontrollü canlı pilot | SEL-324, SEL-326, SEL-433, SEL-434 | Durum takibi; pilot ancak ayrı Owner-L3 |
-| 8 | Web sitesi düzenlemeleri ve büyüme | — | **Şimdi izinli:** UX, mobil form, fiyat metni tutarlılığı, shuttle saatleri, SEO içerik, tasarım — yalnız staging/draft veya GitHub PR olarak. Canlı yayın Owner onayıyla |
+| 8 | Web sitesi düzenlemeleri ve büyüme | — | **Şimdi izinli:** UX, mobil form, fiyat metni tutarlılığı, shuttle saatleri, SEO içerik, tasarım — yalnız staging/draft veya GitHub PR olarak. Canlı yayın Owner onayıyla. Ayrıntı: SEL-439 + agos-seo-publishing |
 
 Siteler: alanyagroup.com, antalyagettransfer.com, antalyaflughafen.com, antalyaairporttransfers.net, safelinetravel.com.
 Shuttle fiyat kuralı (kontrol için): 1 kişi=30, 2=50, 3=60, 4+ kişi başına +10 avro (ayrıntı: agos-pricing-matrix).
