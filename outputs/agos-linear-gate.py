@@ -83,9 +83,11 @@ def main():
         log(op, rest[0], "ok")
     elif op == "comments" and 1 <= len(rest) <= 2 and ID_RE.match(rest[0]):
         n = min(int(rest[1]), 30) if len(rest) == 2 and rest[1].isdigit() else 10
-        d = gql("""query($id:String!,$n:Int!){issue(id:$id){comments(last:$n){nodes{id createdAt user{name} body parent{id}}}}}""",
-                {"id": rest[0], "n": n})["issue"]["comments"]["nodes"]
-        for c in sorted(d, key=lambda x: x["createdAt"]):
+        # En yeni N yorum (yanıtlar dahil): son 100'ü al, zamana göre sırala, en yeni N'i göster.
+        d = gql("""query($id:String!){issue(id:$id){comments(first:100, orderBy:createdAt){nodes{id createdAt user{name} body parent{id}}}}}""",
+                {"id": rest[0]})["issue"]["comments"]["nodes"]
+        d = sorted(d, key=lambda x: x["createdAt"])[-n:]
+        for c in d:
             print("--- %s %s %s%s\n%s\n" % (c["createdAt"], (c.get("user") or {}).get("name"), c["id"],
                   " (yanıt)" if c.get("parent") else "", trunc(c["body"], 1500)))
         log(op, rest[0], "ok n=%d" % len(d))
