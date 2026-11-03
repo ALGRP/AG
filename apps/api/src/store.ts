@@ -15,6 +15,8 @@ import type {
 
 /** Same payer + bank reference is one receipt, regardless of whitespace/case. */
 export const normalizeBankReference = (ref: string): string => ref.replace(/\s+/g, "").toUpperCase();
+/** Adjustment business references are case-insensitive (even for legacy records). */
+export const normalizeAdjustmentReference = (ref: string): string => ref.toUpperCase();
 
 // Depo arayüzü. Üretimde karşılığı merkezi rezervasyon PostgreSQL'idir (CRS); şema adayı packages/db.
 // MemoryStore yalnız yerel geliştirme ve test içindir.
@@ -254,10 +256,11 @@ export class MemoryStore implements Store {
   }
   async appendAdjustments(a: readonly Adjustment[]) {
     // Enforce unique business-reference atomically, including duplicates inside the same batch.
-    const refs = new Set(this.#adjustments.map((x) => x.adjustment_reference));
+    const refs = new Set(this.#adjustments.map((x) => normalizeAdjustmentReference(x.adjustment_reference)));
     for (const item of a) {
-      if (refs.has(item.adjustment_reference)) throw new Error("duplicate adjustment reference");
-      refs.add(item.adjustment_reference);
+      const ref = normalizeAdjustmentReference(item.adjustment_reference);
+      if (refs.has(ref)) throw new Error("duplicate adjustment reference");
+      refs.add(ref);
     }
     this.#adjustments.push(...a);
   }

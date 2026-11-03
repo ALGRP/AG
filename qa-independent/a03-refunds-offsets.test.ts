@@ -145,7 +145,7 @@ describe("A3 offsets and overpayments", () => {
     assert.equal(ob().status, "paid");
   });
 
-  it("A3.13 [RULE] the same written approval typed in a different letter case must not create a second offset", { todo: "PR1-N2 · Codex Paket-01b (mahsup referansı normalizasyonu)" }, async () => {
+  it("A3.13 [RULE] the same written approval typed in a different letter case must not create a second offset", async () => {
     const lower = await h.service.createOffset(MANAGER, { ...body, writtenApprovalReference: "onay-case-1" });
     const upper = await h.service.createOffset(MANAGER, { ...body, writtenApprovalReference: "ONAY-CASE-1" });
     assert.equal(lower.status, 201);

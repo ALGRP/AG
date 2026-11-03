@@ -32,7 +32,7 @@ import {
   type SplitPolicy,
   type StatementDispute,
 } from "@ag/core";
-import { normalizeBankReference } from "./store.ts";
+import { normalizeAdjustmentReference, normalizeBankReference } from "./store.ts";
 import type { OutboxEvent, Store, StoredBooking } from "./store.ts";
 
 export interface ServiceDeps {
@@ -723,7 +723,7 @@ export class BookingService {
           booking_id: null,
           dispute_id: d.id,
         };
-        if ((await tx.listAdjustments()).some((x) => x.adjustment_reference === adj.adjustment_reference)) {
+        if ((await tx.listAdjustments()).some((x) => normalizeAdjustmentReference(x.adjustment_reference) === normalizeAdjustmentReference(adj.adjustment_reference))) {
           return fail(409, "duplicate_adjustment_reference");
         }
         await tx.appendAdjustments([adj]);
@@ -752,6 +752,8 @@ export class BookingService {
     if (typeof fromWeekId !== "string" || typeof debtorId !== "string" || !ID.test(debtorId) || typeof creditorId !== "string" || !ID.test(creditorId)) return fail(422, "party_invalid");
     if (!Number.isSafeInteger(amountMinor) || amountMinor === 0) return fail(422, "amountMinor_invalid");
     if (typeof reason !== "string" || reason.trim().length < 5) return fail(422, "reason_required");
+    // Bind the financial operation to one case-insensitive canonical approval reference.
+    const approvalRef = normalizeAdjustmentReference(writtenApprovalReference);
     return this.#d.store.transaction(async (tx) => {
       if (!(await tx.getClosedWeek(fromWeekId))) return fail(409, "week_not_closed");
       const adj: Adjustment = {
@@ -764,12 +766,12 @@ export class BookingService {
         currency: this.#d.shuttleTariff.currency,
         kind: "offset",
         reason: redactPii(reason.trim()).slice(0, 300),
-        adjustment_reference: `OFS-${fromWeekId}-${writtenApprovalReference}`,
-        written_approval_reference: writtenApprovalReference,
+        adjustment_reference: `OFS-${fromWeekId}-${approvalRef}`,
+        written_approval_reference: approvalRef,
         booking_id: null,
         dispute_id: null,
       };
-      if ((await tx.listAdjustments()).some((x) => x.adjustment_reference === adj.adjustment_reference)) {
+      if ((await tx.listAdjustments()).some((x) => normalizeAdjustmentReference(x.adjustment_reference) === normalizeAdjustmentReference(adj.adjustment_reference))) {
         return fail(409, "duplicate_adjustment_reference");
       }
       await tx.appendAdjustments([adj]);
