@@ -41,7 +41,7 @@ describe("A4 weekly close", () => {
     assert.equal((await h.close("2026-W44")).body.error, "week_before_last_closed");
   });
 
-  it("A4.4 [RULE] the first close must not skip earlier weeks that have activity", { todo: "QA-F7 · Codex Paket-01" }, async () => {
+  it("A4.4 [RULE] the first close must not skip earlier weeks that have activity", async () => {
     const h = harness();
     h.setNow("2026-11-04T10:00:00Z");
     await h.shuttleJob({}, "sup-a", 5000); // W45 activity
@@ -50,7 +50,7 @@ describe("A4 weekly close", () => {
     assert.equal(first.status, 409, "W46 closed as the very first week; W45 is now permanently unclosable");
   });
 
-  it("A4.5 [RULE] the first close must not accept an arbitrary historic week (2020-W01)", { todo: "QA-L2 · Codex Paket-01 (F7 ile aynı kural)" }, async () => {
+  it("A4.5 [RULE] the first close must not accept an arbitrary historic week (2020-W01)", async () => {
     const h = harness();
     h.setNow("2026-11-16T06:00:00Z");
     const r = await h.close("2020-W01");

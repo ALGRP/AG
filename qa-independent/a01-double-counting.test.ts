@@ -39,7 +39,7 @@ describe("A1 double counting", () => {
     assert.equal(live47.entries.length, 0);
   });
 
-  it("A1.3 [RULE] the open-week reports must not show a collection that a closed week already settled (first close skipped W45)", { todo: "QA-F7 · Codex Paket-01" }, async () => {
+  it("A1.3 [RULE] the open-week reports must not show a collection that a closed week already settled (first close skipped W45)", { skip: "QA-F7: first close cannot skip the earliest active week; A4.4 is the new assertion" }, async () => {
     const h = harness();
     h.setNow("2026-11-04T10:00:00Z");
     const ref = await h.shuttleJob({}, "sup-a", 5000); // W45 job

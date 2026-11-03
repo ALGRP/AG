@@ -831,6 +831,26 @@ export class BookingService {
         const last = closedIds[closedIds.length - 1]!;
         if (weekId < last) return fail(409, "week_before_last_closed");
         if (nextWeekId(last) !== weekId) return fail(409, `close_weeks_in_order:${nextWeekId(last)}`);
+      } else {
+        // First close must not jump over a week with booking/payment activity.
+        // With no earlier activity, do not allow arbitrary historical bootstrap weeks.
+        const activity: string[] = [];
+        for (const b of await tx.listBookings()) {
+          if (b.isTest) continue;
+          for (const at of [b.createdAt, b.completedAt, b.cancelledAt, ...b.moneyEvents.map((e) => e.at)]) {
+            if (at) activity.push(settlementWeekId(at));
+          }
+        }
+        for (const r of await tx.listReceipts()) {
+          activity.push(r.week_id, settlementWeekId(r.paid_at));
+        }
+        for (const a of await tx.listAdjustments()) activity.push(a.week_id);
+        const earliest = activity.sort()[0];
+        if (earliest !== undefined && earliest < weekId) return fail(409, `close_first_active_week:${earliest}`);
+        // Safeguard when the store has no earlier activity: limited historical bootstrap.
+        // Four weeks is a LOCAL-only guard, not an approved production retention policy.
+        const idleWeeks = (Date.parse(this.#now()) - Date.parse(bounds.end_utc)) / (7 * 86400_000);
+        if (idleWeeks > 4) return fail(409, "first_week_too_old");
       }
       const report = weeklyReport({
         weekId,
