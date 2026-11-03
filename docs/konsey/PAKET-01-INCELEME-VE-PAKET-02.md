@@ -405,3 +405,26 @@ Sabitlenen sürüm `afaac11eb5644687a0c68ffd0ddf459ed83255aa`.
 1. Paket-01e: PR1-N7 (A4.15), küçük tek commit.
 2. Paket-02 devam: **QA-F14** (tahsil edilmiş ama tamamlanmamış rezervasyonun görünmesi, A2.7). Şartname §7.5.
 3. Sonra QA-F9 (H-26), QA-F11, PKG-F04b (H-25). QA-F4 DB kısıtları (35 prob) ayrı paket.
+
+### 12.1 Ek saldırgan kontroller (aynı sürüm, kararlar değişmedi)
+
+**PostgreSQL rol geçişleri** (atılabilir küme; 0001 + fikstür + 0002; sonra silindi):
+
+| Deneme | `ag_app` sonucu |
+| -- | -- |
+| Doğrudan `ag_app` girişiyle `SET SESSION AUTHORIZATION postgres` | reddedildi |
+| `SET ROLE` ag_owner / ag_platform / ag_readonly / postgres | dördü de reddedildi |
+| `ALTER TABLE booking DISABLE` / `NO FORCE ROW LEVEL SECURITY`, `DROP POLICY` | "must be owner" |
+| `CREATE TABLE` / `SECURITY DEFINER` fonksiyon | şema yetkisi yok |
+| `site`, `partner`, `outbox_event`, `idempotency_key`, `settlement_week` okuma | yetki yok |
+| Kapsamsız `SELECT` / `COPY booking` | 0 satır |
+| p1 kapsamında p2 satırları | 0 |
+| p1 kapsamında `UPDATE booking` | yetki yok |
+| `app.scope=platform` (ag_app) | yetki yok |
+| `app.party_id=p2` olarak ayarlama | **p2 satırlarını görüyor (beklenen)**: GUC kimlik değildir; değeri yalnız doğrulanmış ağ geçidi ayarlamalı (QA-F3-N2, SEL-331/332) |
+
+Not: Süper kullanıcı oturumunda `SET SESSION AUTHORIZATION ag_app` sonrası tekrar `postgres`'e dönülebiliyor; bu yalnız test düzeneğinin özelliği. Doğrudan `ag_app` girişinde reddedildi.
+
+**Müşteri verisi:** yönetim listesi (`#adminView`) müşteri adı, e-posta veya telefon döndürmüyor; site kimliği ve platform için aynı. Ortak seferde site kimliği yalnız kendi rezervasyonlarını görüyor. DB'de site, kendi rezervasyonlarının müşteri kolonlarını görebilir (beklenen); tedarikçi politikası bilerek kaldırıldı.
+
+**Sıradaki iş:** PR1-N7 (A4.15), sonra QA-F14: [`QA-F14-TAHSIL-EDILMIS-TAMAMLANMAMIS.md`](./QA-F14-TAHSIL-EDILMIS-TAMAMLANMAMIS.md) (A2.7, A2.8, A2.10; A2.9 koruma testi).
