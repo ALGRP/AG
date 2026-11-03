@@ -234,3 +234,25 @@ describe("A8.6 manager approval evidence for booking-level financial hold releas
     assert.ok(first.status === 201);
   });
 });
+
+describe("A8.7 audit history for repeated booking-level decisions", () => {
+  it("A8.7 [RULE] a second dispute decision on the same booking must not erase the first decision's audit evidence", { todo: "PR2-N1 · Codex Paket-02 (QA-F10 denetim geçmişi)" }, async () => {
+    const x = harness({ idPrefix: "qa-f10-hist" });
+    x.setNow("2026-11-04T10:00:00Z");
+    const ref = await x.shuttleJob({}, "sup-a", 5000);
+    const first = "Birinci karar gerekcesi kayitli";
+    const second = "Ikinci karar gerekcesi kayitli";
+    await x.service.dispute(ref, { reason: "ilk itiraz" });
+    assert.equal((await x.service.resolveDispute(MANAGER, ref, { outcome: "rejected", reason: first })).status, 200);
+    await x.service.dispute(ref, { reason: "ikinci itiraz" });
+    assert.equal((await x.service.resolveDispute(MANAGER, ref, { outcome: "upheld", reason: second })).status, 200);
+    const audits = (await x.store.listOutbox()).filter((e) => e.type === "audit.booking_dispute_resolved");
+    const row = JSON.stringify(await x.row(ref));
+    assert.deepEqual(
+      { auditEvents: audits.length, firstReasonKept: row.includes(first), secondReasonKept: row.includes(second) },
+      { auditEvents: 2, firstReasonKept: true, secondReasonKept: true },
+      "the second decision overwrote the first audit record and its outbox event was dropped by the dedupe key",
+    );
+  });
+});
+

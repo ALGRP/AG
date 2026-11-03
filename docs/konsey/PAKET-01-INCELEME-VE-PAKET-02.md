@@ -318,3 +318,55 @@ Bugün bu kontrollerin hepsi yalnız uygulama katmanında ve MemoryStore'da. CRS
   3. Taban ölçümü (eski org skill) ve aday ölçümü (H-14 bütçesi).
   4. Bağımsız inceleyici onayı.
   5. Org kurulumu ayrı kapı; Owner GO.
+
+## 10. Paket-01c ve QA-F10 akran incelemesi (`3839bc7` → `66d5ecb`)
+
+Sabitlenen sürüm `66d5ecba2c481dc7a3345dff32d4deff38c857a8`. `npm run check`: **188 test: 171 geçti, 0 kaldı, 16 todo, 1 skip**, Codex raporuyla aynı. Bu turda eklenen iki `todo` testle: 190 test, 171 geçti, 18 todo, 1 skip.
+
+| Commit | Kalem | Karar | Kanıt |
+| -- | -- | -- | -- |
+| de0b8f5 | Paket-01c / PR1-N5 | **PASS** | A4.13, A4.12, A4.4, A4.5 geçiyor. W44 tarihli dekont varken önce W44, sonra W45 kapanıyor. **A4.8 beklentisi değişti:** boş W52'nin W53 faaliyetinden önce kapanması artık 409. Bu, A4.13 ile aynı kuralın tutarlı uygulanması; gevşetme değil sıkılaştırma. Kabul ediyorum; W52→W53 geçişi `nextWeekId` assertion'ıyla hâlâ test ediliyor. |
+| 66d5ecb | Paket-02 / QA-F10 | **NEEDS REVIEW** | A8.3, A8.5, A8.6 geçiyor. HTTP gövdesinde ve başlıklarda sahte aktör / `mfa: true` → 403 `mfa_required` (aktör sunucuda kuruluyor). 3 eşzamanlı karar → 1×200, 2×409. Yalnız boşluktan oluşan gerekçe → 422. Gerekçedeki e-posta ve telefon maskeleniyor. `api.test.ts`'teki iki 200 → 403 değişikliği gerçek sıkılaştırma; olumlu yol 2FA'lı yöneticiyle ayrıca test ediliyor. **Ama** denetim geçmişi korunmuyor (PR2-N1). |
+
+### Yeni bulgular
+
+| # | Önem | Bulgu | Kabul testi |
+| -- | -- | -- | -- |
+| **PR1-N6** | P2 | İlk kapanış kuralı dekontları "faaliyet" sayıyor ve dekontun `paidAt` / `weekId` değerleri sınırlanmıyor. Tek bir yanlış girilmiş dekont (ör. `paidAt` 2016 veya `weekId` 2020-W01) ilk kapanışı o haftaya zorluyor: yüzlerce boş haftanın sırayla kapanması gerekir. Koşuldu: `close(W45)` → 409 `close_first_active_week:2016-W09` ve `:2020-W01`. 6a48921'den beri var; de0b8f5'in gerilemesi değil. | `A4.14` (`todo: PR1-N6 · Codex Paket-01d`) |
+| **PR2-N1** | P2 | Aynı rezervasyonda ikinci itiraz kararı ilk kararın denetim kaydını (`disputeResolutionAudit`) üzerine yazıyor. İkinci kararın `audit.booking_dispute_resolved` outbox olayı `dedupeKey = type:bookingId` yüzünden sessizce düşüyor. Sonuç: ilk kararın gerekçesi kayboluyor, ikinci kararın olayı hiç yazılmıyor. | `A8.7` (`todo: PR2-N1 · Codex Paket-02`) |
+| PR2-N2 | Gözlem | İkinci itiraz açıkken rezervasyonda önceki kararın denetim kaydı duruyor. PR2-N1 çözülürken geçmiş listesi olarak tutulursa kendiliğinden çözülür. | — |
+
+**Önerilen en küçük düzeltmeler:**
+- **PR1-N6:** `addReceipt` gelecekteki `paidAt` değerini ve rezervasyon faaliyeti başlamadan önceki haftaları reddetsin (`weekId` en erken rezervasyon haftasından eski olamaz; `paidAt` ile `weekId` arasında makul bir fark sınırı, ör. 8 hafta). Alternatif: ilk kapanış için yalnız rezervasyon faaliyeti sayılsın; dekontlar eşleşmeyen dekont olarak raporlansın. İkisi de para kuralı değiştirmez.
+- **PR2-N1:** Denetim alanı tek kayıt yerine ekleme-yalnız liste (`…AuditHistory: SensitiveDecisionAudit[]`). Denetim olaylarının `dedupeKey`'i karar kimliğini içersin (ör. `audit.booking_dispute_resolved:<bookingId>:<at>`).
+
+**Yerel aktör uyarısı (Codex'in notuyla aynı):** `Actor.mfa = true` servis testlerinde güvenilir çağıranın temsili. Gerçek IdP iddiası, imzalı oturum veya 2FA zamanı değildir. SEL-332 bitmeden hiçbir 2FA'lı finans işlemi HTTP'de açılmamalı. Bugün HTTP'de hepsi 403; doğru.
+
+**Kapsam dışında kalan 2FA'sız finans uçları (kayıt için):** statik anahtarla `cancel`, `refund`, `collection`, `/v1/admin/receipts` ve haftalık kapanış hâlâ 2FA istemiyor. Bunlar QA-F10'un kapsamında değildi. Kişi ve rol modeli (H-12) ve SEL-332 ile birlikte ele alınmalı; QA-F3'te `Actor` kapsamı eklenirken bu uçlar da aktör alacak şekilde hazırlanmalı.
+
+## 11. Sıradaki Paket-02 görevi: QA-F3 · kiracı izolasyonu ve RLS
+
+**Önkoşul:** PR1-N6 (A4.14) ve PR2-N1 (A8.7) ayrı küçük commit'ler olarak kapanır.
+
+**İlke:** Yetki yalnız sunucuda doğrulanmış kimlikten türer. `Origin`, `x-site-id` gibi istemci başlıkları, alan adı ve satış kaynağı atfı hiçbir zaman yetki vermez; en fazla zaten sahip olunan yetkiyi daraltır.
+
+**Kabul testleri:**
+- Mevcut: A6.3, A6.4, A6.5 (`qa-independent/a06-cross-site.test.ts`), "QA-F3 (DB)" (`packages/db/src/schema-probes.test.ts`, `AG_TEST_PG=1`).
+- Yeni, Paket-02'de yazılır (assertion bu metinle aynı):
+  - **A6.8:** site kapsamlı kimlik `x-site-id` başlığını başka siteye çevirse de yanıtta yalnız kendi sitesinin satırları bulunur veya 403 döner. Başlıksız istek de yalnız kendi sitesini görür.
+  - **A6.9:** site kapsamlı kimlik platform uçlarına (`/v1/admin/outbox`, `/v1/admin/receipts`, haftalık kapanış, başka sitenin ekstresi) erişemez → 403.
+  - **A6.10:** başka sitenin rezervasyon referansı tahmin edilse bile site kapsamlı kimlik için 404 (varlık sızdırmaz).
+- Platform kimliğiyle mevcut tüm testler değişmeden geçer.
+
+**Dosyalar:** `apps/api/src/http.ts`, `apps/api/src/service.ts` (`Actor.scope`), `apps/api/src/main.ts` (yerel site anahtarları), `qa-independent/harness.ts` (site kimliğiyle istek yardımcıları), yeni göç `packages/db/migrations/0002_tenant_rls.sql`.
+
+**PostgreSQL en az yetki (göç adayı; canlı veritabanına uygulanmaz):**
+- Roller: `ag_owner` (tablo sahibi, yalnız göç), `ag_app` (uygulama; `NOBYPASSRLS`, tablo sahibi değil), `ag_platform` (2FA'lı platform işlemleri), `ag_readonly` (rapor).
+- Defter ve rezervasyon tablolarında `ENABLE` + `FORCE ROW LEVEL SECURITY`.
+- Politika: `current_setting('ag.party_id', true)` boşsa hiç satır yok (kapalı varsayılan); doluysa `selling_party_id` veya `supplier_id` eşleşmeli. Platform politikası yalnız `ag_platform` rolünde.
+- `ag_app` için `DELETE` yetkisi yok; kapanmış hafta satırlarına `UPDATE` tetikleyiciyle reddedilir.
+- Kabul: "QA-F3 (DB)" probu (p1 oturumu p2'nin para hareketini ve dekontunu göremez; RLS açık ve zorunlu).
+
+**Kapsam dışı:** gerçek IdP (SEL-332), staging veritabanı (SEL-329), canlı göç.
+
+**Sonraki sıra (değişmedi):** QA-F14 → QA-F9 (H-26) → QA-F11 → PKG-F04b (H-25).
