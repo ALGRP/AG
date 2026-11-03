@@ -2,6 +2,7 @@
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 import { ORIGIN, W45, harness, sumFor } from "./harness.ts";
+import { devOriginsForEnvironment, localHumanToken } from "../apps/api/src/human.ts";
 
 const raw = (siteId: string, over: Record<string, unknown> = {}) => ({
   siteId,
@@ -30,7 +31,7 @@ describe("A10 attribution over HTTP", () => {
     assert.deepEqual([none.status, none.body.error], [403, "origin_not_allowed"]);
   });
 
-  it("A10.2 [RULE] a non-browser client must not be able to credit an arbitrary site by forging the Origin header", { todo: "QA-F11 · Paket-02 (atıf kanıtı)" }, async () => {
+  it("A10.2 [RULE] a non-browser client must not be able to credit an arbitrary site by forging the Origin header", async () => {
     // Plain HTTP client (no browser): forge the Origin of partner-site; no site credential or signature is required.
     const r = await h.httpPost("/v1/public/bookings", raw("partner-site", { pickupAt: "2026-12-12T11:00" }), { origin: "https://www.partner.example", "idempotency-key": "qa-attr-key-00000004" });
     const row = await h.row(r.body.ref);
@@ -115,7 +116,7 @@ describe("A10 QA-F11 marketing data is never attribution authority", () => {
     try {
       const r = await h.httpPost(
         "/v1/public/bookings",
-        raw("partner-site", { pickupAt: "2026-12-20T10:00", utm_source: "rival-site", gclid: "Cj0KCQ-test", referrer: "https://www.rival.example/", attribution: { siteId: "rival-site" }, sellingSiteId: "rival-site" }),
+        raw("partner-site", { pickupAt: "2026-12-20T10:00", humanToken: localHumanToken("www.partner.example", "marketingCase0001"), utm_source: "rival-site", gclid: "Cj0KCQ-test", referrer: "https://www.rival.example/", attribution: { siteId: "rival-site" }, sellingSiteId: "rival-site" }),
         { origin: ORIGIN["partner-site"]!, "idempotency-key": "qa-attr-key-00000099" },
       );
       assert.equal(r.status, 201);
@@ -126,3 +127,130 @@ describe("A10 QA-F11 marketing data is never attribution authority", () => {
   });
 });
 
+
+
+describe("A10 QA-F11 site-bound challenge and header-forgery guards (LOCAL_ONLY)", () => {
+  const partner = (nonce: string) => localHumanToken("www.partner.example", nonce);
+  const rival = (nonce: string) => localHumanToken("www.rival.example", nonce);
+
+  it("A10.9 rival-site challenge cannot credit partner-site", async () => {
+    const h = harness();
+    await h.start();
+    try {
+      const result = await h.httpPost("/v1/public/bookings",
+        raw("partner-site", { humanToken: rival("rivalSpoof0001") }),
+        { origin: ORIGIN["partner-site"]!, "idempotency-key": "qa-f11-host-00000001" });
+      assert.deepEqual([result.status, result.body.error], [403, "attribution_not_verified"]);
+    } finally { await h.stop(); }
+  });
+
+  it("A10.10 site-matching challenge + booking action credits only that site", async () => {
+    const h = harness();
+    await h.start();
+    try {
+      const result = await h.httpPost("/v1/public/bookings",
+        raw("partner-site", { humanToken: partner("partnerMatch001") }),
+        { origin: ORIGIN["partner-site"]!, "idempotency-key": "qa-f11-host-00000002" });
+      assert.equal(result.status, 201, JSON.stringify(result.body));
+      assert.equal((await h.row(result.body.ref)).siteId, "partner-site");
+    } finally { await h.stop(); }
+  });
+
+  it("A10.11 Host / forwarded host / Referer headers never override verified site or Origin CORS rule", async () => {
+    const h = harness();
+    await h.start();
+    try {
+      const result = await h.httpPost("/v1/public/bookings",
+        raw("partner-site", { humanToken: partner("headerForged001") }),
+        {
+          origin: ORIGIN["partner-site"]!,
+          host: "www.rival.example",
+          "x-forwarded-host": "www.rival.example",
+          referer: "https://www.rival.example/",
+          "idempotency-key": "qa-f11-headers-000001",
+        });
+      assert.equal(result.status, 201, JSON.stringify(result.body));
+      assert.equal((await h.row(result.body.ref)).siteId, "partner-site");
+
+      const rivalOrigin = await h.httpPost("/v1/public/bookings",
+        raw("partner-site", { humanToken: partner("headerForged002") }),
+        { origin: ORIGIN["rival-site"]!, "idempotency-key": "qa-f11-headers-000002" });
+      assert.deepEqual([rivalOrigin.status, rivalOrigin.body.error], [403, "origin_not_allowed"]);
+    } finally { await h.stop(); }
+  });
+
+  it("A10.12 a failed verifier (provider offline / timeout) denies the booking and does not store a lead", async () => {
+    const h = harness({ humanVerifier: async () => { throw new Error("siteverify unavailable"); } });
+    const result = await h.book({ humanToken: partner("networkFailure001") });
+    assert.deepEqual([result.status, result.body.error], [403, "human_check_failed"]);
+    assert.equal((await h.store.listBookings()).length, 0);
+  });
+
+  it("A10.13 replayed challenge under a new idempotency key cannot open another booking", async () => {
+    const h = harness();
+    await h.start();
+    try {
+      const token = partner("replayAttempt001");
+      const input = raw("partner-site", { humanToken: token });
+      const first = await h.httpPost("/v1/public/bookings", input,
+        { origin: ORIGIN["partner-site"]!, "idempotency-key": "qa-f11-replay-000001" });
+      const second = await h.httpPost("/v1/public/bookings", input,
+        { origin: ORIGIN["partner-site"]!, "idempotency-key": "qa-f11-replay-000002" });
+      assert.equal(first.status, 201);
+      assert.deepEqual([second.status, second.body.error], [403, "human_check_failed"]);
+      assert.equal((await h.store.listBookings()).length, 1);
+    } finally { await h.stop(); }
+  });
+
+  it("A10.14 development origins are empty in every nonlocal environment", async () => {
+    for (const mode of ["production", "prod", "Production", "", "preview"]) {
+      assert.deepEqual(devOriginsForEnvironment(mode, "http://localhost:4321"), []);
+    }
+    assert.deepEqual(devOriginsForEnvironment("development", "http://localhost:4321"), ["http://localhost:4321"]);
+    const h = harness({ devOrigins: [] });
+    const attempt = await h.book({ siteId: "partner-site", humanToken: partner("noDevOrigin001") }, undefined, "http://localhost:4321");
+    assert.deepEqual([attempt.status, attempt.body.error], [403, "origin_not_allowed"]);
+  });
+
+  it("A10.16 concurrent uses of the same challenge make exactly one booking", async () => {
+    const h = harness();
+    await h.start();
+    try {
+      const body = raw("partner-site", { humanToken: partner("concurrentToken01") });
+      const requests = Array.from({ length: 8 }, (_, i) => h.httpPost("/v1/public/bookings", body, {
+        origin: ORIGIN["partner-site"]!,
+        "idempotency-key": `qa-f11-concurrent-${String(i).padStart(6, "0")}`,
+      }));
+      const replies = await Promise.all(requests);
+      assert.deepEqual(replies.map((r) => r.status).sort(), [201, ...Array(7).fill(403)]);
+      assert.equal((await h.store.listBookings()).length, 1);
+    } finally { await h.stop(); }
+  });
+
+  it("A10.17 a token spent on a wrong site's booking cannot later be reused for its actual site", async () => {
+    const h = harness();
+    await h.start();
+    try {
+      const token = partner("wrongSiteSpent01");
+      const attempt = await h.httpPost("/v1/public/bookings", raw("rival-site", { humanToken: token }),
+        { origin: ORIGIN["rival-site"]!, "idempotency-key": "qa-f11-wrongsite-0001" });
+      assert.deepEqual([attempt.status, attempt.body.error], [403, "attribution_not_verified"]);
+      const replay = await h.httpPost("/v1/public/bookings", raw("partner-site", { humanToken: token }),
+        { origin: ORIGIN["partner-site"]!, "idempotency-key": "qa-f11-wrongsite-0002" });
+      assert.deepEqual([replay.status, replay.body.error], [403, "human_check_failed"]);
+    } finally { await h.stop(); }
+  });
+
+  it("A10.15 wrong action or missing hostname is never treated as a valid booking challenge", async () => {
+    for (const bad of [
+      { ok: true, hostname: "www.partner.example", action: "login" },
+      { ok: true, action: "booking" },
+      { ok: false, hostname: "www.partner.example", action: "booking" },
+    ]) {
+      const h = harness({ humanVerifier: async () => bad });
+      const result = await h.book();
+      assert.equal(result.status, 403);
+      assert.equal((await h.store.listBookings()).length, 0);
+    }
+  });
+});

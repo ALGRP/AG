@@ -33,6 +33,7 @@ import {
   type StatementDispute,
 } from "@ag/core";
 import { normalizeAdjustmentReference, normalizeBankReference } from "./store.ts";
+import type { HumanVerification } from "./human.ts";
 import type { OutboxEvent, SensitiveDecisionAudit, Store, StoredBooking } from "./store.ts";
 
 export interface ServiceDeps {
@@ -53,7 +54,7 @@ export interface ServiceDeps {
     readonly token: () => string;
   };
   /** Turnstile/hCaptcha doğrulaması. Yapılandırılmamışsa çağıran "true" döndüren sahte verir (yalnız yerel). */
-  readonly verifyHuman: (token: string | undefined, ip: string) => Promise<boolean>;
+  readonly verifyHuman: (token: string | undefined, ip: string) => Promise<HumanVerification>;
 }
 
 /**
@@ -173,7 +174,24 @@ export class BookingService {
     const resolved = resolveSite(this.#d.sites, req.siteId, input.origin, this.#d.devOrigins);
     if (!resolved.ok) return fail(resolved.reason === "unknown_site" ? 404 : 403, resolved.reason);
     const site = resolved.site;
-    if (!(await this.#d.verifyHuman(req.humanToken, input.ip))) return fail(403, "human_check_failed");
+    // Origin/Host/Referer/UTM are untrusted claims. A verified challenge hostname binds the
+    // booking to exactly one registered site. No token, wrong action or wrong hostname => deny.
+    if (!req.humanToken || req.humanToken.length > 2048) return fail(403, "attribution_not_verified");
+    let verification: HumanVerification;
+    try {
+      verification = await this.#d.verifyHuman(req.humanToken, input.ip);
+    } catch {
+      return fail(403, "human_check_failed"); // provider unavailable: fail closed
+    }
+    if (!verification.ok) return fail(403, "human_check_failed");
+    // A *verified* token is spent even when hostname/action are wrong, matching Siteverify's
+    // single-use behavior. The hash is reserved before comparing site attribution.
+    if (!(await tx.reserveHumanToken(sha256(req.humanToken), this.#d.clock().getTime()))) {
+      return fail(403, "human_check_failed"); // local replay protection in addition to provider single-use
+    }
+    if (verification.action !== "booking" || !verification.hostname || !site.domains.includes(verification.hostname)) {
+      return fail(403, "attribution_not_verified");
+    }
     if (req.paymentMethod !== undefined && !site.collectionMethods.includes(req.paymentMethod)) {
       return fail(422, "payment_method_not_allowed_for_site");
     }

@@ -109,6 +109,8 @@ export interface IdempotencyRecord {
 export interface Store {
   /** Tüm yazma işlemleri tek işlem (transaction) içinde; MemoryStore bunu sıraya dizerek taklit eder. */
   transaction<T>(fn: (tx: Store) => Promise<T>): Promise<T>;
+  /** Single-use human challenge hash: atomic reservation inside the booking transaction (LOCAL_ONLY). */
+  reserveHumanToken(hash: string, nowMs: number): Promise<boolean>;
   getIdempotency(scope: string): Promise<IdempotencyRecord | undefined>;
   putIdempotency(scope: string, rec: IdempotencyRecord): Promise<void>;
   insertBooking(b: StoredBooking): Promise<void>;
@@ -141,6 +143,7 @@ export interface Store {
 
 interface Snapshot {
   idem: Map<string, IdempotencyRecord>;
+  humanTokens: Map<string, number>;
   bookings: Map<string, StoredBooking>;
   runs: Map<string, ShuttleRun>;
   outbox: number;
@@ -158,6 +161,7 @@ export class MemoryStore implements Store {
   readonly #txContext = new AsyncLocalStorage<symbol>();
   #activeTx: symbol | undefined;
   readonly #idem = new Map<string, IdempotencyRecord>();
+  readonly #humanTokens = new Map<string, number>();
   readonly #bookings = new Map<string, StoredBooking>();
   readonly #runs = new Map<string, ShuttleRun>();
   readonly #outbox: OutboxEvent[] = [];
@@ -193,6 +197,7 @@ export class MemoryStore implements Store {
   #snapshot(): Snapshot {
     return {
       idem: new Map(this.#idem),
+      humanTokens: new Map(this.#humanTokens),
       bookings: new Map(this.#bookings),
       runs: new Map(this.#runs),
       outbox: this.#outbox.length,
@@ -210,6 +215,7 @@ export class MemoryStore implements Store {
       from.forEach((v, k) => target.set(k, v));
     };
     reset(this.#idem, s.idem);
+    reset(this.#humanTokens, s.humanTokens);
     reset(this.#bookings, s.bookings);
     reset(this.#runs, s.runs);
     reset(this.#closed, s.closed);
@@ -220,6 +226,14 @@ export class MemoryStore implements Store {
     this.#adjustments.length = s.adjustments;
   }
 
+  async reserveHumanToken(hash: string, nowMs: number): Promise<boolean> {
+    for (const [key, expiry] of this.#humanTokens) {
+      if (expiry <= nowMs) this.#humanTokens.delete(key);
+    }
+    if (this.#humanTokens.has(hash)) return false;
+    this.#humanTokens.set(hash, nowMs + 600_000);
+    return true;
+  }
   async getIdempotency(scope: string) {
     return this.#idem.get(scope);
   }

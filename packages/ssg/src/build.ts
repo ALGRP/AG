@@ -224,7 +224,7 @@ ${hasPrivate ? `<label data-for="private">${escapeHtml(s.returnAt)}<input name="
 <textarea name="notes" maxlength="1000" rows="2" placeholder="${escapeHtml(s.notes)}" aria-label="${escapeHtml(s.notes)}"></textarea>
 <label class="hp" aria-hidden="true">website<input name="website" tabindex="-1" autocomplete="off"></label>
 <label class="check"><input type="checkbox" name="consent" required> ${escapeHtml(s.consent)}</label>
-${site.turnstileSiteKey ? `<div class="cf-turnstile full" data-sitekey="${escapeHtml(site.turnstileSiteKey)}"></div>` : ""}
+${site.turnstileSiteKey ? `<div class="cf-turnstile full" data-sitekey="${escapeHtml(site.turnstileSiteKey)}" data-action="booking"></div>` : ""}
 <p class="price" aria-live="polite"></p>
 <button type="submit" class="full">${escapeHtml(s.submit)}</button>
 <p class="result" role="status" aria-live="polite"></p>

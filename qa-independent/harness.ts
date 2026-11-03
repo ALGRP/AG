@@ -12,6 +12,7 @@ import {
 } from "@ag/core";
 import { createApiServer } from "../apps/api/src/http.ts";
 import { BookingService, type Actor } from "../apps/api/src/service.ts";
+import { localHumanToken, verifyLocalHuman, type HumanVerification } from "../apps/api/src/human.ts";
 import { MemoryStore } from "../apps/api/src/store.ts";
 
 export const ADMIN_TOKEN = "qa-independent-admin-token-0001";
@@ -137,6 +138,7 @@ export interface HarnessOptions {
   sites?: Map<string, SiteRecord>;
   idPrefix?: string;
   devOrigins?: string[];
+  humanVerifier?: (token: string | undefined, ip: string) => Promise<HumanVerification>;
 }
 
 export function harness(opts: HarnessOptions = {}) {
@@ -145,6 +147,7 @@ export function harness(opts: HarnessOptions = {}) {
   let mailN = 0;
   let keyN = 0;
   let slipN = 0;
+  let humanN = 0;
   let slotN = 0;
   /** Distinct pickup slot per booking (bookings only share a run when a test asks for it explicitly). */
   const uniqueSlot = () => {
@@ -168,7 +171,7 @@ export function harness(opts: HarnessOptions = {}) {
       index: (m) => (seq++ * 7 + 3) % m,
       token: () => `${prefix}-tok-${++seq}`,
     },
-    verifyHuman: async () => true,
+    verifyHuman: opts.humanVerifier ?? ((token) => verifyLocalHuman(token)),
   });
   let server: Server | undefined;
   const h = {
@@ -193,6 +196,11 @@ export function harness(opts: HarnessOptions = {}) {
         customer: { name: "QA Guest", email: `qa${++mailN}@example.com`, phone: "+49 151 0000000", locale: "de" },
         consent: true,
         ...over,
+        humanToken: over.humanToken ?? localHumanToken(
+          siteMap.get(siteId)?.domains[0] ?? "unknown.test",
+          key ? `qaBooking${key.slice(0, 90).replace(/[^A-Za-z0-9_-]/g, "_")}`
+            : `qaHuman${String(++humanN).padStart(10, "0")}`,
+        ),
       };
       return (await service.submit({
         raw,

@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { SHUTTLE_SPLIT_V1, parseShuttleTariff, parseSiteRecord, type SiteRecord, type WeeklyReport } from "@ag/core";
 import { renderWeeklyReportHtml } from "./report-html.ts";
 import { BookingService, type Actor } from "./service.ts";
+import { localHumanToken, verifyLocalHuman } from "./human.ts";
 import { MemoryStore } from "./store.ts";
 
 // Örnek haftalık rapor: SENTETİK verilerle 2026-W45 haftasını uçtan uca çalıştırır ve kapatır.
@@ -51,7 +52,7 @@ const service = new BookingService({
   devOrigins: [],
   clock: () => now,
   random: { id: () => `id-${String(++seq).padStart(4, "0")}`, index: (m) => (seq++ * 11) % m, token: () => `tok-${++seq}` },
-  verifyHuman: async () => true,
+  verifyHuman: (token) => verifyLocalHuman(token),
 });
 
 function must<T>(r: { ok: boolean; status: number; body: T }, what: string): T {
@@ -74,6 +75,7 @@ async function book(siteId: string, over: Record<string, unknown>) {
         customer: { name: `Örnek Misafir ${++n}`, email: `misafir${n}@example.com`, phone: `+90 500 000 00${String(n).padStart(2, "0")}`, locale: "tr" },
         consent: true,
         ...over,
+        humanToken: localHumanToken(new URL(ORIGIN[siteId]!).hostname, `sampleHuman${String(n).padStart(10, "0")}`),
       },
       origin: ORIGIN[siteId],
       ip: "127.0.0.1",

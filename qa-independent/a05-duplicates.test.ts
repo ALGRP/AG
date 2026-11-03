@@ -14,6 +14,7 @@ const body = (over: Record<string, unknown> = {}) => ({
   passengers: 2,
   customer: { name: "Dup Guest", email: "dup@example.com", phone: "+49 151 1234567", locale: "de" },
   consent: true,
+  humanToken: "local:www.partner.example:idemFixedCase01",
   ...over,
 });
 

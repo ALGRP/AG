@@ -33,7 +33,7 @@ const service = (shuttlePolicy: SplitPolicy, splitPolicies?: readonly SplitPolic
     devOrigins: [],
     clock: () => new Date("2026-11-04T09:00:00Z"),
     random: { id: () => "x", index: () => 0, token: () => "t" },
-    verifyHuman: async () => true,
+    verifyHuman: async () => ({ ok: true, hostname: "www.partner.example", action: "booking" }),
   });
 
 const booking = (splitPolicyId?: string): StoredBooking => ({

@@ -70,7 +70,17 @@
       if (p === "shuttle") body.routeCode = f.routeCode.value;
       else if (f.returnPickupAt && f.returnPickupAt.value) body.returnPickupAt = f.returnPickupAt.value;
       var ts = form.querySelector("[name=cf-turnstile-response]");
-      if (ts) body.humanToken = ts.value;
+      if (ts && ts.value) body.humanToken = ts.value;
+      else {
+        // A missing or expired site challenge must not be silently submitted as a valid booking.
+        show(out, t(form, "error"));
+        return;
+      }
+      function resetChallenge() {
+        if (window.turnstile && typeof window.turnstile.reset === "function") {
+          window.turnstile.reset();
+        }
+      }
       var btn = form.querySelector("button[type=submit]");
       btn.disabled = true;
       show(out, t(form, "sending"));
@@ -82,7 +92,7 @@
         .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); })
         .then(function (res) {
           btn.disabled = false;
-          if (!res.ok) { show(out, t(form, "error")); return; }
+          if (!res.ok) { resetChallenge(); show(out, t(form, "error")); return; }
           var b = res.body;
           var lead = b.next === "price_requires_approval" ? t(form, "ok-approval") : (b.product === "shuttle" ? t(form, "ok-shuttle") : t(form, "ok-private"));
           show(out, lead + " " +
@@ -91,7 +101,7 @@
           form.querySelectorAll("input:not([type=radio]):not([type=checkbox]),textarea").forEach(function (i) { if (i.name !== "passengers") i.value = ""; });
           key = newKey();
         })
-        .catch(function () { btn.disabled = false; show(out, t(form, "error")); });
+        .catch(function () { btn.disabled = false; resetChallenge(); show(out, t(form, "error")); });
     });
   }
 

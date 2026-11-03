@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { SHUTTLE_SPLIT_V1, parseShuttleTariff, parseSiteRecord, type SiteRecord } from "@ag/core";
 import { createApiServer } from "./http.ts";
 import { BookingService } from "./service.ts";
+import { devOriginsForEnvironment, verifyLocalHuman, type HumanVerification } from "./human.ts";
 import { MemoryStore } from "./store.ts";
 
 // Yerel çalıştırma: `npm run dev:api`.
@@ -44,7 +45,7 @@ if (env.NODE_ENV !== "development" && env.NODE_ENV !== "test") {
     process.exit(1);
   }
 }
-const devOrigins = (env.AG_DEV_ORIGINS ?? "http://localhost:4321").split(",").filter(Boolean);
+const devOrigins = devOriginsForEnvironment(env.NODE_ENV, env.AG_DEV_ORIGINS);
 // Temporary local-only site credentials; never use as a substitute for SEL-332 verified IdP.
 const siteTokens: Record<string, string> = {};
 if (env.NODE_ENV === "development" || env.NODE_ENV === "test") {
@@ -59,17 +60,31 @@ if (env.NODE_ENV === "development" || env.NODE_ENV === "test") {
 }
 
 const turnstileSecret = env.TURNSTILE_SECRET;
-async function verifyHuman(token: string | undefined, ip: string): Promise<boolean> {
-  if (!turnstileSecret) return true; // yalnız yerel geliştirme
-  if (!token) return false;
-  const r = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
-    method: "POST",
-    body: new URLSearchParams({ secret: turnstileSecret, response: token, remoteip: ip }),
-  });
-  const data = (await r.json()) as { success?: boolean };
-  return data.success === true;
+async function verifyHuman(token: string | undefined, ip: string): Promise<HumanVerification> {
+  if (!token || token.length > 2048) return { ok: false };
+  if (!turnstileSecret) {
+    // Explicitly local/test only; this fixture is forgeable and MUST NOT be considered live protection.
+    if (env.NODE_ENV !== "development" && env.NODE_ENV !== "test") return { ok: false };
+    return verifyLocalHuman(token);
+  }
+  try {
+    const r = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
+      method: "POST",
+      body: new URLSearchParams({ secret: turnstileSecret, response: token, remoteip: ip }),
+      signal: AbortSignal.timeout(5_000),
+    });
+    if (!r.ok) return { ok: false };
+    const data = (await r.json()) as { success?: boolean; hostname?: string; action?: string };
+    return {
+      ok: data.success === true,
+      ...(typeof data.hostname === "string" ? { hostname: data.hostname } : {}),
+      ...(typeof data.action === "string" ? { action: data.action } : {}),
+    };
+  } catch {
+    return { ok: false }; // network error and timeout fail closed
+  }
 }
-if (!turnstileSecret) console.warn("TURNSTILE_SECRET not set: human check disabled (local only)");
+if (!turnstileSecret) console.warn("TURNSTILE_SECRET not set: synthetic local-only human challenge (NOT production security)");
 
 const service = new BookingService({
   store: new MemoryStore(),

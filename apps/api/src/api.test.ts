@@ -4,6 +4,7 @@ import { after, before, describe, it } from "node:test";
 import { SHUTTLE_SPLIT_V1, parseShuttleTariff, parseSiteRecord, type SiteRecord } from "@ag/core";
 import { createApiServer } from "./http.ts";
 import { BookingService, type Actor } from "./service.ts";
+import { localHumanToken, verifyLocalHuman } from "./human.ts";
 import { MemoryStore } from "./store.ts";
 
 const sites = new Map<string, SiteRecord>(
@@ -55,6 +56,7 @@ const W45 = "2026-W45";
 const MANAGER: Actor = { id: "test-finance-manager", role: "finance_manager", mfa: true };
 let slip = 0;
 
+
 function harness(startAt = "2026-11-02T08:00:00Z") {
   let seq = 0;
   let now = new Date(startAt);
@@ -78,7 +80,7 @@ function harness(startAt = "2026-11-02T08:00:00Z") {
     devOrigins: [],
     clock: () => now,
     random: { id: () => `id-${++seq}`, index: (m) => (seq++ * 7) % m, token: () => `tok-${++seq}` },
-    verifyHuman: async () => true,
+    verifyHuman: (token) => verifyLocalHuman(token),
   });
   const server = createApiServer({ service, sites, devOrigins: [], adminToken: "admin-secret-for-tests", publicRateLimitPerMinute: 1000 });
   const h = {
@@ -111,6 +113,10 @@ function harness(startAt = "2026-11-02T08:00:00Z") {
         customer: { name: "Guest", email: `${key}@example.com`, phone: "+49 151 0000000", locale: "de" },
         consent: true,
         ...over,
+        humanToken: over.humanToken ?? localHumanToken(
+          new URL(ORIGIN[(over.siteId as string) ?? "partner-site"]!).hostname,
+          `apiBooking${key.replace(/[^A-Za-z0-9_-]/g, "").padEnd(12, "_")}`,
+        ),
       };
       return h.post("/v1/public/bookings", body, { origin: ORIGIN[body.siteId as string]!, "idempotency-key": key.padEnd(16, "0") });
     },
@@ -502,10 +508,10 @@ describe("K8 — tariff versions", () => {
         devOrigins: [],
         clock: () => new Date("2026-11-03T10:00:00Z"),
         random: { id: () => `${id}-${Math.random()}`, index: (m) => Math.floor(Math.random() * m), token: () => `${id}-tok` },
-        verifyHuman: async () => true,
+        verifyHuman: (token) => verifyLocalHuman(token),
       });
     const created = await make([3000, 5000, 6000, 7000], "v1").submit({
-      raw: { siteId: "partner-site", product: "shuttle", routeCode: "AYT-ALN", pickup: "AYT", dropoff: "Alanya", pickupAt: "2026-12-20T10:00", passengers: 2, customer: { name: "V", email: "v@example.com", phone: "+90 538 000 0000", locale: "en" }, consent: true },
+      raw: { siteId: "partner-site", product: "shuttle", routeCode: "AYT-ALN", pickup: "AYT", dropoff: "Alanya", pickupAt: "2026-12-20T10:00", passengers: 2, customer: { name: "V", email: "v@example.com", phone: "+90 538 000 0000", locale: "en" }, consent: true, humanToken: localHumanToken("www.partner.example", "freezeCase0001") },
       origin: ORIGIN["partner-site"],
       ip: "127.0.0.1",
       idempotencyKey: "k-version-0000001",
