@@ -56,7 +56,7 @@ describe("A12 5+ passenger price bounds", () => {
     assert.equal((await approve(v2, ref, 9000)).body.error, "route_inactive");
   });
 
-  it("A12.5 [RULE] the historical '5 pax = 80 EUR' must never become active (tariff with a 5th total is refused)", () => {
+  it("A12.5 [RULE] the historical '5 pax = 80 EUR' must never become active (tariff with a 5th total is refused)", { todo: "QA-F12 · Codex Paket-01" }, () => {
     let parsed: unknown;
     let err = "";
     try {
@@ -68,7 +68,7 @@ describe("A12 5+ passenger price bounds", () => {
     assert.equal(p, null, `tariff accepted and prices 5 pax automatically: ${JSON.stringify(p)} ${err}`);
   });
 
-  it("A12.6 [RULE] approved bounds whose minimum is 0,01 EUR must not make a 0,01 EUR manual price approvable", async () => {
+  it("A12.6 [RULE] approved bounds whose minimum is 0,01 EUR must not make a 0,01 EUR manual price approvable", { todo: "QA-L8 · H-22 kararı bekliyor" }, async () => {
     const t = tariff({ id: "qa-tariff-cent", manualPriceBounds: { "AYT-ALN": { minMinor: 1, maxMinor: 100000, status: "approved" } } });
     const x = harness({ tariff: t, idPrefix: "cent" });
     const ref = (await x.book({ passengers: 6 })).body.ref;
@@ -155,7 +155,7 @@ describe("A8 financial approval without 2FA", () => {
     assert.equal((await h.service.decideStatementDispute(MANAGER, disputeId, { decision: "rejected", reason: "abc" })).body.error, "reason_required");
   });
 
-  it("A8.3 [RULE] deciding a booking dispute (which releases the held commission) needs 2FA, a reason and a recorded decider", async () => {
+  it("A8.3 [RULE] deciding a booking dispute (which releases the held commission) needs 2FA, a reason and a recorded decider", { todo: "QA-F10 · Paket-02 (2FA, SEL-332)" }, async () => {
     h.setNow("2026-11-10T08:00:00Z");
     const ref = await h.shuttleJob({}, "sup-b", 5000);
     await h.adminPost(`/v1/admin/bookings/${ref}/dispute`, { reason: "musteri bekletildi" });
@@ -170,7 +170,7 @@ describe("A8 financial approval without 2FA", () => {
     );
   });
 
-  it("A8.4 [RULE] an 'upheld' customer dispute must not settle exactly like a 'rejected' one", async () => {
+  it("A8.4 [RULE] an 'upheld' customer dispute must not settle exactly like a 'rejected' one", { todo: "QA-F10 · H-21 kararı bekliyor" }, async () => {
     const mk = async (outcome: "upheld" | "rejected") => {
       const x = harness({ idPrefix: outcome });
       x.setNow("2026-11-04T10:00:00Z");
@@ -184,7 +184,7 @@ describe("A8 financial approval without 2FA", () => {
     assert.notDeepEqual(await mk("upheld"), await mk("rejected"), "outcome is stored but ignored by settlement");
   });
 
-  it("A8.5 [RULE] releasing a suspected duplicate into settlement needs 2FA and a reason", async () => {
+  it("A8.5 [RULE] releasing a suspected duplicate into settlement needs 2FA and a reason", { todo: "QA-F10 · Paket-02 (2FA, SEL-332)" }, async () => {
     h.setNow("2026-11-11T08:00:00Z");
     const same = { pickupAt: "2026-12-24T10:00", customer: { name: "Twin", email: "twin@example.com", phone: "+49 151 3333333", locale: "de" } };
     await h.book(same, "qa-twin-key-a-0000001");

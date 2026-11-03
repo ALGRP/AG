@@ -66,7 +66,7 @@ describe("A5 duplicate submissions", () => {
     assert.equal((await h.collect(ref, 3000, { reference: "POS-SAME" })).body.error, "reference_already_recorded");
   });
 
-  it("A5.4 [RULE] one physical slip/receipt number of the same supplier must not be recorded on two bookings", async () => {
+  it("A5.4 [RULE] one physical slip/receipt number of the same supplier must not be recorded on two bookings", { todo: "QA-F9 · Paket-02 (tahsis modeli kararı)" }, async () => {
     const h = harness();
     h.setNow("2026-11-04T08:00:00Z");
     const r1 = await h.shuttleJob({}, "sup-a", null);
@@ -85,7 +85,7 @@ describe("A5 duplicate submissions", () => {
     assert.equal((await rc("2026-W46", "TR-0002")).body.error, "duplicate_bank_reference");
   });
 
-  it("A5.6 [RULE] the same bank receipt typed in a different letter case must be detected as a duplicate", async () => {
+  it("A5.6 [RULE] the same bank receipt typed in a different letter case must be detected as a duplicate", { todo: "QA-F8 · Codex Paket-01" }, async () => {
     const h = harness();
     h.setNow("2026-11-04T10:00:00Z");
     await h.shuttleJob({}, "sup-a", 5000); // owes agos 5 EUR, site 10 EUR

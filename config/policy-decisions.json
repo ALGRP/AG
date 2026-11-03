@@ -1,0 +1,56 @@
+{
+  "version": "consortium-20261103-v2-candidate",
+  "release_state": "REVIEW_CANDIDATE_NOT_INSTALLED",
+  "commercial": {
+    "scope": "CONSORTIUM_SAAS",
+    "shuttle_currency": "EUR",
+    "group_total_minor": {
+      "1": 3000,
+      "2": 5000,
+      "3": 6000,
+      "4": 7000
+    },
+    "share_bps": {
+      "site": 2000,
+      "agos": 1000,
+      "supplier": 7000
+    },
+    "same_party_economic_bps": {
+      "seller_supplier": 9000,
+      "agos": 1000
+    },
+    "private_vip_agos_fee_bps": 0,
+    "collection_owner": "SUPPLIER",
+    "subscription_monthly_minor": 20000,
+    "ads_payer": "SITE_OWNER",
+    "ads_reference_daily_minor": 4000,
+    "ads_reference_is_mandatory": false
+  },
+  "local_qa_accepted": [
+    "T1_REFUND_NOT_AUTO_OFFSET",
+    "T2_COLLECTED_AND_FULFILLED",
+    "T3_OBJECTION_7_CALENDAR_DAYS",
+    "K17_BOUND_AUTH_MFA_AUDIT_GUARDS"
+  ],
+  "open": {
+    "manual_5plus_bounds": null,
+    "route_coverage_and_live_dates": null,
+    "private_vip_pro_rata": "LOCAL_QA_CANDIDATE",
+    "rounding_fractional_minor_unit": "REQUIRES_DECISION_AND_REGRESSION",
+    "outside_b2b_policy": "SEPARATE_10_TO_15_SCOPE_NOT_IMPORTED",
+    "satellite_build_tool": "CUSTOM_SSG_OR_NEXT_STATIC_UNDECIDED",
+    "payment_due_tuesday_18": "PROPOSED_CONTRACT_CONFIRMATION",
+    "tax_invoice_model": "ACCOUNTANT_LEGAL_REVIEW"
+  },
+  "forbidden_routes": [
+    "AYT-GZP",
+    "GZP-AYT"
+  ],
+  "live_gate": {
+    "human_independent_acceptance": false,
+    "identity_mfa_verified": false,
+    "crs_staging_verified": false,
+    "legal_accountant_release": false,
+    "owner_live_go": false
+  }
+}

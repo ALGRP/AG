@@ -102,7 +102,7 @@ describe("A2 partial collection", () => {
     assert.deepEqual(quad(all, ref), [5000, 1000, 500, 3500]);
   });
 
-  it("A2.6 [RULE] a shuttle booking that joins an already-assigned run must still be settled (site 20 % / AGOS 10 %)", async () => {
+  it("A2.6 [RULE] a shuttle booking that joins an already-assigned run must still be settled (site 20 % / AGOS 10 %)", { todo: "QA-F1 · Codex Paket-01" }, async () => {
     const h = harness();
     h.setNow("2026-11-04T08:00:00Z");
     const first = await h.book({ pickupAt: "2026-11-04T13:00" });
@@ -127,7 +127,7 @@ describe("A2 partial collection", () => {
     );
   });
 
-  it("A2.7 [RULE] money collected for a transfer that is never marked completed must be visible on the statement", async () => {
+  it("A2.7 [RULE] money collected for a transfer that is never marked completed must be visible on the statement", { todo: "QA-F14 · Paket-02" }, async () => {
     const h = harness();
     h.setNow("2026-11-04T08:00:00Z");
     const b = await h.book();

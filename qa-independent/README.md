@@ -8,14 +8,18 @@
 
 **Bu bir kabul değildir.** `INDEPENDENT_ACCEPTED=NO`. İnsan bağımsız inceleyici bu testleri girdi olarak kullanır.
 
-## Neden `npm test` dışında?
+## `npm test` ile ilişki (V2.5 · 03.11.2026)
 
-`npm run check` yalnız `packages/*/src` ve `apps/*/src` altını koşar. Bu klasördeki `[RULE]` testleri iş kuralını kodlar ve **bugün 27'si bilerek kırmızıdır**: her biri açık bir bulguyu belgeler (`docs/konsey/E-pr9-bagimsiz-qa-plani.md` §3). Düzeltme turundan sonra hepsi yeşile dönmeli; o zaman ana test setine alınması önerilir.
+- Bu klasör artık `npm run check` içinde koşar: tip kontrolü `tsc -p qa-independent/tsconfig.json`, testler `npm test` deseninde.
+- Bugün kırmızı olan 24 `[RULE]` testi `todo` olarak işaretli. Her birinin `todo` metni bulgu kimliğini ve paketi taşır (ör. `QA-F1 · Codex Paket-01`). `todo` testler koşar ve sonucu raporlanır, ama `npm test`'i kırmaz.
+- **Kabul ölçütü:** düzeltmeyi yapan ilgili testteki `todo` seçeneğini kaldırır ve test geçer. Testin beklentisini koda uydurmak için gevşetmek yasaktır.
+- Bulgu ve test eşlemesinin tek kaynağı: [`docs/konsey/TEK-KARAR-SKILL-ESLEMESI.md`](../docs/konsey/TEK-KARAR-SKILL-ESLEMESI.md).
+- SQL probları (`sql/qa_probes.sql`) kopyalanmaz. Bunları `packages/db/src/schema-probes.test.ts` gerçek PostgreSQL'de koşar (`AG_TEST_PG=1` ile; ayar yoksa atlanır).
 
 ## Çalıştırma
 
 ```bash
-node --test "qa-independent/**/*.test.ts"     # beklenen bugün: 83 test, 56 geçer, 27 kalır ([RULE] testleri)
+node --test "qa-independent/**/*.test.ts"     # beklenen bugün: 83 test, 59 geçer, 24 todo, 0 kalır
 npx tsc -p qa-independent/tsconfig.json       # tip kontrolü (çıkış 0)
 node --test --test-name-pattern="A2.6" qa-independent/a02-partial-collection.test.ts   # tek bulgu
 ```
@@ -28,9 +32,15 @@ psql -d <bos_db> -f qa-independent/sql/qa_probes.sql
 ```
 
 Bugünkü beklenen sonuç:
-- 34 negatif prob (Q01–Q35, Q21 yapısal gözlem) **kabul ediliyor**; bu, F4 bulgusu.
+- 34 negatif prob (Q01–Q35; Q21 yapısal gözlem) **kabul ediliyor**; bu, F4 bulgusu.
 - 5 kontrol (C01–C05) reddediliyor.
 - R01–R08 RLS gözlemleri.
+
+Aynı kontrolleri otomatik koşmak için:
+
+```bash
+AG_TEST_PG=1 PGHOST=… PGPORT=… PGUSER=… node --test packages/db/src/schema-probes.test.ts
+```
 
 ## Dosyalar
 

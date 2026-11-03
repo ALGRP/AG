@@ -11,8 +11,8 @@
     "node": ">=22.18"
   },
   "scripts": {
-    "typecheck": "tsc -p tsconfig.json",
-    "test": "node --test \"packages/*/src/**/*.test.ts\" \"apps/*/src/**/*.test.ts\"",
+    "typecheck": "tsc -p tsconfig.json && tsc -p qa-independent/tsconfig.json",
+    "test": "node --test \"packages/*/src/**/*.test.ts\" \"apps/*/src/**/*.test.ts\" \"qa-independent/**/*.test.ts\"",
     "check": "npm run typecheck && npm test",
     "build:sites": "node packages/ssg/src/cli.ts",
     "dev:api": "node --watch apps/api/src/main.ts",

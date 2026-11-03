@@ -30,7 +30,7 @@ describe("A10 attribution over HTTP", () => {
     assert.deepEqual([none.status, none.body.error], [403, "origin_not_allowed"]);
   });
 
-  it("A10.2 [RULE] a non-browser client must not be able to credit an arbitrary site by forging the Origin header", async () => {
+  it("A10.2 [RULE] a non-browser client must not be able to credit an arbitrary site by forging the Origin header", { todo: "QA-F11 · Paket-02 (atıf kanıtı)" }, async () => {
     // Plain HTTP client (no browser): forge the Origin of partner-site; no site credential or signature is required.
     const r = await h.httpPost("/v1/public/bookings", raw("partner-site", { pickupAt: "2026-12-12T11:00" }), { origin: "https://www.partner.example", "idempotency-key": "qa-attr-key-00000004" });
     const row = await h.row(r.body.ref);
@@ -90,7 +90,7 @@ describe("A10 attribution rules", () => {
     assert.deepEqual(pick(other.body.ref), ["p-001", "p-002", 1000, 500, 3500]);
   });
 
-  it("A10.6 [RULE] a self-operation 'verification' dated in the future must not unlock 90/10 today", async () => {
+  it("A10.6 [RULE] a self-operation 'verification' dated in the future must not unlock 90/10 today", { todo: "QA-L6 · Paket-02" }, async () => {
     const h = harness();
     h.setNow("2026-11-04T10:00:00Z");
     const b = await h.book({ siteId: "future-verified" });
@@ -99,7 +99,7 @@ describe("A10 attribution rules", () => {
     assert.equal(r.body.error, "self_operation_not_verified", "selfOperationVerifiedAt=2099-01-01 is treated as verified in 2026");
   });
 
-  it("A10.7 [RULE] dev origins must not let one origin book for every site (main.ts defaults AG_DEV_ORIGINS to localhost:4321 outside NODE_ENV=production)", async () => {
+  it("A10.7 [RULE] dev origins must not let one origin book for every site (main.ts defaults AG_DEV_ORIGINS to localhost:4321 outside NODE_ENV=production)", { todo: "QA-L7 · Paket-02" }, async () => {
     const h = harness({ devOrigins: ["http://localhost:4321"] });
     const r = await h.book({ siteId: "rival-site" }, undefined, "http://localhost:4321");
     const r2 = await h.book({ siteId: "alanyagroup-com" }, undefined, "http://localhost:4321");

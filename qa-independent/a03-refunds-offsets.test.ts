@@ -114,7 +114,7 @@ describe("A3 offsets and overpayments", () => {
     assert.equal((await h.service.createOffset(MANAGER, { ...body, fromWeekId: W46, writtenApprovalReference: "ONAY-1" })).body.error, "week_not_closed");
   });
 
-  it("A3.8 [RULE] the same offset submitted twice must be recorded once (unique adjustment reference)", async () => {
+  it("A3.8 [RULE] the same offset submitted twice must be recorded once (unique adjustment reference)", { todo: "QA-F2 · Codex Paket-01" }, async () => {
     const one = await h.service.createOffset(MANAGER, { ...body, writtenApprovalReference: "ONAY-DUP-1" });
     const two = await h.service.createOffset(MANAGER, { ...body, writtenApprovalReference: "ONAY-DUP-1" });
     assert.equal(one.status, 201);
@@ -127,7 +127,7 @@ describe("A3 offsets and overpayments", () => {
     );
   });
 
-  it("A3.9 [RULE] a 'written approval reference' must be a real reference, not punctuation", async () => {
+  it("A3.9 [RULE] a 'written approval reference' must be a real reference, not punctuation", { todo: "QA-L3 · Paket-02" }, async () => {
     const r = await h.service.createOffset(MANAGER, { ...body, amountMinor: 1, writtenApprovalReference: "---" });
     assert.equal(r.status, 422, "'---' accepted as written approval of the parties");
   });

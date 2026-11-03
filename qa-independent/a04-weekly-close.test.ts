@@ -41,7 +41,7 @@ describe("A4 weekly close", () => {
     assert.equal((await h.close("2026-W44")).body.error, "week_before_last_closed");
   });
 
-  it("A4.4 [RULE] the first close must not skip earlier weeks that have activity", async () => {
+  it("A4.4 [RULE] the first close must not skip earlier weeks that have activity", { todo: "QA-F7 · Codex Paket-01" }, async () => {
     const h = harness();
     h.setNow("2026-11-04T10:00:00Z");
     await h.shuttleJob({}, "sup-a", 5000); // W45 activity
@@ -50,7 +50,7 @@ describe("A4 weekly close", () => {
     assert.equal(first.status, 409, "W46 closed as the very first week; W45 is now permanently unclosable");
   });
 
-  it("A4.5 [RULE] the first close must not accept an arbitrary historic week (2020-W01)", async () => {
+  it("A4.5 [RULE] the first close must not accept an arbitrary historic week (2020-W01)", { todo: "QA-L2 · Codex Paket-01 (F7 ile aynı kural)" }, async () => {
     const h = harness();
     h.setNow("2026-11-16T06:00:00Z");
     const r = await h.close("2020-W01");
@@ -167,7 +167,7 @@ describe("A4 statement disputes timing (T3)", () => {
     assert.ok(rep.statement_disputes.every((d: any) => d.status === "open" && d.timing.reviewable === true && d.timing.within_window === false));
   });
 
-  it("A4.11 [RULE] '7 calendar days' — a dispute on day 7 at 23:00 Istanbul is still within the window", async () => {
+  it("A4.11 [RULE] '7 calendar days' — a dispute on day 7 at 23:00 Istanbul is still within the window", { todo: "QA-L4 · H-20 kararı bekliyor" }, async () => {
     // statement sent Tue 10 Nov 09:00 IST -> day 7 = Tue 17 Nov; 23:00 IST = 20:00Z
     h.setNow("2026-11-17T20:00:00Z");
     const d = await h.service.raiseStatementDispute(W45, { raisedBy: "p-001", reason: "yedinci gun itirazi", category: "other" });

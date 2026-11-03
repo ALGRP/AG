@@ -104,6 +104,16 @@ describe("D-F03 — yeni komisyon ile iade alacağı yazılı mahsup onayı olma
     assert.ok(w46.debts_and_disputes.some((d) => d.kind === "missing_payment" && d.debtor_id === "sup-1" && d.creditor_id === "site-1" && d.amount === 400));
     assert.ok(w46.debts_and_disputes.some((d) => d.kind === "credit_due" && d.debtor_id === "site-1" && d.creditor_id === "sup-1" && d.amount === 1000));
   });
+
+  it("paket F03: net sıfır olsa da +1000 yeni komisyon ve −1000 iade düzeltmesi iki brüt kalem kalır", () => {
+    const a = line({ booking_id: "f3c" });
+    const w45 = run(W45, [a]);
+    const aRefunded = { ...a, money_events: [...a.money_events, ev(5000, IN_W46, "refund")] };
+    const b = line({ booking_id: "f3d", money_events: [ev(5000, IN_W46)], completed_at: IN_W46 });
+    const w46 = run(W46, [aRefunded, b], w45.entries);
+    const siteLines = w46.obligations.filter((o) => o.debtor_id === "sup-1" && o.creditor_id === "site-1" && o.kind === "site_commission");
+    assert.deepEqual(siteLines.map((o) => [o.amount, o.status]).sort(), [[-1000, "credit_due"], [1000, "unpaid"]]);
+  });
 });
 
 describe("D-F04 — müşteriye iade ve onaylı hizmet kredisi yeniden müşteri borcu oluşturmaz", () => {
@@ -126,6 +136,16 @@ describe("D-F04 — müşteriye iade ve onaylı hizmet kredisi yeniden müşteri
     const w46 = run(W46, [a]);
     assert.deepEqual(w46.customer_balances.filter((c) => c.booking_id === "f4c").map((c) => c.remaining), [2000]);
   });
+
+  it(
+    "paket F04: 30 € tahsil + onaylı 20 € nakitsiz hizmet kredisi → müşteri borcu 0",
+    { todo: "PKG-F04b · Paket-02: onaylı kredi notu kaydı (2FA, gerekçe, referans) henüz yok" },
+    () => {
+      const withCredit = { ...line({ booking_id: "f4d", money_events: [ev(3000)] }), approved_credit_minor: 2000 } as SettlementLine & { approved_credit_minor: number };
+      const w45 = run(W45, [withCredit]);
+      assert.equal(w45.customer_balances.filter((c) => c.booking_id === "f4d").length, 0);
+    },
+  );
 });
 
 describe("D-F06 — iptal filtresi, kaydedilmiş komisyonun ters hareketini atlamaz", () => {
@@ -188,6 +208,19 @@ describe("D-F05 — önceki paylar güncel politikayla yeniden hesaplanmaz", () 
       target.supplier_entitlement - recorded.supplier,
     ]);
   });
+
+  it(
+    "paket F05: aynı tabanda kayıtlı pay (900/600/3500) dondurulmuş politikadan (1000/500/3500) farklıysa sessizce atlanmaz",
+    { todo: "PKG-F05b · Codex Paket-01: 'share_mismatch' istisnası; otomatik düzeltme H-24 kararına bağlı" },
+    () => {
+      const a = line({ booking_id: "f5c" });
+      const recorded: SettlementEntry = { ...run(W45, [a]).entries[0]!, site_delta: 900, agos_delta: 600, supplier_delta: 3500 };
+      const w46 = run(W46, [a], [recorded]);
+      const flagged = w46.exceptions.some((x) => x.booking_id === "f5c" && (x.reason as string) === "share_mismatch");
+      const corrected = w46.entries.some((e) => e.booking_id === "f5c" && e.site_delta === 100 && e.agos_delta === -100 && e.supplier_delta === 0);
+      assert.ok(flagged || corrected, "kayıtlı pay ile hedef pay arasındaki fark ne istisna ne düzeltme olarak görünüyor");
+    },
+  );
 });
 
 describe("D-F02 — küsurat dağıtımı (politika kararı bekleniyor; algoritma değiştirilmedi)", () => {
@@ -200,15 +233,17 @@ describe("D-F02 — küsurat dağıtımı (politika kararı bekleniyor; algoritm
   });
 
   it(
-    "pozitif bir tahsilat haftasında AGOS payı azalmamalı (49,99 € sonrası son 1 kuruş: bugün AGOS −1)",
+    "pozitif bir tahsilat haftasında AGOS payı azalmamalı (49,99 € sonrası son 1 kuruş; paket F02: 9 → 10 kuruş)",
     { todo: "BLOCKED: Owner küsurat dağıtım politikası (H-23). Algoritma sessizce değiştirilmez." },
     () => {
-      const a = line({ booking_id: "f2a", money_events: [ev(4999)] });
-      const w45 = run(W45, [a]);
-      const later = { ...a, money_events: [...a.money_events, ev(1, IN_W46)] };
-      const e = run(W46, [later], w45.entries).entries.find((x) => x.booking_id === "f2a")!;
-      assert.equal(e.collected_delta, 1);
-      assert.ok(e.agos_delta >= 0, `agos_delta=${e.agos_delta}, site_delta=${e.site_delta}, supplier_delta=${e.supplier_delta}`);
+      for (const [first, id] of [[4999, "f2a"], [9, "f2b"]] as const) {
+        const a = line({ booking_id: id, money_events: [ev(first)] });
+        const w45 = run(W45, [a]);
+        const later = { ...a, money_events: [...a.money_events, ev(1, IN_W46)] };
+        const e = run(W46, [later], w45.entries).entries.find((x) => x.booking_id === id)!;
+        assert.equal(e.collected_delta, 1);
+        assert.ok(e.agos_delta >= 0, `${first}+1: agos_delta=${e.agos_delta}, site_delta=${e.site_delta}, supplier_delta=${e.supplier_delta}`);
+      }
     },
   );
 });
