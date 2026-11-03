@@ -136,6 +136,10 @@ must(await receipt("p-side", "agos", 500, "TR-EFT-1004"), "r4"); // kendi aracı
 must(await receipt("sup-akdeniz", "alanya-group", 1200, "TR-EFT-1005"), "r5"); // tam
 must(await receipt("sup-akdeniz", "agos", 1600, "TR-EFT-1006"), "r6"); // fazla ödeme (borç 15 €)
 must(await receipt("sup-bilinmeyen", "p-ege", 2500, "TR-EFT-1007"), "r7"); // borçla eşleşmez
+must(
+  await service.addReceipt({ weekId: "2026-W45", payerId: "p-ege", payeeId: "agos", amountMinor: 20000, currency: "EUR", bankReference: "TR-SAAS-1101", paidAt: "2026-11-10T08:45:00Z", purpose: "subscription" }),
+  "saas",
+); // abonelik: komisyonla eşleşmez
 
 // ---- Rapor zamanı: Salı 20:00 İstanbul (son tarih geçti) ----
 now = new Date("2026-11-10T17:00:00Z");
@@ -143,7 +147,7 @@ const w45 = must(await service.weekReport("2026-W45"), "report") as WeeklyReport
 
 // ---- Sonraki hafta: kapanmış işe iade → düzeltme hareketi ----
 now = new Date("2026-11-11T09:00:00Z");
-must(await service.refund(refundLater, { amountMinor: 5000 }), "refund");
+must(await service.refund(refundLater, { amountMinor: 5000, refundReference: "IADE-2026-0001" }), "refund");
 const w46 = must(await service.weekReport("2026-W46"), "report-w46") as WeeklyReport;
 
 const html = renderWeeklyReportHtml(w45, {

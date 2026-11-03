@@ -39,12 +39,20 @@ export interface SettlementLine {
   readonly collection_method: CollectionMethod | null;
   readonly collector: Collector;
   readonly collection_status: CollectionStatus;
+  /** Net tahsilat (tahsil edilen − iade edilen). */
   readonly collected_amount: number;
+  /** Bugüne kadar iade edilen toplam. */
+  readonly refunded_amount: number;
+  /** Tahsilat kaydının zamanı (hesaba girme zamanı = max(completed_at, collected_at)). */
+  readonly collected_at: string | null;
   readonly completed_at: string | null;
   readonly cancelled: boolean;
   readonly cancelled_at: string | null;
+  /** Açık (çözülmemiş) itiraz. */
   readonly disputed: boolean;
   readonly disputed_at: string | null;
+  /** Mükerrer şüphesi; inceleme ile kaldırılana kadar otomatik hesaplanmaz. */
+  readonly suspected_duplicate: boolean;
   readonly dispute_reason: string | null;
   readonly self_supplied: boolean;
   readonly site_commission_amount: number;
@@ -200,6 +208,8 @@ export interface BankReceipt {
   /** Banka dekont numarası / referansı. */
   readonly bank_reference: string;
   readonly paid_at: string;
+  /** Kural 10: abonelik ödemeleri komisyon borçlarıyla eşleşmez. */
+  readonly purpose: "settlement" | "subscription";
 }
 
 /** Eski haftaya dokunmadan, iade/düzeltme için açılan hareket (ör. iade sonrası komisyon iadesi). */
@@ -226,6 +236,8 @@ export type ExceptionReason =
   | "short_collected"
   | "not_collected"
   | "disputed"
+  | "partially_refunded"
+  | "suspected_duplicate"
   | "completed_without_collection_record";
 
 export interface ExceptionItem {
@@ -244,13 +256,21 @@ export interface Obligation {
   readonly week_id: string;
   readonly debtor_id: string;
   readonly creditor_id: string;
-  readonly kind: "site_commission" | "agos_fee" | "supplier_entitlement";
+  /**
+   * site_commission: shuttle %20 · site_sale_share: private/VIP satış − hak ediş (komisyon değil) ·
+   * agos_fee: shuttle %10 · supplier_entitlement: müşteri siteye ödediyse site → tedarikçi.
+   */
+  readonly kind: "site_commission" | "site_sale_share" | "agos_fee" | "supplier_entitlement";
   readonly currency: Currency;
+  /** Negatifse alacaklı borçluya geri ödeyecek (ör. iade düzeltmesi). */
   readonly amount: number;
   readonly paid: number;
   readonly outstanding: number;
-  readonly status: "paid" | "partially_paid" | "unpaid" | "overpaid" | "nothing_due";
+  readonly status: "paid" | "partially_paid" | "unpaid" | "overpaid" | "nothing_due" | "credit_due";
+  /** Son tarih geçti ve hâlâ borç var. */
   readonly late: boolean;
+  /** Ödendi ama son tarihten sonra (kural 7). */
+  readonly paid_late: boolean;
   readonly receipt_ids: readonly string[];
   /** Eşleşen dekontların banka referansları. */
   readonly receipt_refs: readonly string[];
@@ -267,6 +287,8 @@ export interface WeeklyReport {
   readonly adjustments: readonly Adjustment[];
   readonly obligations: readonly Obligation[];
   readonly unmatched_receipts: readonly BankReceipt[];
+  /** Kural 10: bu haftaya ait abonelik dekontları — komisyonlarla eşleştirilmez. */
+  readonly subscription_receipts: readonly BankReceipt[];
   readonly supplier_statements: readonly SupplierStatement[];
   readonly site_receivables: readonly SiteReceivable[];
   readonly agos_fees: AgosFeeReport;
@@ -284,10 +306,16 @@ export interface SupplierStatement {
   readonly owes_agos: number;
   readonly paid_agos: number;
   readonly adjustments: number;
+  /** Pozitif borçlar toplamı (site + AGOS). */
   readonly total_owed: number;
+  /** Bu borçlara mahsup edilen ödemeler (fazla ödeme hariç). */
   readonly total_paid: number;
+  /** Kalan borç (alacaklı bazında, fazla ödeme başka alacaklının borcunu kapatmaz). */
   readonly outstanding: number;
-  readonly status: "settled" | "open" | "late";
+  readonly overpaid: number;
+  /** Tedarikçinin geri alacağı (iade düzeltmeleri). */
+  readonly credits: number;
+  readonly status: "settled" | "open" | "late" | "credit";
 }
 
 export interface SiteReceivable {
@@ -309,7 +337,15 @@ export interface DebtOrDispute {
   /** Borç kalemlerinde hangi tür borç olduğu (site komisyonu / AGOS payı / hak ediş). */
   readonly obligation_kind: Obligation["kind"] | null;
   readonly late: boolean;
-  readonly kind: "late_payment" | "missing_payment" | "partial_payment" | "overpayment" | "unmatched_receipt" | "booking_dispute";
+  readonly kind:
+    | "late_payment"
+    | "missing_payment"
+    | "partial_payment"
+    | "paid_late"
+    | "overpayment"
+    | "credit_due"
+    | "unmatched_receipt"
+    | "booking_dispute";
   readonly debtor_id: string | null;
   readonly creditor_id: string | null;
   readonly amount: number;
@@ -324,18 +360,27 @@ export const OPEN_EXCEPTION_REASONS: readonly ExceptionReason[] = [
   "not_collected",
   "completed_without_collection_record",
   "disputed",
+  "partially_refunded",
+  "suspected_duplicate",
 ];
 
 /** Bir rezervasyon için istisna nedeni (yoksa null → hesaplanabilir). */
 export function exceptionReason(l: SettlementLine): ExceptionReason | null {
   if (l.disputed) return "disputed";
   if (l.cancelled) return l.collected_amount > 0 ? "cancelled_after_collection" : "cancelled";
-  if (l.collection_status === "refunded") return "refunded";
+  if (l.refunded_amount > 0 && l.settlement_week_id === null) return l.collected_amount > 0 ? "partially_refunded" : "refunded";
+  if (l.suspected_duplicate && (l.completed_at !== null || l.collected_at !== null)) return "suspected_duplicate";
   if (l.completed_at === null) return null; // henüz tamamlanmadı: kapsam dışı, istisna değil
   if (l.collection_status === "pending") return "completed_without_collection_record";
   if (l.collection_status === "not_collected") return "not_collected";
   if (l.collection_status === "short_collected" || l.collected_amount < l.final_booking_price) return "short_collected";
   return null;
+}
+
+/** Satırın hesaba girebildiği an: hem tamamlanmış hem tahsil edilmiş olduğu ilk an. */
+export function eligibleAt(l: SettlementLine): string | null {
+  if (l.completed_at === null || l.collected_at === null) return null;
+  return l.completed_at > l.collected_at ? l.completed_at : l.collected_at;
 }
 
 function inWeek(iso: string | null, w: WeekBounds): boolean {
@@ -344,8 +389,9 @@ function inWeek(iso: string | null, w: WeekBounds): boolean {
 
 /**
  * Haftalık kapanış. Kurallar:
- *  - Hesaplanan: bu haftada tamamlanmış (completed_at) VE tam tahsil edilmiş, istisnası olmayan, daha önce hiçbir
- *    haftaya girmemiş satırlar. Bir satır yalnız bir haftaya girer (settlement_week_id bir kez yazılır).
+ *  - Hesaplanan: hafta sonundan önce tamamlanmış VE tam tahsil edilmiş, istisnası olmayan, daha önce hiçbir
+ *    haftaya girmemiş satırlar (geç girilen tahsilat ya da çözülen istisna sonraki kapanışa devreder).
+ *    Bir satır yalnız bir haftaya girer (settlement_week_id bir kez yazılır).
  *  - İstisna listesi: iptal, iade, eksik/yok tahsilat, itiraz — otomatik hesaplanmaz.
  *  - Düzeltmeler bu haftaya yazılır; eski hafta değişmez.
  *  - Dekontlar (receipts) aynı hafta + ödeyen + alacaklı + para birimiyle eşleşir; eşleşmeyen dekont listelenir.
@@ -370,7 +416,7 @@ export function weeklyReport(input: {
   const exceptions: ExceptionItem[] = input.frozen ? [...input.frozen.exceptions] : [];
   for (const l of input.frozen ? [] : input.lines) {
     const reason = exceptionReason(l);
-    const eventAt = l.disputed_at ?? l.cancelled_at ?? l.completed_at;
+    const eventAt = l.disputed_at ?? l.cancelled_at ?? l.completed_at ?? l.collected_at;
     const settledElsewhere = l.settlement_week_id !== null && l.settlement_week_id !== week.week_id;
     if (reason !== null) {
       // Çözülene kadar her hafta listede kalan açık istisnalar; para hareketi olmayan iptal ve
@@ -394,7 +440,8 @@ export function weeklyReport(input: {
       continue;
     }
     if (settledElsewhere) continue; // başka haftada hesaplandı: ikinci kez hesaplanmaz
-    if (l.completed_at !== null && (inWeek(l.completed_at, week) || l.settlement_week_id === week.week_id)) {
+    const eligible = eligibleAt(l);
+    if (eligible !== null && (eligible < week.end_utc || l.settlement_week_id === week.week_id)) {
       included.push({ ...l, settlement_week_id: week.week_id, settlement_status: "included" });
     }
   }
@@ -413,7 +460,7 @@ export function weeklyReport(input: {
     if (adj) a.adj.add(adj);
   };
   for (const l of included) {
-    add(l.supplier_id, l.selling_party_id, "site_commission", l.currency, l.supplier_payment_to_site, l.booking_id);
+    add(l.supplier_id, l.selling_party_id, l.service_type === "shuttle" ? "site_commission" : "site_sale_share", l.currency, l.supplier_payment_to_site, l.booking_id);
     add(l.supplier_id, AGOS_PARTY_ID, "agos_fee", l.currency, l.supplier_payment_to_agos, l.booking_id);
     add(l.selling_party_id, l.supplier_id, "supplier_entitlement", l.currency, l.site_payment_to_supplier, l.booking_id);
   }
@@ -424,7 +471,8 @@ export function weeklyReport(input: {
 
   // Dekont eşleştirme: aynı hafta + ödeyen + alacaklı + para birimi; bir alacaklıya birden çok tür borç varsa
   // önce site komisyonu, sonra AGOS ücreti (alacaklı farklı olduğundan pratikte çakışmaz).
-  const weekReceipts = input.receipts.filter((r) => r.week_id === week.week_id);
+  const weekReceipts = input.receipts.filter((r) => r.week_id === week.week_id && r.purpose === "settlement");
+  const subscriptionReceipts = input.receipts.filter((r) => r.week_id === week.week_id && r.purpose === "subscription");
   const usedReceipts = new Set<string>();
   const obligations: Obligation[] = [...acc.values()]
     .sort((x, y) => `${x.debtor}|${x.creditor}|${x.kind}`.localeCompare(`${y.debtor}|${y.creditor}|${y.kind}`))
@@ -436,7 +484,17 @@ export function weeklyReport(input: {
       const paid = rs.reduce((s, r) => s + r.amount, 0);
       const outstanding = a.amount - paid;
       const status: Obligation["status"] =
-        a.amount <= 0 && paid === 0 ? "nothing_due" : outstanding === 0 ? "paid" : outstanding < 0 ? "overpaid" : paid > 0 ? "partially_paid" : "unpaid";
+        a.amount < 0 && paid === 0
+          ? "credit_due"
+          : a.amount === 0 && paid === 0
+            ? "nothing_due"
+            : outstanding === 0
+              ? "paid"
+              : outstanding < 0
+                ? "overpaid"
+                : paid > 0
+                  ? "partially_paid"
+                  : "unpaid";
       return {
         week_id: week.week_id,
         debtor_id: a.debtor,
@@ -448,6 +506,7 @@ export function weeklyReport(input: {
         outstanding,
         status,
         late: late && outstanding > 0,
+        paid_late: rs.some((r) => r.paid_at > week.payment_due_utc),
         receipt_ids: rs.map((r) => r.id),
         receipt_refs: rs.map((r) => r.bank_reference),
         booking_ids: [...a.bookings],
@@ -479,12 +538,14 @@ export function weeklyReport(input: {
     .map(([k, ls]) => {
       const [supplier_id, currency] = k.split("|") as [string, Currency];
       const mine = obligations.filter((o) => o.debtor_id === supplier_id && o.currency === currency && o.kind !== "supplier_entitlement");
-      const owesSites = mine.filter((o) => o.kind === "site_commission");
+      const owesSites = mine.filter((o) => o.kind === "site_commission" || o.kind === "site_sale_share");
       const agos = mine.filter((o) => o.kind === "agos_fee");
       const adjTotal = adjustments.filter((a) => a.debtor_id === supplier_id && a.currency === currency).reduce((s, a) => s + a.amount, 0);
-      const total_owed = mine.reduce((s, o) => s + o.amount, 0);
-      const total_paid = mine.reduce((s, o) => s + o.paid, 0);
-      const outstanding = total_owed - total_paid;
+      const total_owed = mine.reduce((s, o) => s + Math.max(0, o.amount), 0);
+      const total_paid = mine.reduce((s, o) => s + Math.min(o.paid, Math.max(0, o.amount)), 0);
+      const outstanding = mine.reduce((s, o) => s + Math.max(0, o.outstanding), 0);
+      const overpaid = mine.reduce((s, o) => s + (o.amount >= 0 ? Math.max(0, -o.outstanding) : 0), 0);
+      const credits = mine.reduce((s, o) => s + Math.min(0, o.amount), 0);
       return {
         supplier_id,
         currency,
@@ -498,14 +559,17 @@ export function weeklyReport(input: {
         total_owed,
         total_paid,
         outstanding,
-        status: outstanding <= 0 ? ("settled" as const) : late ? ("late" as const) : ("open" as const),
+        overpaid,
+        credits,
+        status:
+          outstanding > 0 ? (late ? ("late" as const) : ("open" as const)) : credits < 0 ? ("credit" as const) : ("settled" as const),
       };
     })
     .sort((a, b) => a.supplier_id.localeCompare(b.supplier_id));
 
   // Site komisyon alacakları
   const siteMap = new Map<string, Obligation[]>();
-  for (const o of obligations.filter((o) => o.kind === "site_commission")) {
+  for (const o of obligations.filter((o) => o.kind === "site_commission" || o.kind === "site_sale_share")) {
     const k = `${o.creditor_id}|${o.currency}`;
     siteMap.set(k, [...(siteMap.get(k) ?? []), o]);
   }
@@ -513,14 +577,14 @@ export function weeklyReport(input: {
     .map(([k, os]) => {
       const [site_party_id, currency] = k.split("|") as [string, Currency];
       const total = os.reduce((s, o) => s + o.amount, 0);
-      const received = os.reduce((s, o) => s + o.paid, 0);
+      const received = os.reduce((s, o) => s + Math.min(o.paid, Math.max(0, o.amount)), 0);
       return {
         site_party_id,
         currency,
         by_supplier: os.map((o) => ({ supplier_id: o.debtor_id, amount: o.amount, paid: o.paid })),
         total,
         received,
-        outstanding: total - received,
+        outstanding: os.reduce((s, o) => s + Math.max(0, o.outstanding), 0),
       };
     })
     .sort((a, b) => a.site_party_id.localeCompare(b.site_party_id));
@@ -531,13 +595,16 @@ export function weeklyReport(input: {
   const received_by_currency: Partial<Record<Currency, number>> = {};
   for (const o of agosOs) {
     total_by_currency[o.currency] = (total_by_currency[o.currency] ?? 0) + o.amount;
-    received_by_currency[o.currency] = (received_by_currency[o.currency] ?? 0) + o.paid;
+    // Fazla ödeme "alınan" sayılmaz; borç ve ihtilaf listesinde ayrıca görünür.
+    received_by_currency[o.currency] = (received_by_currency[o.currency] ?? 0) + Math.min(o.paid, Math.max(0, o.amount));
   }
 
   // Borç ve ihtilaf listesi
   const debts: DebtOrDispute[] = [];
   for (const o of obligations) {
-    if (o.status === "overpaid") {
+    if (o.status === "credit_due") {
+      debts.push({ kind: "credit_due", obligation_kind: o.kind, late: false, debtor_id: o.creditor_id, creditor_id: o.debtor_id, amount: -o.amount, currency: o.currency, detail: "iade düzeltmesi: alacaklı tedarikçiye geri öder ya da sonraki haftaya mahsup edilir (karar gerekir)" });
+    } else if (o.status === "overpaid") {
       debts.push({ kind: "overpayment", obligation_kind: o.kind, late: false, debtor_id: o.debtor_id, creditor_id: o.creditor_id, amount: -o.outstanding, currency: o.currency, detail: "fazla ödeme — iade veya sonraki haftaya mahsup kararı gerekir" });
     } else if (o.outstanding > 0) {
       const kind = o.late ? (o.paid > 0 ? "partial_payment" : "late_payment") : o.paid > 0 ? "partial_payment" : "missing_payment";
@@ -551,6 +618,9 @@ export function weeklyReport(input: {
         currency: o.currency,
         detail: o.late ? "son tarih (Salı 18:00) geçti" : "son tarih bekleniyor",
       });
+    }
+    if (o.paid_late && o.outstanding <= 0) {
+      debts.push({ kind: "paid_late", obligation_kind: o.kind, late: true, debtor_id: o.debtor_id, creditor_id: o.creditor_id, amount: o.paid, currency: o.currency, detail: "ödendi, ancak son tarihten (Salı 18:00) sonra" });
     }
   }
   for (const r of unmatched) {
@@ -568,6 +638,7 @@ export function weeklyReport(input: {
     adjustments,
     obligations,
     unmatched_receipts: unmatched,
+    subscription_receipts: subscriptionReceipts,
     supplier_statements,
     site_receivables,
     agos_fees: {
@@ -581,49 +652,58 @@ export function weeklyReport(input: {
 }
 
 /**
- * Hesaplanmış (eski haftaya girmiş) bir shuttle işinin iadesi: eski satır DEĞİŞMEZ; yeni haftaya
- * ters düzeltme hareketleri yazılır. İade tutarı aynı 20/10/70 politikasıyla bölünür (tek kaynak).
- * Private/VIP iadesi otomatik bölünmez (hak edişi site belirlediği için) → istisna olarak kalır.
+ * Hesaplanmış (eski haftaya girmiş) bir shuttle işinin iadesi: eski satır DEĞİŞMEZ; içinde bulunulan haftaya ters
+ * düzeltme hareketleri yazılır. Kümülatif hesap: bu iadeyle toplam iadenin payı − önceki iadelerin payı. Böylece
+ * birden çok kısmi iadede yuvarlama birikmez ve toplam düzeltme hiçbir zaman orijinal payı aşmaz.
+ * Private/VIP iadesi otomatik bölünmez (hak edişi site belirler) → elle düzeltme.
  */
 export function refundAdjustments(
   line: SettlementLine,
-  refundMinor: number,
-  currentWeekId: string,
+  input: {
+    /** Hesaplanan haftadaki tahsilat (iade öncesi). */
+    readonly originalCollectedMinor: number;
+    readonly priorRefundedMinor: number;
+    readonly refundMinor: number;
+    readonly currentWeekId: string;
+    /** Bu rezervasyonun kaçıncı düzeltmesi (referansı tekil yapar). */
+    readonly sequence: number;
+    readonly policy?: SplitPolicy;
+  },
   newId: () => string,
 ): Adjustment[] {
   if (line.settlement_week_id === null) throw new Error("line not yet settled: handle as an exception, not an adjustment");
   if (line.service_type !== "shuttle") throw new Error("private/VIP refunds need a manual adjustment");
-  if (!Number.isSafeInteger(refundMinor) || refundMinor <= 0 || refundMinor > line.collected_amount) {
-    throw new RangeError("refund must be positive and not exceed the collected amount");
+  const { originalCollectedMinor: orig, priorRefundedMinor: prior, refundMinor: r } = input;
+  if (!Number.isSafeInteger(r) || r <= 0 || prior + r > orig) {
+    throw new RangeError("refund must be positive and total refunds must not exceed the collected amount");
   }
-  const s = shuttleSplit(refundMinor, line.currency, line.selling_party_id, line.supplier_id);
-  const out: Adjustment[] = [];
-  const ref = `ADJ-${line.booking_ref}-${currentWeekId}`;
-  if (s.site_commission_amount > 0) {
-    out.push({
-      id: newId(),
-      booking_id: line.booking_id,
-      week_id: currentWeekId,
-      original_week_id: line.settlement_week_id,
-      debtor_id: line.supplier_id,
-      creditor_id: line.selling_party_id,
-      amount: -s.site_commission_amount,
-      currency: line.currency,
-      reason: `refund ${refundMinor}`,
-      adjustment_reference: ref,
-    });
-  }
-  out.push({
+  if (input.currentWeekId <= line.settlement_week_id) throw new RangeError("adjustment must go to a later week");
+  const policy = input.policy ?? SHUTTLE_SPLIT_V1;
+  const before = shuttleSplit(prior, line.currency, line.selling_party_id, line.supplier_id, policy);
+  const after = shuttleSplit(prior + r, line.currency, line.selling_party_id, line.supplier_id, policy);
+  const siteDelta = after.site_commission_amount - before.site_commission_amount;
+  const agosDelta = after.agos_fee_amount - before.agos_fee_amount;
+  const ref = `ADJ-${line.booking_ref}-${input.currentWeekId}-${input.sequence}`;
+  const mk = (creditor: string, amount: number): Adjustment => ({
     id: newId(),
     booking_id: line.booking_id,
-    week_id: currentWeekId,
-    original_week_id: line.settlement_week_id,
+    week_id: input.currentWeekId,
+    original_week_id: line.settlement_week_id!,
     debtor_id: line.supplier_id,
-    creditor_id: AGOS_PARTY_ID,
-    amount: -s.agos_fee_amount,
+    creditor_id: creditor,
+    amount: -amount,
     currency: line.currency,
-    reason: `refund ${refundMinor}`,
+    reason: `refund ${r}`,
     adjustment_reference: ref,
   });
+  // Delta bazen yuvarlama yüzünden negatif olabilir (ör. 1 cent iadede AGOS kalanı); atılırsa toplam kayar.
+  const out: Adjustment[] = [];
+  if (siteDelta !== 0) out.push(mk(line.selling_party_id, siteDelta));
+  if (agosDelta !== 0) out.push(mk(AGOS_PARTY_ID, agosDelta));
   return out;
+}
+
+/** Sonraki ISO hafta kimliği. */
+export function nextWeekId(weekId: string): string {
+  return settlementWeekId(weekBounds(weekId).end_utc);
 }

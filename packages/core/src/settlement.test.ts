@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { describe, it } from "node:test";
 import {
   AGOS_PARTY_ID,
+  nextWeekId,
   SHUTTLE_SPLIT_V1,
   privateSplit,
   refundAdjustments,
@@ -36,12 +37,15 @@ function line(over: Partial<SettlementLine> & Pick<SettlementLine, "booking_id">
     collector: "supplier",
     collection_status: "collected",
     collected_amount: final,
+    refunded_amount: 0,
+    collected_at: "2026-11-04T09:00:00Z",
     completed_at: "2026-11-04T09:00:00Z",
     cancelled: false,
     cancelled_at: null,
     disputed: false,
     disputed_at: null,
     dispute_reason: null,
+    suspected_duplicate: false,
     self_supplied: split.self_supplied,
     site_commission_amount: split.site_commission_amount,
     agos_fee_amount: split.agos_fee_amount,
@@ -140,6 +144,7 @@ describe("weekly report", () => {
     currency: "EUR",
     bank_reference: `DEKONT-${over.id}`,
     paid_at: "2026-11-10T09:00:00Z",
+    purpose: "settlement",
     ...over,
   });
 
@@ -153,9 +158,9 @@ describe("weekly report", () => {
     line({ booking_id: "x1", cancelled: true, cancelled_at: "2026-11-03T10:00:00Z", completed_at: null, collected_amount: 0, collection_status: "pending" }),
     line({ booking_id: "x2", collection_status: "short_collected", collected_amount: 3000 }),
     line({ booking_id: "x3", disputed: true, disputed_at: "2026-11-05T10:00:00Z", dispute_reason: "müşteri gelmedi" }),
-    line({ booking_id: "x4", collection_status: "refunded", collected_amount: 0 }),
+    line({ booking_id: "x4", collection_status: "refunded", collected_amount: 0, refunded_amount: 5000 }),
     // Kapsam dışı: gelecek hafta tamamlanan, daha önce hesaplanmış
-    line({ booking_id: "n1", completed_at: "2026-11-09T09:00:00Z" }),
+    line({ booking_id: "n1", completed_at: "2026-11-09T09:00:00Z", collected_at: "2026-11-09T09:00:00Z" }),
     line({ booking_id: "o1", settlement_week_id: "2026-W44", settlement_status: "included" }),
   ];
 
@@ -240,7 +245,8 @@ describe("weekly report", () => {
   it("refund after settlement: the old week stays unchanged; a correction is posted to the current week", () => {
     const settledLine = { ...line({ booking_id: "b2" }), settlement_week_id: W45, settlement_status: "included" as const };
     let n = 0;
-    const adj = refundAdjustments(settledLine, 5000, "2026-W46", () => `a${++n}`);
+    const base = { originalCollectedMinor: 5000, priorRefundedMinor: 0, refundMinor: 5000, currentWeekId: "2026-W46", sequence: 1 };
+    const adj = refundAdjustments(settledLine, base, () => `a${++n}`);
     assert.deepEqual(
       adj.map((a) => [a.creditor_id, a.amount, a.original_week_id, a.week_id]),
       [
@@ -248,25 +254,123 @@ describe("weekly report", () => {
         [AGOS_PARTY_ID, -500, W45, "2026-W46"],
       ],
     );
-    assert.ok(adj.every((a) => a.adjustment_reference === `ADJ-${settledLine.booking_ref}-2026-W46`));
-    // W45 raporu düzeltmeden etkilenmez
+    assert.ok(adj.every((a) => a.adjustment_reference === `ADJ-${settledLine.booking_ref}-2026-W46-1`));
     const w45 = weeklyReport({ weekId: W45, now: "2026-11-16T08:00:00Z", lines: [settledLine], adjustments: adj, receipts: [] });
-    assert.equal(w45.site_receivables[0]!.total, 1000);
-    // W46 raporunda tedarikçinin site ve AGOS borcu eksiye düşer (alacak/mahsup)
+    assert.equal(w45.site_receivables[0]!.total, 1000, "old week unchanged");
     const w46 = weeklyReport({ weekId: "2026-W46", now: "2026-11-16T08:00:00Z", lines: [settledLine], adjustments: adj, receipts: [] });
+    assert.deepEqual(w46.obligations.map((o) => [o.creditor_id, o.amount, o.status]), [
+      [AGOS_PARTY_ID, -500, "credit_due"],
+      ["site-1", -1000, "credit_due"],
+    ]);
+    // Geri ödenecek tutar görünür (QA bulgusu 6)
     assert.deepEqual(
-      w46.obligations.map((o) => [o.creditor_id, o.amount, o.adjustment_ids.length]),
+      w46.debts_and_disputes.map((d) => [d.kind, d.debtor_id, d.creditor_id, d.amount]).sort(),
       [
-        [AGOS_PARTY_ID, -500, 1],
-        ["site-1", -1000, 1],
+        ["credit_due", AGOS_PARTY_ID, "sup-1", 500],
+        ["credit_due", "site-1", "sup-1", 1000],
       ],
     );
-    assert.equal(w46.supplier_statements[0]!.adjustments, -1500);
-    // Partial refund uses the same single-source split
-    const half = refundAdjustments(settledLine, 3000, "2026-W46", () => "h");
-    assert.deepEqual(half.map((a) => a.amount), [-600, -300]);
-    assert.throws(() => refundAdjustments(settledLine, 6000, "2026-W46", () => "x"), /exceed/);
-    assert.throws(() => refundAdjustments({ ...settledLine, settlement_week_id: null }, 1000, "2026-W46", () => "x"), /exception/);
-    assert.throws(() => refundAdjustments({ ...settledLine, service_type: "private" }, 1000, "2026-W46", () => "x"), /manual/);
+    assert.equal(w46.supplier_statements[0]!.status, "credit");
+    assert.equal(w46.supplier_statements[0]!.credits, -1500);
+    assert.throws(() => refundAdjustments(settledLine, { ...base, refundMinor: 6000 }, () => "x"), /exceed/);
+    assert.throws(() => refundAdjustments({ ...settledLine, settlement_week_id: null }, base, () => "x"), /exception/);
+    assert.throws(() => refundAdjustments({ ...settledLine, service_type: "private" }, base, () => "x"), /manual/);
+    assert.throws(() => refundAdjustments(settledLine, { ...base, currentWeekId: W45 }, () => "x"), /later week/);
+  });
+
+  it("many partial refunds never drift: the total reversal equals the split of the total refund (QA 7)", () => {
+    const settled = { ...line({ booking_id: "b9" }), settlement_week_id: W45, settlement_status: "included" as const };
+    let prior = 0;
+    let site = 0;
+    let agos = 0;
+    const parts = [333, 333, 333, 4001]; // 3,33 € ×3 + 40,01 € = 50 €
+    parts.forEach((r, i) => {
+      const adj = refundAdjustments(settled, { originalCollectedMinor: 5000, priorRefundedMinor: prior, refundMinor: r, currentWeekId: "2026-W46", sequence: i + 1 }, () => `p${i}`);
+      prior += r;
+      for (const a of adj) a.creditor_id === AGOS_PARTY_ID ? (agos += a.amount) : (site += a.amount);
+    });
+    assert.deepEqual([site, agos], [-1000, -500], "exactly the original 10 € and 5 €");
+    // 5000 × 1 cent cannot reverse more than the original fee either
+    let p = 0;
+    let fee = 0;
+    for (let i = 0; i < 5000; i++) {
+      for (const a of refundAdjustments(settled, { originalCollectedMinor: 5000, priorRefundedMinor: p, refundMinor: 1, currentWeekId: "2026-W46", sequence: i + 1 }, () => "c")) {
+        if (a.creditor_id === AGOS_PARTY_ID) fee += a.amount;
+      }
+      p += 1;
+    }
+    assert.equal(fee, -500);
+  });
+});
+
+describe("QA regression — inclusion and exceptions", () => {
+  it("a collection recorded after its week closed is settled in the next week (QA 1)", () => {
+    const l = line({ booking_id: "late", completed_at: "2026-11-08T19:00:00Z", collected_at: null, collection_status: "pending", collected_amount: 0, collection_method: null });
+    const w45 = weeklyReport({ weekId: W45, now: "2026-11-09T06:00:00Z", lines: [l], adjustments: [], receipts: [] });
+    assert.deepEqual(w45.exceptions.map((e) => e.reason), ["completed_without_collection_record"]);
+    assert.equal(w45.included.length, 0);
+    const collected = { ...l, collected_at: "2026-11-09T06:00:00Z", collection_status: "collected" as const, collected_amount: 5000, collection_method: "cash" as const };
+    const w46 = weeklyReport({ weekId: nextWeekId(W45), now: "2026-11-16T06:00:00Z", lines: [collected], adjustments: [], receipts: [] });
+    assert.deepEqual(w46.included.map((x) => x.booking_id), ["late"]);
+    assert.equal(w46.site_receivables[0]!.total, 1000);
+  });
+
+  it("a suspected duplicate that was delivered and paid stays visible as an exception (QA 2)", () => {
+    const d = line({ booking_id: "dup", suspected_duplicate: true });
+    const r = weeklyReport({ weekId: W45, now: "2026-11-09T06:00:00Z", lines: [d], adjustments: [], receipts: [] });
+    assert.deepEqual(r.exceptions.map((e) => e.reason), ["suspected_duplicate"]);
+    const cleared = weeklyReport({ weekId: W45, now: "2026-11-09T06:00:00Z", lines: [{ ...d, suspected_duplicate: false }], adjustments: [], receipts: [] });
+    assert.equal(cleared.included.length, 1);
+  });
+
+  it("a partial refund before closing stays an open exception every week (QA 3)", () => {
+    const p = line({ booking_id: "part", collected_amount: 4000, refunded_amount: 1000 });
+    for (const w of [W45, "2026-W46", "2026-W47"]) {
+      const r = weeklyReport({ weekId: w, now: "2026-12-01T00:00:00Z", lines: [p], adjustments: [], receipts: [] });
+      assert.deepEqual(r.exceptions.map((e) => e.reason), ["partially_refunded"], w);
+    }
+  });
+});
+
+describe("QA regression — payments", () => {
+  const rc = (id: string, payee: string, amount: number, paid_at: string, purpose: "settlement" | "subscription" = "settlement"): BankReceipt => ({
+    id,
+    week_id: W45,
+    payer_id: "sup-1",
+    payee_id: payee,
+    amount,
+    currency: "EUR",
+    bank_reference: `DK-${id}`,
+    paid_at,
+    purpose,
+  });
+  const lines = [line({ booking_id: "q1" })]; // 50 €: site 10, AGOS 5
+
+  it("a payment made after Tuesday 18:00 is reported as paid late (QA 5)", () => {
+    const r = weeklyReport({ weekId: W45, now: "2026-11-20T00:00:00Z", lines, adjustments: [], receipts: [rc("1", "site-1", 1000, "2026-11-19T09:00:00Z"), rc("2", AGOS_PARTY_ID, 500, "2026-11-10T09:00:00Z")] });
+    const site = r.obligations.find((o) => o.creditor_id === "site-1")!;
+    assert.deepEqual([site.status, site.late, site.paid_late], ["paid", false, true]);
+    assert.ok(r.debts_and_disputes.some((d) => d.kind === "paid_late" && d.creditor_id === "site-1"));
+    assert.ok(!r.debts_and_disputes.some((d) => d.kind === "paid_late" && d.creditor_id === AGOS_PARTY_ID));
+  });
+
+  it("an overpayment to one creditor does not hide a debt to another; AGOS 'received' excludes it (QA 9)", () => {
+    const r = weeklyReport({ weekId: W45, now: "2026-11-10T10:00:00Z", lines, adjustments: [], receipts: [rc("3", AGOS_PARTY_ID, 600, "2026-11-10T09:00:00Z")] });
+    const st = r.supplier_statements[0]!;
+    assert.deepEqual([st.total_owed, st.total_paid, st.outstanding, st.overpaid], [1500, 500, 1000, 100]);
+    assert.equal(r.agos_fees.received_by_currency.EUR, 500);
+  });
+
+  it("subscription payments are never matched against shuttle commissions (rule 10)", () => {
+    const r = weeklyReport({ weekId: W45, now: "2026-11-10T10:00:00Z", lines, adjustments: [], receipts: [rc("4", AGOS_PARTY_ID, 20000, "2026-11-10T09:00:00Z", "subscription")] });
+    assert.equal(r.obligations.find((o) => o.creditor_id === AGOS_PARTY_ID)!.paid, 0);
+    assert.deepEqual(r.subscription_receipts.map((x) => x.id), ["4"]);
+    assert.equal(r.unmatched_receipts.length, 0);
+  });
+
+  it("private/VIP sale difference is labelled as the site's sale share, not a commission", () => {
+    const r = weeklyReport({ weekId: W45, now: "2026-11-10T10:00:00Z", lines: [line({ booking_id: "pv", service_type: "private", final_booking_price: 8000 })], adjustments: [], receipts: [] });
+    assert.deepEqual(r.obligations.map((o) => [o.kind, o.amount]), [["site_sale_share", 3250]]);
+    assert.equal(r.site_receivables[0]!.total, 3250);
   });
 });

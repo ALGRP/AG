@@ -49,10 +49,14 @@ export interface StoredBooking {
   readonly collection?: CollectionRecord;
   readonly collectionStatus: CollectionStatus;
   readonly refundedMinor: number;
+  /** İadeler; referans rezervasyon başına tekildir (aynı iade iki kez yazılamaz). */
+  readonly refunds: ReadonlyArray<{ readonly reference: string; readonly amountMinor: number; readonly at: string }>;
   readonly completedAt?: string;
   readonly cancelledAt?: string;
   readonly disputedAt?: string;
   readonly disputeReason?: string;
+  readonly disputeResolvedAt?: string;
+  readonly disputeOutcome?: "upheld" | "rejected";
   /** Bir kez yazılır (kapanışta). */
   readonly settlementWeekId?: string;
   readonly settlementStatus: SettlementStatus;
@@ -105,6 +109,7 @@ export interface Store {
   /** Kapanmış haftanın anlık görüntüsü; bir hafta bir kez kapanır, sonradan değişmez. */
   saveClosedWeek(r: WeeklyReport): Promise<void>;
   getClosedWeek(weekId: string): Promise<WeeklyReport | undefined>;
+  listClosedWeekIds(): Promise<string[]>;
 }
 
 interface Snapshot {
@@ -240,6 +245,9 @@ export class MemoryStore implements Store {
   async saveClosedWeek(r: WeeklyReport) {
     if (this.#closed.has(r.week.week_id)) throw new Error("week already closed");
     this.#closed.set(r.week.week_id, structuredClone(r));
+  }
+  async listClosedWeekIds() {
+    return [...this.#closed.keys()].sort();
   }
   async getClosedWeek(weekId: string) {
     const r = this.#closed.get(weekId);

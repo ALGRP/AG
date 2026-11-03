@@ -53,6 +53,10 @@ function reply(res: ServerResponse, r: ServiceResult<unknown>, headers: Record<s
 }
 
 async function readJson(req: IncomingMessage): Promise<{ ok: true; value: unknown } | { ok: false; status: number; error: string }> {
+  // Gövdesiz POST (ör. /close, /complete) boş nesne sayılır.
+  if (req.headers["content-length"] === "0" || (req.headers["content-length"] === undefined && req.headers["transfer-encoding"] === undefined)) {
+    return { ok: true, value: {} };
+  }
   const ct = req.headers["content-type"] ?? "";
   if (!ct.toLowerCase().startsWith("application/json")) return { ok: false, status: 415, error: "json_required" };
   const chunks: Buffer[] = [];
@@ -174,6 +178,10 @@ export function createApiServer(opts: HttpOptions): Server {
               return reply(res, await opts.service.refund(ref, v));
             case "dispute":
               return reply(res, await opts.service.dispute(ref, v));
+            case "resolve-dispute":
+              return reply(res, await opts.service.resolveDispute(ref, v));
+            case "clear-duplicate":
+              return reply(res, await opts.service.clearDuplicate(ref));
             case "cancel":
               return reply(res, await opts.service.cancel(ref));
             case "invoice":

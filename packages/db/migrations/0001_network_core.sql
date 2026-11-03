@@ -174,7 +174,9 @@ CREATE TABLE booking (
   collection_status collection_status NOT NULL DEFAULT 'pending',
   collected_amount bigint NOT NULL DEFAULT 0 CHECK (collected_amount >= 0),
   refunded_amount bigint NOT NULL DEFAULT 0 CHECK (refunded_amount >= 0 AND refunded_amount <= collected_amount),
+  collected_at    timestamptz,
   completed_at    timestamptz,
+  policy_id       text REFERENCES split_policy(id),
   site_commission_amount bigint,
   agos_fee_amount bigint,
   supplier_entitlement bigint,
@@ -207,7 +209,9 @@ CREATE TABLE booking (
   allowed_collection_methods collection_method[] NOT NULL CHECK (cardinality(allowed_collection_methods) >= 1),
   cancelled_at    timestamptz,
   disputed_at     timestamptz,
-  dispute_reason  text,
+  dispute_reason  text CHECK (dispute_reason IS NULL OR dispute_reason !~ '[^[:space:]@]+@[^[:space:]@]+[.][^[:space:]@]+'),
+  dispute_resolved_at timestamptz,
+  dispute_outcome text CHECK (dispute_outcome IN ('upheld', 'rejected')),
   lookup_token_hash text NOT NULL,
   fingerprint     text NOT NULL,
   is_duplicate    boolean NOT NULL DEFAULT false,
@@ -222,6 +226,9 @@ CREATE TABLE booking (
   CHECK (collected_amount <= coalesce(final_booking_price, 0)),
   -- Kural 2: shuttle'da tahsilatı tedarikçi yapar.
   CHECK (service_type <> 'shuttle' OR collector = 'supplier'),
+  -- Paylar ya hepsi var ya hiçbiri (NULL ile CHECK atlatılamaz).
+  CHECK ((supplier_entitlement IS NULL) = (site_commission_amount IS NULL) AND (supplier_entitlement IS NULL) = (agos_fee_amount IS NULL)),
+  CHECK ((collection_method IS NULL) = (collected_at IS NULL)),
   -- Paylar tutarlı: tedarikçi hak edişi + site komisyonu + AGOS = satış.
   CHECK (supplier_entitlement IS NULL OR supplier_entitlement + site_commission_amount + agos_fee_amount = final_booking_price),
   -- Private/VIP: AGOS ek işlem komisyonu yok.
@@ -233,32 +240,76 @@ CREATE INDEX booking_fingerprint ON booking(fingerprint) WHERE status <> 'cancel
 CREATE INDEX booking_site_created ON booking(selling_site_id, created_at DESC);
 CREATE INDEX booking_week ON booking(settlement_week_id);
 
--- Kural 9 ve 8: tahsilat bir kez yazılır; hesaplandığı hafta bir kez yazılır; eski hafta değişmez.
+-- Kural 1, 8, 9 ve kendi aracı kuralı veritabanında da:
+--  * shuttle payları split_policy tablosundaki TEK kaynaktan hesaplananla aynı olmalı (20/10/70; kendi aracı 0/10/90)
+--  * site kendi aracıyla ancak yetkisi doğrulanmışsa tedarikçi olabilir
+--  * tahsilat bir kez yazılır; hesaplandığı hafta bir kez yazılır; hesaplanmış işin tutar ve kimlikleri donar
 CREATE FUNCTION booking_settlement_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+  p split_policy%ROWTYPE;
+  exp_site bigint;
+  exp_agos bigint;
+  exp_supplier bigint;
+  verified timestamptz;
 BEGIN
-  IF OLD.collection_method IS NOT NULL AND (NEW.collection_method IS DISTINCT FROM OLD.collection_method
-       OR NEW.collected_amount IS DISTINCT FROM OLD.collected_amount OR NEW.collector IS DISTINCT FROM OLD.collector) THEN
-    RAISE EXCEPTION 'collection already recorded for booking % (no second collection)', OLD.id;
+  IF NEW.supplier_id IS NOT NULL AND NEW.supplier_id = NEW.selling_party_id THEN
+    SELECT self_operation_verified_at INTO verified FROM site WHERE id = NEW.selling_site_id;
+    IF verified IS NULL THEN
+      RAISE EXCEPTION 'site % is not verified for self-operation', NEW.selling_site_id;
+    END IF;
   END IF;
-  IF OLD.settlement_week_id IS NOT NULL AND NEW.settlement_week_id IS DISTINCT FROM OLD.settlement_week_id THEN
-    RAISE EXCEPTION 'booking % already settled in % (use an adjustment)', OLD.id, OLD.settlement_week_id;
+  IF NEW.service_type = 'shuttle' AND NEW.supplier_entitlement IS NOT NULL THEN
+    SELECT * INTO p FROM split_policy WHERE id = NEW.policy_id AND status = 'approved';
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'shuttle booking % needs an approved split policy', NEW.id;
+    END IF;
+    exp_supplier := NEW.final_booking_price * p.carrier_bps / 10000;
+    exp_site := NEW.final_booking_price * p.partner_bps / 10000;
+    exp_agos := NEW.final_booking_price - exp_supplier - exp_site;
+    IF NEW.supplier_id = NEW.selling_party_id THEN
+      exp_supplier := exp_supplier + exp_site;
+      exp_site := 0;
+    END IF;
+    IF NEW.site_commission_amount <> exp_site OR NEW.agos_fee_amount <> exp_agos OR NEW.supplier_entitlement <> exp_supplier THEN
+      RAISE EXCEPTION 'shuttle split of booking % does not match policy % (expected %/%/%)', NEW.id, p.id, exp_site, exp_agos, exp_supplier;
+    END IF;
   END IF;
-  IF OLD.settlement_week_id IS NOT NULL AND (
-       NEW.final_booking_price IS DISTINCT FROM OLD.final_booking_price
-    OR NEW.site_commission_amount IS DISTINCT FROM OLD.site_commission_amount
-    OR NEW.agos_fee_amount IS DISTINCT FROM OLD.agos_fee_amount
-    OR NEW.supplier_entitlement IS DISTINCT FROM OLD.supplier_entitlement
-    OR NEW.supplier_id IS DISTINCT FROM OLD.supplier_id) THEN
-    RAISE EXCEPTION 'settled amounts of booking % are frozen (use an adjustment)', OLD.id;
+  IF TG_OP = 'UPDATE' THEN
+    IF OLD.collection_method IS NOT NULL AND (NEW.collection_method IS DISTINCT FROM OLD.collection_method
+         OR NEW.collected_amount IS DISTINCT FROM OLD.collected_amount OR NEW.collector IS DISTINCT FROM OLD.collector
+         OR NEW.collected_at IS DISTINCT FROM OLD.collected_at) THEN
+      RAISE EXCEPTION 'collection already recorded for booking % (no second collection)', OLD.id;
+    END IF;
+    IF NEW.refunded_amount < OLD.refunded_amount THEN
+      RAISE EXCEPTION 'refunds of booking % cannot be reduced', OLD.id;
+    END IF;
+    IF OLD.settlement_week_id IS NOT NULL AND NEW.settlement_week_id IS DISTINCT FROM OLD.settlement_week_id THEN
+      RAISE EXCEPTION 'booking % already settled in % (use an adjustment)', OLD.id, OLD.settlement_week_id;
+    END IF;
+    IF OLD.settlement_week_id IS NOT NULL AND (
+         NEW.final_booking_price IS DISTINCT FROM OLD.final_booking_price
+      OR NEW.currency IS DISTINCT FROM OLD.currency
+      OR NEW.site_commission_amount IS DISTINCT FROM OLD.site_commission_amount
+      OR NEW.agos_fee_amount IS DISTINCT FROM OLD.agos_fee_amount
+      OR NEW.supplier_entitlement IS DISTINCT FROM OLD.supplier_entitlement
+      OR NEW.supplier_id IS DISTINCT FROM OLD.supplier_id
+      OR NEW.selling_site_id IS DISTINCT FROM OLD.selling_site_id
+      OR NEW.selling_party_id IS DISTINCT FROM OLD.selling_party_id
+      OR NEW.service_type IS DISTINCT FROM OLD.service_type
+      OR NEW.completed_at IS DISTINCT FROM OLD.completed_at
+      OR NEW.policy_id IS DISTINCT FROM OLD.policy_id) THEN
+      RAISE EXCEPTION 'settled booking % is frozen (use an adjustment)', OLD.id;
+    END IF;
   END IF;
   RETURN NEW;
 END $$;
-CREATE TRIGGER booking_settlement_guard BEFORE UPDATE ON booking FOR EACH ROW EXECUTE FUNCTION booking_settlement_guard();
+CREATE TRIGGER booking_settlement_guard BEFORE INSERT OR UPDATE ON booking FOR EACH ROW EXECUTE FUNCTION booking_settlement_guard();
 CREATE FUNCTION no_delete() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
   RAISE EXCEPTION '% rows are never deleted', TG_TABLE_NAME;
 END $$;
 CREATE TRIGGER booking_no_delete BEFORE DELETE ON booking FOR EACH ROW EXECUTE FUNCTION no_delete();
+CREATE TRIGGER booking_no_truncate BEFORE TRUNCATE ON booking FOR EACH STATEMENT EXECUTE FUNCTION no_delete();
 
 CREATE TABLE idempotency_key (
   scope           text PRIMARY KEY,           -- intake:<site>:<key>
@@ -296,16 +347,30 @@ CREATE TABLE bank_receipt (
   currency        currency NOT NULL,
   bank_reference  text NOT NULL,
   paid_at         timestamptz NOT NULL,
+  -- Kural 10: abonelik ödemesi komisyon borcuyla eşleştirilmez.
+  purpose         text NOT NULL DEFAULT 'settlement' CHECK (purpose IN ('settlement', 'subscription')),
   recorded_at     timestamptz NOT NULL DEFAULT now(),
   UNIQUE (payer_id, bank_reference)
 );
 CREATE TRIGGER bank_receipt_append_only BEFORE UPDATE OR DELETE ON bank_receipt FOR EACH ROW EXECUTE FUNCTION append_only();
+CREATE TRIGGER bank_receipt_no_truncate BEFORE TRUNCATE ON bank_receipt FOR EACH STATEMENT EXECUTE FUNCTION append_only();
+
+-- İadeler: referans rezervasyon başına tekil (tekrar gönderim ikinci iade yazmaz).
+CREATE TABLE booking_refund (
+  booking_id      uuid NOT NULL REFERENCES booking(id),
+  reference       text NOT NULL,
+  amount          bigint NOT NULL CHECK (amount > 0),
+  at              timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (booking_id, reference)
+);
+CREATE TRIGGER booking_refund_append_only BEFORE UPDATE OR DELETE ON booking_refund FOR EACH ROW EXECUTE FUNCTION append_only();
+CREATE TRIGGER booking_refund_no_truncate BEFORE TRUNCATE ON booking_refund FOR EACH STATEMENT EXECUTE FUNCTION append_only();
 
 -- Kural 8: düzeltme hareketleri — eski hafta silinmez/değişmez, düzeltme yeni haftaya yazılır.
 CREATE TABLE settlement_adjustment (
   id              uuid PRIMARY KEY,
   booking_id      uuid NOT NULL REFERENCES booking(id),
-  week_id         text NOT NULL,
+  week_id         text NOT NULL CHECK (week_id ~ '^[0-9]{4}-W[0-9]{2}$'),
   original_week_id text NOT NULL REFERENCES settlement_week(week_id),
   debtor_id       text NOT NULL,
   creditor_id     text NOT NULL,
@@ -314,12 +379,15 @@ CREATE TABLE settlement_adjustment (
   reason          text NOT NULL,
   adjustment_reference text NOT NULL,
   created_at      timestamptz NOT NULL DEFAULT now(),
-  CHECK (week_id > original_week_id)
+  CHECK (week_id > original_week_id),
+  UNIQUE (booking_id, adjustment_reference, creditor_id)
 );
 CREATE TRIGGER settlement_adjustment_append_only BEFORE UPDATE OR DELETE ON settlement_adjustment
   FOR EACH ROW EXECUTE FUNCTION append_only();
 CREATE TRIGGER settlement_week_append_only BEFORE UPDATE OR DELETE ON settlement_week
   FOR EACH ROW EXECUTE FUNCTION append_only();
+CREATE TRIGGER settlement_adjustment_no_truncate BEFORE TRUNCATE ON settlement_adjustment FOR EACH STATEMENT EXECUTE FUNCTION append_only();
+CREATE TRIGGER settlement_week_no_truncate BEFORE TRUNCATE ON settlement_week FOR EACH STATEMENT EXECUTE FUNCTION append_only();
 
 -- RLS: site sahibi yalnız kendi satışlarını, tedarikçi yalnız kendi işlerini görür. Uygulama her işlemde
 --   SET LOCAL app.party_id = '<oturumdaki taraf>';

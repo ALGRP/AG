@@ -25,6 +25,8 @@ const STATUS_TR: Record<string, string> = {
   unpaid: "Ödenmedi",
   overpaid: "Fazla ödeme",
   nothing_due: "Borç yok",
+  credit_due: "Geri ödenecek",
+  credit: "Alacaklı (iade)",
   settled: "Kapandı",
   open: "Açık",
   late: "Gecikmiş",
@@ -38,17 +40,26 @@ const REASON_TR: Record<string, string> = {
   not_collected: "Tahsil edilemedi",
   disputed: "İtiraz",
   completed_without_collection_record: "Tamamlandı, tahsilat kaydı yok",
+  partially_refunded: "Kısmi iade — karar bekliyor",
+  suspected_duplicate: "Mükerrer şüphesi — inceleme bekliyor",
 };
 const DEBT_TR: Record<string, string> = {
   late_payment: "Geciken ödeme",
   missing_payment: "Eksik ödeme (son tarih bekleniyor)",
   partial_payment: "Kısmi ödeme",
   overpayment: "Fazla ödeme",
+  paid_late: "Geç ödendi",
+  credit_due: "Tedarikçiye geri ödenecek",
   unmatched_receipt: "Eşleşmeyen dekont",
   booking_dispute: "Rezervasyon itirazı",
 };
 const METHOD_TR: Record<string, string> = { cash: "Nakit", card_pos: "Kart (POS)", bank_transfer: "Havale/EFT" };
-const KIND_TR: Record<string, string> = { site_commission: "Site komisyonu", agos_fee: "AGOS sistem payı", supplier_entitlement: "Tedarikçi hak edişi" };
+const KIND_TR: Record<string, string> = {
+  site_commission: "Site komisyonu (shuttle %20)",
+  site_sale_share: "Site satış farkı (private/VIP)",
+  agos_fee: "AGOS sistem payı",
+  supplier_entitlement: "Tedarikçi hak edişi",
+};
 
 function pill(status: string) {
   return `<span class="pill ${esc(status)}">${esc(STATUS_TR[status] ?? status)}</span>`;
@@ -82,7 +93,7 @@ export function renderWeeklyReportHtml(r: WeeklyReport, opts: { title: string; n
         l.self_supplied ? "Kendi aracı" : "",
       ]);
       return `<section class="card"><h3>Tedarikçi: ${esc(s.supplier_id)} ${pill(s.status)}</h3>
-<div class="kpis"><div><b>${s.jobs}</b><span>iş</span></div><div><b>${eur(s.collected)}</b><span>müşteriden tahsil</span></div><div><b>${eur(s.entitlement)}</b><span>hak ediş (kendisinde kalır)</span></div><div><b>${eur(s.total_owed)}</b><span>ödeyeceği toplam</span></div><div><b>${eur(s.outstanding)}</b><span>kalan borç</span></div></div>
+<div class="kpis"><div><b>${s.jobs}</b><span>iş</span></div><div><b>${eur(s.collected)}</b><span>müşteriden tahsil</span></div><div><b>${eur(s.entitlement)}</b><span>hak ediş (kendisinde kalır)</span></div><div><b>${eur(s.total_owed)}</b><span>ödeyeceği toplam</span></div><div><b>${eur(s.outstanding)}</b><span>kalan borç</span></div>${s.overpaid ? `<div><b>${eur(s.overpaid)}</b><span>fazla ödeme</span></div>` : ""}${s.credits ? `<div><b>${eur(-s.credits)}</b><span>geri alacağı (iade)</span></div>` : ""}</div>
 ${table(
   ["Rezervasyon", "Hizmet", "Satış sitesi", "Satış", "Tahsilat", "Tahsil edilen", "Hak ediş", "Siteye", "AGOS'a", "Ödeme dekontu", ""],
   rows,
@@ -104,7 +115,7 @@ ${table(
     eur(o.paid),
     eur(o.outstanding),
     o.receipt_refs.length ? esc(o.receipt_refs.join(", ")) : "—",
-    pill(o.status) + (o.late ? ' <span class="pill late">Gecikmiş</span>' : ""),
+    pill(o.status) + (o.late ? ' <span class="pill late">Gecikmiş</span>' : "") + (o.paid_late ? ' <span class="pill overpaid">Geç ödendi</span>' : ""),
   ]);
   const unmatched = r.unmatched_receipts.map((x) => [esc(x.bank_reference), esc(x.payer_id), esc(x.payee_id), eur(x.amount), esc(ist(x.paid_at))]);
   const debts = r.debts_and_disputes.map((d) => [
@@ -119,6 +130,7 @@ ${table(
   const adjSource = opts.nextWeek ?? r;
   const adj = adjSource.adjustments.map((a) => [esc(a.adjustment_reference), esc(a.original_week_id), esc(a.week_id), esc(a.debtor_id), esc(a.creditor_id), eur(a.amount), esc(a.reason)]);
   const subs = (opts.subscriptions ?? []).map((s) => [esc(s.site_id), esc(s.period), eur(s.amount), pill(s.status)]);
+  const subReceipts = r.subscription_receipts.map((x) => [esc(x.bank_reference), esc(x.payer_id), eur(x.amount), esc(ist(x.paid_at))]);
 
   const totalCollected = sum(r.included.map((l) => l.collected_amount));
   const totalSite = sum(r.site_receivables.map((s) => s.total));
@@ -179,6 +191,8 @@ ${table(["Düzeltme ref.", "Orijinal hafta", "Yazıldığı hafta", "Borçlu", "
 <h2>8. SaaS abonelikleri (shuttle komisyonlarından AYRI)</h2>
 <p class="note">Aylık 200 € abonelik ayrı takip edilir; komisyon borç/alacaklarıyla mahsup edilmez.</p>
 ${table(["Site", "Dönem", "Tutar", "Durum"], subs)}
+<h3 style="margin-top:14px">Bu haftanın abonelik dekontları (komisyonlarla eşleştirilmez)</h3>
+${table(["Banka referansı", "Ödeyen", "Tutar", "Tarih"], subReceipts)}
 </div></body></html>
 `;
 }

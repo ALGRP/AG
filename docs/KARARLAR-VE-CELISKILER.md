@@ -35,7 +35,7 @@ Bu belge, Owner'ın 03.11.2026 tarihli talebini Linear'daki mevcut kararlarla ka
 | K19 | AG'nin kendi sitesinden satılan özel/VIP | Önceki: satıcı marjı | **K15:** alanyagroup.com da site gibi davranır | (satış − hak ediş) `alanya-group` site payı olarak yazılır | **KARAR** (K15 ile kapandı) |
 | K20 | İade ve düzeltmeler | Önceki: payı yazılmış işte her iade tüm payları geri alıyordu | **K15 kural 8:** eski hafta silinmez, düzeltme hareketi | Kapanmamış iş → istisna listesi. Kapanmış shuttle → iade tutarı **aynı 20/10/70 ile** bölünüp yeni haftaya ters hareket (kısmi iade dahil). Kapanmış private/VIP → `finance.manual_adjustment_required` (hak edişi site belirlediği için otomatik bölünmez) | **EVET:** private/VIP kısmi iade kuralı ve fazla ödemenin iadesi mi mahsubu mu |
 | K21 | Ödeme son tarihi | — | Salı 18:00 "önerilen" | Rapor son tarihi hesaplar; geçince `late` / "Geciken ödeme" | **EVET:** son tarih kesinleşsin mi; gecikmede yaptırım (yeni iş kısıtı vb.)? |
-| K22 | Tedarikçinin tahsil edemediği / eksik tahsil ettiği iş | — | Kural 5: istisna listesi | Otomatik hesaplanmaz; çözülene kadar her haftanın istisna listesinde kalır | **EVET:** eksik tahsilatta komisyon tam satış üzerinden mi, tahsil edilen üzerinden mi? |
+| K22 | Tedarikçinin tahsil edemediği / eksik tahsil ettiği iş | — | Kural 5: istisna listesi | Otomatik hesaplanmaz; çözülene kadar her haftanın istisna listesinde kalır. Kapanış öncesi kısmi iade de aynı şekilde açık istisnadır | **EVET:** eksik tahsilatta komisyon tam satış üzerinden mi, tahsil edilen üzerinden mi? |
 | K23 | Kapatılmış haftanın tedarikçi itirazı | — | Kural 5 | İtiraz eski haftadaki işe sonradan gelirse itiraz haftasında listelenir; sonuç düzeltme hareketiyle | Süreç ve süre sınırı |
 
 ## PR denetimi — K15 kesin karar (supplier collection)
@@ -85,6 +85,10 @@ Owner talimatı: "Mevcut PR ve karar kayıtları bu modele göre incelensin, çe
 - Kapanışta kullanıcı kimliği (kimin kapattığı) yönetim girişi (SEL-332) gelene kadar kaydedilemiyor.
 - Turnstile ancak `TURNSTILE_SECRET` ve `turnstileSiteKey` tanımlanınca çalışır. Yerelde insan doğrulaması kapalıdır.
 - Rate limit uygulama belleğindedir; çok süreçli üretimde edge (Cloudflare) kuralı gerekir.
+
+## Bağımsız QA
+
+K15 için bağımsız QA yapıldı (kodu yazmayan ayrı bir yapay zekâ ajanı). 10 bulgunun hepsi düzeltildi ve teste bağlandı: [K15-QA-VE-KARAR-RAPORU.md](./K15-QA-VE-KARAR-RAPORU.md). Bu inceleme insan bağımsız kabulünün yerine geçmez.
 
 ## Durum etiketi
 

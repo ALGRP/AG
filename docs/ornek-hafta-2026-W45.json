@@ -21,11 +21,14 @@
         "collector": "supplier",
         "collection_status": "collected",
         "collected_amount": 3000,
+        "refunded_amount": 0,
+        "collected_at": "2026-11-03T12:00:00.000Z",
         "completed_at": "2026-11-03T12:00:00.000Z",
         "cancelled": false,
         "cancelled_at": null,
         "disputed": false,
         "disputed_at": null,
+        "suspected_duplicate": false,
         "dispute_reason": null,
         "self_supplied": false,
         "site_commission_amount": 600,
@@ -54,11 +57,14 @@
         "collector": "supplier",
         "collection_status": "collected",
         "collected_amount": 5000,
+        "refunded_amount": 0,
+        "collected_at": "2026-11-03T12:00:00.000Z",
         "completed_at": "2026-11-03T12:00:00.000Z",
         "cancelled": false,
         "cancelled_at": null,
         "disputed": false,
         "disputed_at": null,
+        "suspected_duplicate": false,
         "dispute_reason": null,
         "self_supplied": false,
         "site_commission_amount": 1000,
@@ -87,11 +93,14 @@
         "collector": "supplier",
         "collection_status": "collected",
         "collected_amount": 7000,
+        "refunded_amount": 0,
+        "collected_at": "2026-11-03T12:00:00.000Z",
         "completed_at": "2026-11-03T12:00:00.000Z",
         "cancelled": false,
         "cancelled_at": null,
         "disputed": false,
         "disputed_at": null,
+        "suspected_duplicate": false,
         "dispute_reason": null,
         "self_supplied": false,
         "site_commission_amount": 1400,
@@ -120,11 +129,14 @@
         "collector": "supplier",
         "collection_status": "collected",
         "collected_amount": 6000,
+        "refunded_amount": 0,
+        "collected_at": "2026-11-03T12:00:00.000Z",
         "completed_at": "2026-11-03T12:00:00.000Z",
         "cancelled": false,
         "cancelled_at": null,
         "disputed": false,
         "disputed_at": null,
+        "suspected_duplicate": false,
         "dispute_reason": null,
         "self_supplied": false,
         "site_commission_amount": 1200,
@@ -153,11 +165,14 @@
         "collector": "supplier",
         "collection_status": "collected",
         "collected_amount": 5000,
+        "refunded_amount": 0,
+        "collected_at": "2026-11-03T12:00:00.000Z",
         "completed_at": "2026-11-03T12:00:00.000Z",
         "cancelled": false,
         "cancelled_at": null,
         "disputed": false,
         "disputed_at": null,
+        "suspected_duplicate": false,
         "dispute_reason": null,
         "self_supplied": true,
         "site_commission_amount": 0,
@@ -186,11 +201,14 @@
         "collector": "supplier",
         "collection_status": "collected",
         "collected_amount": 9000,
+        "refunded_amount": 0,
+        "collected_at": "2026-11-03T12:00:00.000Z",
         "completed_at": "2026-11-03T12:00:00.000Z",
         "cancelled": false,
         "cancelled_at": null,
         "disputed": false,
         "disputed_at": null,
+        "suspected_duplicate": false,
         "dispute_reason": null,
         "self_supplied": false,
         "site_commission_amount": 1800,
@@ -219,11 +237,14 @@
         "collector": "supplier",
         "collection_status": "collected",
         "collected_amount": 8000,
+        "refunded_amount": 0,
+        "collected_at": "2026-11-03T12:00:00.000Z",
         "completed_at": "2026-11-03T12:00:00.000Z",
         "cancelled": false,
         "cancelled_at": null,
         "disputed": false,
         "disputed_at": null,
+        "suspected_duplicate": false,
         "dispute_reason": null,
         "self_supplied": false,
         "site_commission_amount": 3250,
@@ -288,6 +309,7 @@
         "outstanding": 0,
         "status": "paid",
         "late": false,
+        "paid_late": false,
         "receipt_ids": [
           "id-0141"
         ],
@@ -310,6 +332,7 @@
         "outstanding": -100,
         "status": "overpaid",
         "late": false,
+        "paid_late": false,
         "receipt_ids": [
           "id-0143"
         ],
@@ -333,6 +356,7 @@
         "outstanding": 0,
         "status": "paid",
         "late": false,
+        "paid_late": false,
         "receipt_ids": [
           "id-0142"
         ],
@@ -350,15 +374,34 @@
         "creditor_id": "p-ege",
         "kind": "site_commission",
         "currency": "EUR",
-        "amount": 5050,
+        "amount": 1800,
         "paid": 0,
-        "outstanding": 5050,
+        "outstanding": 1800,
         "status": "unpaid",
         "late": true,
+        "paid_late": false,
         "receipt_ids": [],
         "receipt_refs": [],
         "booking_ids": [
-          "id-0106",
+          "id-0106"
+        ],
+        "adjustment_ids": []
+      },
+      {
+        "week_id": "2026-W45",
+        "debtor_id": "sup-akdeniz",
+        "creditor_id": "p-ege",
+        "kind": "site_sale_share",
+        "currency": "EUR",
+        "amount": 3250,
+        "paid": 0,
+        "outstanding": 3250,
+        "status": "unpaid",
+        "late": true,
+        "paid_late": false,
+        "receipt_ids": [],
+        "receipt_refs": [],
+        "booking_ids": [
           "id-0120"
         ],
         "adjustment_ids": []
@@ -374,6 +417,7 @@
         "outstanding": 500,
         "status": "partially_paid",
         "late": true,
+        "paid_late": false,
         "receipt_ids": [
           "id-0139"
         ],
@@ -398,6 +442,7 @@
         "outstanding": 0,
         "status": "paid",
         "late": false,
+        "paid_late": false,
         "receipt_ids": [
           "id-0140"
         ],
@@ -420,6 +465,7 @@
         "outstanding": 0,
         "status": "paid",
         "late": false,
+        "paid_late": false,
         "receipt_ids": [
           "id-0138"
         ],
@@ -442,7 +488,21 @@
         "amount": 2500,
         "currency": "EUR",
         "bank_reference": "TR-EFT-1007",
-        "paid_at": "2026-11-10T08:30:00.000Z"
+        "paid_at": "2026-11-10T08:30:00.000Z",
+        "purpose": "settlement"
+      }
+    ],
+    "subscription_receipts": [
+      {
+        "id": "id-0145",
+        "week_id": "2026-W45",
+        "payer_id": "p-ege",
+        "payee_id": "agos",
+        "amount": 20000,
+        "currency": "EUR",
+        "bank_reference": "TR-SAAS-1101",
+        "paid_at": "2026-11-10T08:45:00.000Z",
+        "purpose": "subscription"
       }
     ],
     "supplier_statements": [
@@ -459,6 +519,8 @@
         "total_owed": 500,
         "total_paid": 500,
         "outstanding": 0,
+        "overpaid": 0,
+        "credits": 0,
         "status": "settled"
       },
       {
@@ -475,7 +537,12 @@
           },
           {
             "site_party_id": "p-ege",
-            "amount": 5050,
+            "amount": 1800,
+            "paid": 0
+          },
+          {
+            "site_party_id": "p-ege",
+            "amount": 3250,
             "paid": 0
           }
         ],
@@ -483,8 +550,10 @@
         "paid_agos": 1600,
         "adjustments": 0,
         "total_owed": 7750,
-        "total_paid": 2800,
-        "outstanding": 4950,
+        "total_paid": 2700,
+        "outstanding": 5050,
+        "overpaid": 100,
+        "credits": 0,
         "status": "late"
       },
       {
@@ -511,6 +580,8 @@
         "total_owed": 4500,
         "total_paid": 4000,
         "outstanding": 500,
+        "overpaid": 0,
+        "credits": 0,
         "status": "late"
       }
     ],
@@ -540,7 +611,12 @@
         "by_supplier": [
           {
             "supplier_id": "sup-akdeniz",
-            "amount": 5050,
+            "amount": 1800,
+            "paid": 0
+          },
+          {
+            "supplier_id": "sup-akdeniz",
+            "amount": 3250,
             "paid": 0
           },
           {
@@ -579,7 +655,7 @@
         "EUR": 3500
       },
       "received_by_currency": {
-        "EUR": 3100
+        "EUR": 3000
       }
     },
     "debts_and_disputes": [
@@ -599,7 +675,17 @@
         "late": true,
         "debtor_id": "sup-akdeniz",
         "creditor_id": "p-ege",
-        "amount": 5050,
+        "amount": 1800,
+        "currency": "EUR",
+        "detail": "son tarih (Salı 18:00) geçti"
+      },
+      {
+        "kind": "late_payment",
+        "obligation_kind": "site_sale_share",
+        "late": true,
+        "debtor_id": "sup-akdeniz",
+        "creditor_id": "p-ege",
+        "amount": 3250,
         "currency": "EUR",
         "detail": "son tarih (Salı 18:00) geçti"
       },
@@ -639,7 +725,7 @@
   },
   "w46_adjustments": [
     {
-      "id": "id-0145",
+      "id": "id-0146",
       "booking_id": "id-0014",
       "week_id": "2026-W46",
       "original_week_id": "2026-W45",
@@ -648,10 +734,10 @@
       "amount": -1000,
       "currency": "EUR",
       "reason": "refund 5000",
-      "adjustment_reference": "ADJ-AG-CQ3ES5-2026-W46"
+      "adjustment_reference": "ADJ-AG-CQ3ES5-2026-W46-1"
     },
     {
-      "id": "id-0146",
+      "id": "id-0147",
       "booking_id": "id-0014",
       "week_id": "2026-W46",
       "original_week_id": "2026-W45",
@@ -660,7 +746,7 @@
       "amount": -500,
       "currency": "EUR",
       "reason": "refund 5000",
-      "adjustment_reference": "ADJ-AG-CQ3ES5-2026-W46"
+      "adjustment_reference": "ADJ-AG-CQ3ES5-2026-W46-1"
     }
   ]
 }

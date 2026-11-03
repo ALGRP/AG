@@ -5,6 +5,7 @@ import {
   bookingRef,
   duplicateFingerprintInput,
   money,
+  nextWeekId,
   placeInPool,
   priceShuttle,
   privateSplit,
@@ -56,7 +57,13 @@ export interface ApiError {
 }
 
 const sha256 = (s: string) => createHash("sha256").update(s).digest("hex");
-const ID = /^[A-Za-z0-9_-]{1,64}$/;
+/** Taraf kimlikleri küçük harf (büyük/küçük harf farkıyla kural atlatılamaz). */
+const ID = /^[a-z0-9_-]{1,64}$/;
+
+/** İtiraz notunda e-posta ve telefon numarası saklanmaz (kişisel veri). */
+function redactPii(text: string): string {
+  return text.replace(/[^\s@]+@[^\s@]+\.[^\s@]+/g, "[e-posta]").replace(/\+?\d[\d ()-]{6,}\d/g, "[telefon]");
+}
 
 function safeEqualHex(a: string, b: string): boolean {
   const ab = Buffer.from(a, "hex");
@@ -174,6 +181,7 @@ export class BookingService {
       ...(req.paymentMethod !== undefined ? { preferredCollectionMethod: req.paymentMethod } : {}),
       collectionStatus: "pending",
       refundedMinor: 0,
+      refunds: [],
       settlementStatus: "open",
       createdAt: now,
       version: 1,
@@ -282,11 +290,14 @@ export class BookingService {
       collector,
       collection_status: b.collectionStatus,
       collected_amount: (b.collection?.amountMinor ?? 0) - b.refundedMinor,
+      refunded_amount: b.refundedMinor,
+      collected_at: b.collection?.at ?? null,
       completed_at: b.completedAt ?? null,
       cancelled: b.status === "cancelled",
       cancelled_at: b.cancelledAt ?? null,
-      disputed: b.disputedAt !== undefined,
-      disputed_at: b.disputedAt ?? null,
+      disputed: b.disputedAt !== undefined && b.disputeResolvedAt === undefined,
+      disputed_at: b.disputeResolvedAt === undefined ? (b.disputedAt ?? null) : null,
+      suspected_duplicate: b.isDuplicate,
       dispute_reason: b.disputeReason ?? null,
       self_supplied: split.self_supplied,
       site_commission_amount: split.site_commission_amount,
@@ -401,18 +412,22 @@ export class BookingService {
       if (run.status !== "assigned") return fail(409, "run_not_assigned");
       const now = this.#now();
       const outcome: Array<{ ref: string; result: string }> = [];
+      let pending = 0;
       for (const item of run.bookings) {
         const b = await tx.getBookingById(item.bookingId);
-        if (!b) continue;
+        if (!b || b.status === "cancelled" || b.status === "delivered") continue;
         if (b.status !== "confirmed" || !b.price) {
-          outcome.push({ ref: b.ref, result: b.price ? `skipped_${b.status}` : "skipped_price_not_approved" });
+          pending++;
+          outcome.push({ ref: b.ref, result: b.price ? `pending_${b.status}` : "pending_price_not_approved" });
           continue;
         }
         if (!(await tx.updateBooking({ ...b, status: "delivered", completedAt: now }, b.version))) throw new Error("version_conflict");
         outcome.push({ ref: b.ref, result: "completed" });
       }
-      await tx.saveRun({ ...run, status: "completed" });
-      return ok({ runId, status: "completed", bookings: outcome });
+      // Bekleyen rezervasyon varsa sefer "assigned" kalır; onlar hazır olunca aynı uçla tamamlanır.
+      const status = pending > 0 ? "assigned" : "completed";
+      await tx.saveRun({ ...run, status });
+      return ok({ runId, status, bookings: outcome });
     });
   }
 
@@ -483,36 +498,75 @@ export class BookingService {
   }
 
   /**
-   * İade. Henüz hesaplanmamış iş → istisna listesine düşer. Eski haftada hesaplanmış shuttle işi → eski hafta
-   * değişmez; içinde bulunulan haftaya ters düzeltme hareketi yazılır (kural 8). Private/VIP → elle düzeltme.
+   * İade. `refundReference` zorunlu ve rezervasyon başına tekildir (tekrar gönderim ikinci iade yazmaz).
+   * Henüz hesaplanmamış iş → istisna (tam iade: "refunded", kısmi: "partially_refunded", çözülene kadar açık).
+   * Eski haftada hesaplanmış shuttle → eski hafta değişmez; içinde bulunulan haftaya kümülatif ters düzeltme (kural 8).
+   * Hesaplanmış private/VIP → elle düzeltme.
    */
   async refund(ref: string, input: Record<string, unknown>): Promise<ServiceResult<unknown>> {
-    const { amountMinor } = input;
+    const { amountMinor, refundReference } = input;
     if (!Number.isSafeInteger(amountMinor) || (amountMinor as number) <= 0) return fail(422, "amountMinor_invalid");
+    if (typeof refundReference !== "string" || !/^[A-Za-z0-9./_-]{3,64}$/.test(refundReference)) return fail(422, "refundReference_invalid");
     return this.#mutate(ref, async (b, tx) => {
-      const collected = (b.collection?.amountMinor ?? 0) - b.refundedMinor;
-      if ((amountMinor as number) > collected) return fail(422, "refund_exceeds_collected");
-      const refunded = b.refundedMinor + (amountMinor as number);
-      if (!b.settlementWeekId) return { ...b, refundedMinor: refunded, collectionStatus: "refunded" };
+      if (b.refunds.some((r) => r.reference === refundReference)) return fail(409, "refund_reference_already_used");
+      const original = b.collection?.amountMinor ?? 0;
+      const amount = amountMinor as number;
+      if (b.refundedMinor + amount > original) return fail(422, "refund_exceeds_collected");
+      const now = this.#now();
+      const refunded = b.refundedMinor + amount;
+      const next: StoredBooking = {
+        ...b,
+        refundedMinor: refunded,
+        refunds: [...b.refunds, { reference: refundReference, amountMinor: amount, at: now }],
+        collectionStatus: refunded === original ? "refunded" : b.collectionStatus,
+      };
+      if (!b.settlementWeekId) return next;
       const line = this.toLine(b)!;
       if (b.product !== "shuttle") {
         await tx.appendOutbox([this.#event(b, "finance.manual_adjustment_required", { reason: "private_refund_after_settlement" })]);
-        return { ...b, refundedMinor: refunded, settlementStatus: "adjusted", adjustmentReference: "MANUAL" };
+        return { ...next, settlementStatus: "adjusted", adjustmentReference: "MANUAL" };
       }
-      const weekId = settlementWeekId(this.#now());
-      const adj = refundAdjustments({ ...line, collected_amount: collected }, amountMinor as number, weekId, this.#d.random.id);
+      const adj = refundAdjustments(
+        line,
+        {
+          originalCollectedMinor: original,
+          priorRefundedMinor: b.refundedMinor,
+          refundMinor: amount,
+          currentWeekId: settlementWeekId(now),
+          sequence: b.refunds.length + 1,
+          policy: this.#d.shuttlePolicy,
+        },
+        this.#d.random.id,
+      );
       await tx.appendAdjustments(adj);
-      return { ...b, refundedMinor: refunded, settlementStatus: "adjusted", adjustmentReference: adj[0]!.adjustment_reference };
+      return { ...next, settlementStatus: "adjusted", adjustmentReference: adj[0]?.adjustment_reference ?? b.adjustmentReference ?? "NONE" };
+    });
+  }
+
+  /** Mükerrer şüphesi incelendi, gerçek bir iş: istisna kalkar, sonraki kapanışa girer. */
+  async clearDuplicate(ref: string): Promise<ServiceResult<unknown>> {
+    return this.#mutate(ref, async (b) => (b.isDuplicate ? { ...b, isDuplicate: false } : fail(409, "not_flagged_as_duplicate")));
+  }
+
+  /** İtiraz sonucu. upheld: itiraz haklı (çoğunlukla iade ile sonuçlanır); rejected: iş normal hesaplanır. */
+  async resolveDispute(ref: string, input: Record<string, unknown>): Promise<ServiceResult<unknown>> {
+    const { outcome } = input;
+    if (outcome !== "upheld" && outcome !== "rejected") return fail(422, "outcome_invalid");
+    return this.#mutate(ref, async (b, tx) => {
+      if (!b.disputedAt || b.disputeResolvedAt) return fail(409, "no_open_dispute");
+      await tx.appendOutbox([this.#event(b, "finance.dispute_resolved", { outcome })]);
+      return { ...b, disputeResolvedAt: this.#now(), disputeOutcome: outcome };
     });
   }
 
   async dispute(ref: string, input: Record<string, unknown>): Promise<ServiceResult<unknown>> {
-    const reason = typeof input.reason === "string" ? input.reason.trim().slice(0, 300) : "";
+    const reason = typeof input.reason === "string" ? redactPii(input.reason.trim()).slice(0, 300) : "";
     if (!reason) return fail(422, "reason_required");
     return this.#mutate(ref, async (b, tx) => {
-      if (b.disputedAt) return fail(409, "already_disputed");
+      if (b.disputedAt && !b.disputeResolvedAt) return fail(409, "already_disputed");
       await tx.appendOutbox([this.#event(b, "finance.dispute_opened")]);
-      return { ...b, disputedAt: this.#now(), disputeReason: reason };
+      const { disputeResolvedAt: _r, disputeOutcome: _o, ...rest } = b;
+      return { ...rest, disputedAt: this.#now(), disputeReason: reason };
     });
   }
 
@@ -548,6 +602,8 @@ export class BookingService {
   /** Banka dekontu (tedarikçi → site / AGOS ödemesi). Yalnız eklenir; aynı dekont ikinci kez girilemez. */
   async addReceipt(input: Record<string, unknown>): Promise<ServiceResult<unknown>> {
     const { weekId, payerId, payeeId, amountMinor, currency, bankReference, paidAt } = input;
+    const purpose = input.purpose ?? "settlement";
+    if (purpose !== "settlement" && purpose !== "subscription") return fail(422, "purpose_invalid");
     if (typeof weekId !== "string") return fail(422, "weekId_invalid");
     try {
       weekBounds(weekId);
@@ -568,6 +624,7 @@ export class BookingService {
       currency: this.#d.shuttleTariff.currency,
       bank_reference: bankReference,
       paid_at: new Date(paidAt).toISOString(),
+      purpose,
     };
     return this.#d.store.transaction(async (tx) => {
       if ((await tx.listReceipts()).some((x) => x.bank_reference === r.bank_reference && x.payer_id === r.payer_id)) {
@@ -581,7 +638,8 @@ export class BookingService {
   async #lines(tx: Store): Promise<SettlementLine[]> {
     const out: SettlementLine[] = [];
     for (const b of await tx.listBookings()) {
-      if (b.isTest || b.isDuplicate) continue; // test ve mükerrer rezervasyon komisyon doğurmaz
+      // Test rezervasyonu hiç hesaba girmez. Mükerrer şüphesi olan iş istisna listesinde görünür (kaybolmaz).
+      if (b.isTest) continue;
       const l = this.toLine(b);
       if (l) out.push(l);
     }
@@ -622,6 +680,13 @@ export class BookingService {
     if (this.#now() < bounds.end_utc) return fail(409, "week_not_finished");
     return this.#d.store.transaction(async (tx) => {
       if (await tx.getClosedWeek(weekId)) return fail(409, "week_already_closed");
+      // Haftalar sırayla kapanır: önceki hafta kapanmadan sonraki kapanmaz (ilk kapanış hariç).
+      const closedIds = await tx.listClosedWeekIds();
+      if (closedIds.length > 0) {
+        const last = closedIds[closedIds.length - 1]!;
+        if (weekId < last) return fail(409, "week_before_last_closed");
+        if (nextWeekId(last) !== weekId) return fail(409, `close_weeks_in_order:${nextWeekId(last)}`);
+      }
       const report = weeklyReport({
         weekId,
         now: this.#now(),
