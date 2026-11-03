@@ -207,3 +207,25 @@ Kurallar:
 Not: Owner sırası F3, F10, F9, F11, F14, F04b. F10'u öne almamın nedeni: F3'teki `Actor` kapsam değişikliği F10'un 2FA desenini kullanır ve F10 tek dosyada kalır. Owner aksini söylerse Owner sırası geçerlidir.
 
 Paket-02 bitince beklenen: A6.3–A6.5, A6.8, A6.9, A8.3, A8.5, A5.4, A10.2, A2.7 ve F04 testleri yeşil; DB QA-F3 testi yeşil. `todo` kalanlar: A8.4 (H-21), A4.11 (H-20), F02 (H-23), QA-F4 Q-probları (Paket-03), düşük bulgular.
+
+## 8. Paket-01b akran incelemesi (`954328c` → `8741de3`)
+
+Sabitlenen sürüm `8741de30af52ba651971b5bc814c54ab471be723`. `npm run check`: 186 test, 167 geçti, 0 kaldı, 18 todo, 1 skip; Codex raporuyla aynı. A4.12 ve A3.13 assertion değişmeden geçiyor.
+
+| Commit | Kalem | Karar | Kanıt |
+| -- | -- | -- | -- |
+| f2a5bd4 | PR1-N1 ilk kapanış kilitlenmesi | **FAIL (gerileme)** | A4.12 geçiyor; 10 hafta sonra W45 ve W46 kapanıyor; yalnız iptal edilmiş rezervasyon da faaliyet sayılıyor. **Ama** faaliyet varken ilk kapanış olarak faaliyetten önceki boş bir hafta (`2020-W01`) kabul ediliyor. Önceki sürümde bunu 4 hafta sınırı engelliyordu. Sonuç: W45'e ulaşmak için ~350 boş haftanın sırayla kapanması gerekir (PR1-N5). |
+| 8741de3 | PR1-N2 mahsup referansı | **PASS** | 4 eşzamanlı harf varyantından tek 201; eski küçük harfli kayıt yeni büyük harfli isteği engelliyor; farklı hafta ayrı mahsup (201). |
+
+**PR1-N5 kabul testi:** `A4.13` (`todo: PR1-N5 · Codex Paket-01c`). En küçük düzeltme: `earliest` tanımlıysa yalnız `weekId === earliest` kabul edilsin; `weekId < earliest` için 409 `close_first_active_week:<earliest>`.
+
+Gözlemler (karar gerektirmez, not):
+- PR1-N2 sonrası `written_approval_reference` büyük harfe çevrilerek saklanıyor; belgedeki özgün yazım kaybolur. Denetim için özgün metnin ayrı alanda saklanması önerilir (P3).
+- Aynı yazılı onay referansı aynı hafta için farklı taraflar arası ikinci mahsupta da 409 veriyor. Bir onay belgesinin tek mahsuba bağlanması tutucu ve kabul edilebilir; bir belge birden çok mahsubu kapsayacaksa Owner kararı gerekir.
+- 4 haftalık sınır yalnız boş defterde çalışıyor; LOCAL_ONLY. Üretim saklama politikası değildir; ayrıca Owner kararı gerektirmez.
+
+**PostgreSQL'de ileride zorunlu kısıtlar (bugün yalnız MemoryStore'da):**
+- `bank_receipt`: `UNIQUE (payer_id, upper(regexp_replace(bank_reference, '\s', '', 'g')))`.
+- `settlement_adjustment`: `UNIQUE (upper(adjustment_reference))`.
+- Haftalık kapanış: `SERIALIZABLE` işlem veya `pg_advisory_xact_lock` ile tek kapanış; `closed_week` üzerinde `UNIQUE (week_id)`.
+- Bunlar Paket-03 (QA-F4) kapsamında; `AG_TEST_PG=1` probları bunları doğrulayacak.

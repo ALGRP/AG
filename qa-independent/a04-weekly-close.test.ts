@@ -185,4 +185,14 @@ describe("A4 statement disputes timing (T3)", () => {
     assert.equal(w45.status, 201, `earliest active week refused (${w45.body.error}); W46 is refused with close_first_active_week, so no week can be closed`);
     assert.equal((await h.close(W46)).status, 201, "the following week closes in order");
   });
+
+  it("A4.13 [RULE] with recorded activity, the first close must be the earliest active week, not an older empty week", { todo: "PR1-N5 · Codex Paket-01c (f2a5bd4 gerilemesi)" }, async () => {
+    const h = harness();
+    h.setNow("2026-11-04T10:00:00Z");
+    await h.shuttleJob({}, "sup-a", 5000); // W45 activity
+    h.setNow("2026-11-16T06:00:00Z");
+    const r = await h.close("2020-W01");
+    assert.equal(r.status, 409, "2020-W01 accepted as the first close; W45 now needs ~350 empty sequential closes first");
+    assert.equal((await h.close(W45)).status, 201, "the earliest active week is the valid first close");
+  });
 });
