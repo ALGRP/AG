@@ -847,10 +847,14 @@ export class BookingService {
         for (const a of await tx.listAdjustments()) activity.push(a.week_id);
         const earliest = activity.sort()[0];
         if (earliest !== undefined && earliest < weekId) return fail(409, `close_first_active_week:${earliest}`);
-        // Safeguard when the store has no earlier activity: limited historical bootstrap.
-        // Four weeks is a LOCAL-only guard, not an approved production retention policy.
-        const idleWeeks = (Date.parse(this.#now()) - Date.parse(bounds.end_utc)) / (7 * 86400_000);
-        if (idleWeeks > 4) return fail(409, "first_week_too_old");
+        // The bootstrap age limit only applies to a completely empty ledger.
+        // Historical activity must remain closable, even if it was over four weeks ago;
+        // otherwise the earliest active week and all following weeks become deadlocked.
+        // The four-week threshold is still LOCAL_ONLY pending an Owner policy decision.
+        if (earliest === undefined) {
+          const idleWeeks = (Date.parse(this.#now()) - Date.parse(bounds.end_utc)) / (7 * 86400_000);
+          if (idleWeeks > 4) return fail(409, "first_week_too_old");
+        }
       }
       const report = weeklyReport({
         weekId,

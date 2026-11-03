@@ -176,7 +176,7 @@ describe("A4 statement disputes timing (T3)", () => {
     assert.equal(t.within_window, true, `deadline computed as ${t.deadline} (exactly 168 h), not end of the 7th calendar day`);
   });
 
-  it("A4.12 [RULE] a first close more than four weeks after the first activity must still be possible (no deadlock)", { todo: "PR1-N1 · Codex Paket-01b (ilk kapanış kilitlenmesi)" }, async () => {
+  it("A4.12 [RULE] a first close more than four weeks after the first activity must still be possible (no deadlock)", async () => {
     const h = harness();
     h.setNow("2026-11-04T10:00:00Z");
     await h.shuttleJob({}, "sup-a", 5000); // W45 activity
