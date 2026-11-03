@@ -7,10 +7,7 @@ export const PRODUCTS = ["private", "vip", "shuttle"] as const;
 export type Product = (typeof PRODUCTS)[number];
 
 export type BookingStatus = "request" | "quoted" | "confirmed" | "delivered" | "cancelled";
-export type PaymentStatus = "unpaid" | "partially_paid" | "paid" | "refunded";
-/** K15: online tahsilat merkezden; araçta nakit yalnız rezervasyonun izin verdiği yöntemse. */
-export type PaymentMethod = "card_online" | "cash_in_vehicle";
-export const PAYMENT_METHODS: readonly PaymentMethod[] = ["card_online", "cash_in_vehicle"];
+
 
 const TRANSITIONS: Readonly<Record<BookingStatus, readonly BookingStatus[]>> = {
   request: ["quoted", "confirmed", "cancelled"],
@@ -38,14 +35,11 @@ export function assertTransition(from: BookingStatus, to: BookingStatus): void {
   if (!canTransition(from, to)) throw new InvalidTransitionError(from, to);
 }
 
-/** Kim operasyonu yapar: özel/VIP'de talebi getiren site sahibi, shuttle'da merkez. */
-export type OperationsOwner = { kind: "central" } | { kind: "partner"; partnerId: string };
 
 export interface PriceSnapshot {
-  readonly mode: "FIXED_SHUTTLE" | "SHUTTLE_MANUAL_APPROVED" | "PARTNER_PRICE_WITH_PASS" | "PARTNER_QUOTE";
+  /** FIXED_SHUTTLE: tarifeden · SHUTTLE_MANUAL_APPROVED: 5+ kişi elle onay · SITE_PRICE: sitenin özel/VIP fiyatı. */
+  readonly mode: "FIXED_SHUTTLE" | "SHUTTLE_MANUAL_APPROVED" | "SITE_PRICE";
   readonly total: Money;
-  /** Yalnız PARTNER_PRICE_WITH_PASS: ağa aktarılan pass bedeli (rezervasyon anında dondurulur). */
-  readonly pass?: Money;
   /** tariff_version_id veya teklif id'si — fiyat sonradan sessizce değişmez. */
   readonly sourceVersionId: string;
   readonly frozenAt: string;

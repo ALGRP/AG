@@ -1,7 +1,7 @@
 import { randomBytes, randomInt, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { PASS_POLICY_DECK_V3, SHUTTLE_DIRECT_SPLIT_PROPOSED, SHUTTLE_SPLIT_V1, parseShuttleTariff, parseSiteRecord, type SiteRecord } from "@ag/core";
+import { SHUTTLE_SPLIT_V1, parseShuttleTariff, parseSiteRecord, type SiteRecord } from "@ag/core";
 import { createApiServer } from "./http.ts";
 import { BookingService } from "./service.ts";
 import { MemoryStore } from "./store.ts";
@@ -41,9 +41,8 @@ const service = new BookingService({
   store: new MemoryStore(),
   sites,
   shuttleTariff,
-  // K4 önerisi (90/10) onaylanana kadar "proposed": AG kendi sitesinden gelen shuttle için otomatik pay yazılmaz.
-  splitPolicies: { partnerSourced: SHUTTLE_SPLIT_V1, direct: SHUTTLE_DIRECT_SPLIT_PROPOSED },
-  passPolicy: PASS_POLICY_DECK_V3,
+  // K15: shuttle %20 site / %10 AGOS / %70 tedarikçi — tek kaynak.
+  shuttlePolicy: SHUTTLE_SPLIT_V1,
   pool: { slotMinutes: 60, vehicleCapacity: 10 },
   devOrigins,
   clock: () => new Date(),

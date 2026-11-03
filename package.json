@@ -2,15 +2,21 @@
   "name": "ag-network",
   "private": true,
   "type": "module",
-  "description": "Alanya Group uydu site ağı + merkezi rezervasyon/havuz/komisyon sistemi (LOCAL_ONLY aday)",
-  "workspaces": ["packages/*", "apps/*"],
-  "engines": { "node": ">=22.18" },
+  "description": "Alanya Group uydu site a\u011f\u0131 + merkezi rezervasyon/havuz/komisyon sistemi (LOCAL_ONLY aday)",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=22.18"
+  },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
     "test": "node --test \"packages/*/src/**/*.test.ts\" \"apps/*/src/**/*.test.ts\"",
     "check": "npm run typecheck && npm test",
     "build:sites": "node packages/ssg/src/cli.ts",
-    "dev:api": "node --watch apps/api/src/main.ts"
+    "dev:api": "node --watch apps/api/src/main.ts",
+    "report:sample": "node apps/api/src/sample-week.ts"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",

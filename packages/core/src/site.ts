@@ -1,5 +1,8 @@
-import { PAYMENT_METHODS, type PaymentMethod } from "./booking.ts";
 import { isCurrency, type Currency } from "./money.ts";
+import { COLLECTION_METHODS, type CollectionMethod } from "./settlement.ts";
+
+/** alanyagroup.com ve diğer AG markalı sitelerin sahibi (satış kanalı payının alacaklısı). */
+export const ALANYA_GROUP_PARTY_ID = "alanya-group";
 
 // Uydu site kaydı (site registry). Site registry tenant güvenliği DEĞİLDİR (Linear kararı):
 // yetki her zaman sunucudaki oturumdan gelir; bu kayıt yalnız talebin hangi siteden geldiğini
@@ -13,14 +16,6 @@ export type SiteOwnership =
 
 export type SiteStatus = "preview" | "live" | "suspended";
 
-/**
- * K12 (öneri) — Özel/VIP operasyon modeli. Varsayılan "network_pass".
- * - network_pass:  site satar, iş Alanya Group tedarikçi ağına pass bedeliyle aktarılır (AG ek komisyon 0 €).
- * - self_operated: site sahibi kendi aracıyla yapar; yalnız yasal şartlar ve operasyon yetkisi
- *                  DOĞRULANMIŞSA açılabilir (selfOperationVerifiedAt zorunlu). AG işlem komisyonu almaz.
- */
-export type PrivateMode = "network_pass" | "self_operated";
-
 export interface SiteRecord {
   readonly id: string;
   readonly ownership: SiteOwnership;
@@ -31,11 +26,15 @@ export interface SiteRecord {
   /** Özel/VIP taleplerin anında düşeceği e-posta (site sahibi). */
   readonly ownerEmail: string;
   readonly status: SiteStatus;
-  readonly privateMode: PrivateMode;
-  /** self_operated için: yetki belgelerinin doğrulandığı tarih (ISO). Doğrulanmadan model açılamaz. */
+  /** Satış kanalı payının alacaklısı: partner sitede partnerId, AG markalı sitede "alanya-group". */
+  readonly ownerPartyId: string;
+  /**
+   * Site işi kendi aracıyla yapabilir (shuttle %90/%10, private/VIP tamamı) — yalnız yasal taşıma yetkisi ve
+   * belgeleri doğrulandıysa. Doğrulanma tarihi (ISO). Hukuki inceleme ayrıca gereklidir.
+   */
   readonly selfOperationVerifiedAt?: string;
-  /** K15: bu sitedeki rezervasyonlarda izin verilen ödeme yöntemleri. */
-  readonly paymentMethods: readonly PaymentMethod[];
+  /** Tedarikçinin (ya da private/VIP'de sitenin) müşteriden tahsilatta kullanabileceği yöntemler. */
+  readonly collectionMethods: readonly CollectionMethod[];
   /** Site sahibinin kendi satış fiyatları (cent). Yoksa özel talep fiyatsız "request" olarak gelir. */
   readonly salePrices?: Readonly<Partial<Record<"private" | "vip", number>>>;
   readonly saleCurrency?: Currency;
@@ -92,20 +91,16 @@ export function parseSiteRecord(raw: unknown): SiteRecord {
   }
   if (typeof r.ownerEmail !== "string" || !r.ownerEmail.includes("@")) fail("ownerEmail");
   if (r.status !== "preview" && r.status !== "live" && r.status !== "suspended") fail("status");
-  const privateMode = r.privateMode ?? "network_pass";
-  if (privateMode !== "network_pass" && privateMode !== "self_operated") fail("privateMode");
-  if (privateMode === "self_operated") {
-    if (typeof r.selfOperationVerifiedAt !== "string" || Number.isNaN(Date.parse(r.selfOperationVerifiedAt))) {
-      fail("self_operated requires selfOperationVerifiedAt (verified licence and operating authority)");
-    }
+  if (r.selfOperationVerifiedAt !== undefined && (typeof r.selfOperationVerifiedAt !== "string" || Number.isNaN(Date.parse(r.selfOperationVerifiedAt)))) {
+    fail("selfOperationVerifiedAt");
   }
-  const paymentMethods = r.paymentMethods ?? ["card_online"];
+  const collectionMethods = r.collectionMethods ?? ["cash", "card_pos"];
   if (
-    !Array.isArray(paymentMethods) ||
-    paymentMethods.length === 0 ||
-    paymentMethods.some((m) => !(PAYMENT_METHODS as readonly unknown[]).includes(m))
+    !Array.isArray(collectionMethods) ||
+    collectionMethods.length === 0 ||
+    collectionMethods.some((m) => !(COLLECTION_METHODS as readonly unknown[]).includes(m))
   ) {
-    fail("paymentMethods");
+    fail("collectionMethods");
   }
   let salePrices: Partial<Record<"private" | "vip", number>> | undefined;
   if (r.salePrices !== undefined) {
@@ -124,9 +119,9 @@ export function parseSiteRecord(raw: unknown): SiteRecord {
     domains: [...(r.domains as string[])],
     ownerEmail: r.ownerEmail as string,
     status: r.status as SiteStatus,
-    privateMode: privateMode as PrivateMode,
-    paymentMethods: [...(paymentMethods as PaymentMethod[])],
-    ...(privateMode === "self_operated" ? { selfOperationVerifiedAt: r.selfOperationVerifiedAt as string } : {}),
+    ownerPartyId: r.ownership === "partner" ? (r.partnerId as string) : ALANYA_GROUP_PARTY_ID,
+    collectionMethods: [...(collectionMethods as CollectionMethod[])],
+    ...(typeof r.selfOperationVerifiedAt === "string" ? { selfOperationVerifiedAt: r.selfOperationVerifiedAt } : {}),
     ...(r.ownership === "partner" ? { partnerId: r.partnerId as string } : {}),
     ...(salePrices !== undefined ? { salePrices, saleCurrency: r.saleCurrency as Currency } : {}),
   });

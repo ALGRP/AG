@@ -147,56 +147,50 @@ export function createApiServer(opts: HttpOptions): Server {
           return send(res, 401, { error: "unauthorized" });
         }
         if (req.method === "GET" && path === "/v1/admin/bookings") return reply(res, await opts.service.listBookings());
-        if (req.method === "GET" && path === "/v1/admin/ledger/balances") return reply(res, await opts.service.ledgerBalances());
         if (req.method === "GET" && path === "/v1/admin/outbox") return reply(res, await opts.service.outbox());
 
         const confirm = /^\/v1\/admin\/bookings\/([A-Z0-9-]+)\/confirm$/.exec(path);
         if (req.method === "POST" && confirm) return reply(res, await opts.service.confirm(confirm[1]!));
 
-        const pay = /^\/v1\/admin\/bookings\/([A-Z0-9-]+)\/payments$/.exec(path);
-        if (req.method === "POST" && pay) {
-          const body = await readJson(req);
-          if (!body.ok) return send(res, body.status, { error: body.error });
-          return reply(res, await opts.service.recordPayment(pay[1]!, (body.value ?? {}) as Record<string, unknown>));
-        }
-        const cancel = /^\/v1\/admin\/bookings\/([A-Z0-9-]+)\/cancel$/.exec(path);
-        if (req.method === "POST" && cancel) return reply(res, await opts.service.cancel(cancel[1]!));
-        if (req.method === "GET" && path === "/v1/admin/settlements") return reply(res, await opts.service.listClosings());
-        if (req.method === "POST" && path === "/v1/admin/settlements/close-week") {
-          const body = await readJson(req);
-          if (!body.ok) return send(res, body.status, { error: body.error });
-          return reply(res, await opts.service.closeWeek(((body.value ?? {}) as Record<string, unknown>).weekStart));
-        }
+        const body = req.method === "POST" ? await readJson(req) : ({ ok: true, value: {} } as const);
+        if (!body.ok) return send(res, body.status, { error: body.error });
+        const v = (body.value ?? {}) as Record<string, unknown>;
 
-        const approve = /^\/v1\/admin\/bookings\/([A-Z0-9-]+)\/approve-price$/.exec(path);
-        if (req.method === "POST" && approve) {
-          const body = await readJson(req);
-          if (!body.ok) return send(res, body.status, { error: body.error });
-          return reply(res, await opts.service.approveShuttlePrice(approve[1]!, (body.value ?? {}) as Record<string, unknown>));
+        const bk = /^\/v1\/admin\/bookings\/([A-Z0-9-]+)\/([a-z-]+)$/.exec(path);
+        if (req.method === "POST" && bk) {
+          const ref = bk[1]!;
+          switch (bk[2]) {
+            case "confirm":
+              return reply(res, await opts.service.confirm(ref));
+            case "approve-price":
+              return reply(res, await opts.service.approveShuttlePrice(ref, v));
+            case "assign":
+              return reply(res, await opts.service.assignPrivate(ref, v));
+            case "complete":
+              return reply(res, await opts.service.completePrivate(ref));
+            case "collection":
+              return reply(res, await opts.service.recordCollection(ref, v));
+            case "refund":
+              return reply(res, await opts.service.refund(ref, v));
+            case "dispute":
+              return reply(res, await opts.service.dispute(ref, v));
+            case "cancel":
+              return reply(res, await opts.service.cancel(ref));
+            case "invoice":
+              return reply(res, await opts.service.setInvoiceReference(ref, v));
+          }
         }
-
-        const done = /^\/v1\/admin\/bookings\/([A-Z0-9-]+)\/complete$/.exec(path);
-        if (req.method === "POST" && done) {
-          const body = await readJson(req);
-          if (!body.ok) return send(res, body.status, { error: body.error });
-          return reply(res, await opts.service.completePrivate(done[1]!, (body.value ?? {}) as Record<string, unknown>));
-        }
+        if (req.method === "POST" && path === "/v1/admin/receipts") return reply(res, await opts.service.addReceipt(v));
+        const wk = /^\/v1\/admin\/settlements\/(\d{4}-W\d{2})(\/close)?$/.exec(path);
+        if (wk && req.method === "GET" && !wk[2]) return reply(res, await opts.service.weekReport(wk[1]!));
+        if (wk && req.method === "POST" && wk[2]) return reply(res, await opts.service.closeWeek(wk[1]!));
 
         const run = /^\/v1\/admin\/shuttle-runs\/([A-Za-z0-9-]+)\/(assign|complete)$/.exec(path);
         if (req.method === "POST" && run) {
-          const body = await readJson(req);
-          if (!body.ok) return send(res, body.status, { error: body.error });
-          const v = (body.value ?? {}) as Record<string, unknown>;
-          return reply(
-            res,
-            run[2] === "assign"
-              ? await opts.service.assignRun(run[1]!, v.carrierPayeeId)
-              : await opts.service.completeRun(run[1]!),
-          );
+          return reply(res, run[2] === "assign" ? await opts.service.assignRun(run[1]!, v.supplierId) : await opts.service.completeRun(run[1]!));
         }
         return send(res, 404, { error: "not_found" });
       }
-
       return send(res, 404, { error: "not_found" });
     } catch (err) {
       // Kişisel veri loglanmaz: yalnız hata türü.

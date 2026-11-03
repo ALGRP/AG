@@ -1,4 +1,5 @@
-import { PAYMENT_METHODS, PRODUCTS, type PaymentMethod, type Product } from "./booking.ts";
+import { PRODUCTS, type Product } from "./booking.ts";
+import { COLLECTION_METHODS, type CollectionMethod } from "./settlement.ts";
 
 // Uydu site formundan gelen ham verinin doğrulanması.
 // İstemciden FİYAT KABUL EDİLMEZ: fiyat yalnız sunucuda tarifeden / teklif akışından gelir.
@@ -22,8 +23,8 @@ export interface IntakeRequest {
     readonly phone: string;
     readonly locale: string;
   };
-  /** Müşterinin tercih ettiği ödeme yöntemi; sitenin izin verdiği yöntemlerden biri olmalı (API'de kontrol). */
-  readonly paymentMethod?: PaymentMethod;
+  /** Müşterinin tercih ettiği ödeme yöntemi (tedarikçiye); sitenin izin verdiği yöntemlerden biri olmalı. */
+  readonly paymentMethod?: CollectionMethod;
   /** Turnstile / captcha jetonu; doğrulaması API katmanında yapılır. */
   readonly humanToken?: string;
 }
@@ -126,9 +127,9 @@ export function validateIntake(raw: unknown): IntakeValidation {
 
   if (r.consent !== true) errors.push({ field: "consent", code: "required" });
 
-  let paymentMethod: PaymentMethod | undefined;
+  let paymentMethod: CollectionMethod | undefined;
   if (r.paymentMethod !== undefined && r.paymentMethod !== "") {
-    if ((PAYMENT_METHODS as readonly unknown[]).includes(r.paymentMethod)) paymentMethod = r.paymentMethod as PaymentMethod;
+    if ((COLLECTION_METHODS as readonly unknown[]).includes(r.paymentMethod)) paymentMethod = r.paymentMethod as CollectionMethod;
     else errors.push({ field: "paymentMethod", code: "invalid" });
   }
 

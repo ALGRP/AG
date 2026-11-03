@@ -1,34 +1,37 @@
 import type {
+  Adjustment,
+  BankReceipt,
   BookingStatus,
+  CollectionMethod,
+  CollectionStatus,
+  Collector,
   IntakeRequest,
-  LedgerEntry,
-  PaymentEvent,
-  PaymentMethod,
-  WeeklyClosing,
-  OperationsOwner,
-  PaymentStatus,
   PriceSnapshot,
   Product,
+  SettlementStatus,
   ShuttleRun,
+  WeeklyReport,
 } from "@ag/core";
 
-// Depo arayüzü. Üretimde bunun karşılığı merkezi rezervasyon PostgreSQL'idir (CRS);
-// şema adayı: packages/db/migrations. Bu dosyadaki MemoryStore yalnız yerel geliştirme ve test içindir.
+// Depo arayüzü. Üretimde karşılığı merkezi rezervasyon PostgreSQL'idir (CRS); şema adayı packages/db.
+// MemoryStore yalnız yerel geliştirme ve test içindir.
+
+/** Müşteriden yapılan tahsilat: rezervasyon başına EN FAZLA BİR kayıt (K15 kural 9). */
+export interface CollectionRecord {
+  readonly method: CollectionMethod;
+  readonly collector: Collector;
+  readonly amountMinor: number;
+  readonly at: string;
+}
 
 export interface StoredBooking {
   readonly id: string;
   readonly ref: string;
   readonly siteId: string;
+  /** Satış kanalı payının alacaklısı (site sahibi). */
+  readonly sellingPartyId: string;
   readonly product: Product;
   readonly status: BookingStatus;
-  readonly paymentStatus: PaymentStatus;
-  /** K15: bu rezervasyonda izin verilen ödeme yöntemleri (site ayarından, rezervasyon anında dondurulur). */
-  readonly allowedPaymentMethods: readonly PaymentMethod[];
-  readonly preferredPaymentMethod?: PaymentMethod;
-  /** İşi yapan tedarikçi (hak ediş alıcısı); sefer/iş tamamlanırken yazılır. */
-  readonly carrierPayeeId?: string;
-  readonly operationsOwner: OperationsOwner;
-  readonly sourcePartnerId?: string;
   readonly request: IntakeRequest;
   readonly price?: PriceSnapshot;
   readonly lookupTokenHash: string;
@@ -36,6 +39,25 @@ export interface StoredBooking {
   readonly isDuplicate: boolean;
   readonly isTest: boolean;
   readonly shuttleRunId?: string;
+  /** K15: bu rezervasyonda izin verilen tahsilat yöntemleri (rezervasyon anında dondurulur). */
+  readonly allowedCollectionMethods: readonly CollectionMethod[];
+  readonly preferredCollectionMethod?: CollectionMethod;
+  /** İşi yapan tedarikçi; site kendi aracıyla yapıyorsa = sellingPartyId. */
+  readonly supplierId?: string;
+  /** Yalnız private/VIP: siteyi getiren sitenin belirlediği tedarikçi hak edişi. */
+  readonly supplierEntitlementMinor?: number;
+  readonly collection?: CollectionRecord;
+  readonly collectionStatus: CollectionStatus;
+  readonly refundedMinor: number;
+  readonly completedAt?: string;
+  readonly cancelledAt?: string;
+  readonly disputedAt?: string;
+  readonly disputeReason?: string;
+  /** Bir kez yazılır (kapanışta). */
+  readonly settlementWeekId?: string;
+  readonly settlementStatus: SettlementStatus;
+  readonly invoiceReference?: string;
+  readonly adjustmentReference?: string;
   readonly createdAt: string;
   readonly version: number;
 }
@@ -69,20 +91,20 @@ export interface Store {
   getBookingByRef(ref: string): Promise<StoredBooking | undefined>;
   getBookingById(id: string): Promise<StoredBooking | undefined>;
   findActiveByFingerprint(fingerprint: string): Promise<StoredBooking | undefined>;
-  listBookings(limit: number): Promise<StoredBooking[]>;
+  listBookings(limit?: number): Promise<StoredBooking[]>;
   listRuns(routeCode: string, slotStart: string): Promise<ShuttleRun[]>;
   getRun(id: string): Promise<ShuttleRun | undefined>;
   saveRun(run: ShuttleRun): Promise<void>;
   appendOutbox(events: readonly OutboxEvent[]): Promise<void>;
   listOutbox(status?: OutboxEvent["status"]): Promise<OutboxEvent[]>;
-  appendLedger(entries: readonly LedgerEntry[]): Promise<void>;
-  listLedger(bookingId?: string): Promise<LedgerEntry[]>;
-  appendPayment(e: PaymentEvent): Promise<void>;
-  listPayments(bookingId?: string): Promise<PaymentEvent[]>;
-  /** Kapanış tektir: aynı hafta ikinci kez yazılamaz; bir kayıt iki kapanışa giremez. */
-  saveClosing(c: WeeklyClosing): Promise<void>;
-  getClosing(weekStart: string): Promise<WeeklyClosing | undefined>;
-  listClosings(): Promise<WeeklyClosing[]>;
+  /** Dekontlar yalnız eklenir; aynı banka referansı ikinci kez kaydedilemez. */
+  appendReceipt(r: BankReceipt): Promise<void>;
+  listReceipts(weekId?: string): Promise<BankReceipt[]>;
+  appendAdjustments(a: readonly Adjustment[]): Promise<void>;
+  listAdjustments(): Promise<Adjustment[]>;
+  /** Kapanmış haftanın anlık görüntüsü; bir hafta bir kez kapanır, sonradan değişmez. */
+  saveClosedWeek(r: WeeklyReport): Promise<void>;
+  getClosedWeek(weekId: string): Promise<WeeklyReport | undefined>;
 }
 
 interface Snapshot {
@@ -90,9 +112,9 @@ interface Snapshot {
   bookings: Map<string, StoredBooking>;
   runs: Map<string, ShuttleRun>;
   outbox: number;
-  ledger: number;
-  payments: number;
-  closings: Map<string, WeeklyClosing>;
+  receipts: number;
+  adjustments: number;
+  closed: Map<string, WeeklyReport>;
 }
 
 export class MemoryStore implements Store {
@@ -102,15 +124,14 @@ export class MemoryStore implements Store {
   readonly #bookings = new Map<string, StoredBooking>();
   readonly #runs = new Map<string, ShuttleRun>();
   readonly #outbox: OutboxEvent[] = [];
-  readonly #ledger: LedgerEntry[] = [];
-  readonly #payments: PaymentEvent[] = [];
-  readonly #closings = new Map<string, WeeklyClosing>();
+  readonly #receipts: BankReceipt[] = [];
+  readonly #adjustments: Adjustment[] = [];
+  readonly #closed = new Map<string, WeeklyReport>();
 
   transaction<T>(fn: (tx: Store) => Promise<T>): Promise<T> {
     if (this.#inTx) return fn(this);
     const run = this.#queue.then(async () => {
       this.#inTx = true;
-      // Basit geri alma: hata olursa anlık görüntüye dön.
       const snapshot = this.#snapshot();
       try {
         return await fn(this);
@@ -131,24 +152,24 @@ export class MemoryStore implements Store {
       bookings: new Map(this.#bookings),
       runs: new Map(this.#runs),
       outbox: this.#outbox.length,
-      ledger: this.#ledger.length,
-      payments: this.#payments.length,
-      closings: new Map(this.#closings),
+      receipts: this.#receipts.length,
+      adjustments: this.#adjustments.length,
+      closed: new Map(this.#closed),
     };
   }
 
   #restore(s: Snapshot) {
-    this.#idem.clear();
-    s.idem.forEach((v, k) => this.#idem.set(k, v));
-    this.#bookings.clear();
-    s.bookings.forEach((v, k) => this.#bookings.set(k, v));
-    this.#runs.clear();
-    s.runs.forEach((v, k) => this.#runs.set(k, v));
+    const reset = <K, V>(target: Map<K, V>, from: Map<K, V>) => {
+      target.clear();
+      from.forEach((v, k) => target.set(k, v));
+    };
+    reset(this.#idem, s.idem);
+    reset(this.#bookings, s.bookings);
+    reset(this.#runs, s.runs);
+    reset(this.#closed, s.closed);
     this.#outbox.length = s.outbox;
-    this.#ledger.length = s.ledger;
-    this.#payments.length = s.payments;
-    this.#closings.clear();
-    s.closings.forEach((v, k) => this.#closings.set(k, v));
+    this.#receipts.length = s.receipts;
+    this.#adjustments.length = s.adjustments;
   }
 
   async getIdempotency(scope: string) {
@@ -179,8 +200,9 @@ export class MemoryStore implements Store {
   async findActiveByFingerprint(fingerprint: string) {
     return [...this.#bookings.values()].find((b) => b.fingerprint === fingerprint && b.status !== "cancelled");
   }
-  async listBookings(limit: number) {
-    return [...this.#bookings.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, limit);
+  async listBookings(limit?: number) {
+    const all = [...this.#bookings.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    return limit === undefined ? all : all.slice(0, limit);
   }
   async listRuns(routeCode: string, slotStart: string) {
     return [...this.#runs.values()].filter((r) => r.routeCode === routeCode && r.slotStart === slotStart);
@@ -200,31 +222,27 @@ export class MemoryStore implements Store {
   async listOutbox(status?: OutboxEvent["status"]) {
     return this.#outbox.filter((e) => status === undefined || e.status === status);
   }
-  async appendLedger(entries: readonly LedgerEntry[]) {
-    this.#ledger.push(...entries);
-  }
-  async listLedger(bookingId?: string) {
-    return this.#ledger.filter((e) => bookingId === undefined || e.bookingId === bookingId);
-  }
-  async appendPayment(e: PaymentEvent) {
-    this.#payments.push(e);
-  }
-  async listPayments(bookingId?: string) {
-    return this.#payments.filter((e) => bookingId === undefined || e.bookingId === bookingId);
-  }
-  async saveClosing(c: WeeklyClosing) {
-    if (this.#closings.has(c.weekStart)) throw new Error("week already closed");
-    const seenE = new Set([...this.#closings.values()].flatMap((x) => x.entryIds));
-    const seenP = new Set([...this.#closings.values()].flatMap((x) => x.paymentIds));
-    if (c.entryIds.some((id) => seenE.has(id)) || c.paymentIds.some((id) => seenP.has(id))) {
-      throw new Error("item already in another closing");
+  async appendReceipt(r: BankReceipt) {
+    if (this.#receipts.some((x) => x.bank_reference === r.bank_reference && x.payer_id === r.payer_id)) {
+      throw new Error("duplicate bank reference");
     }
-    this.#closings.set(c.weekStart, c);
+    this.#receipts.push(r);
   }
-  async getClosing(weekStart: string) {
-    return this.#closings.get(weekStart);
+  async listReceipts(weekId?: string) {
+    return this.#receipts.filter((r) => weekId === undefined || r.week_id === weekId);
   }
-  async listClosings() {
-    return [...this.#closings.values()].sort((a, b) => a.weekStart.localeCompare(b.weekStart));
+  async appendAdjustments(a: readonly Adjustment[]) {
+    this.#adjustments.push(...a);
+  }
+  async listAdjustments() {
+    return [...this.#adjustments];
+  }
+  async saveClosedWeek(r: WeeklyReport) {
+    if (this.#closed.has(r.week.week_id)) throw new Error("week already closed");
+    this.#closed.set(r.week.week_id, structuredClone(r));
+  }
+  async getClosedWeek(weekId: string) {
+    const r = this.#closed.get(weekId);
+    return r ? structuredClone(r) : undefined;
   }
 }

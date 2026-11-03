@@ -16,8 +16,10 @@ CREATE TYPE site_ownership AS ENUM ('ag_brand', 'partner');
 CREATE TYPE site_status AS ENUM ('preview', 'live', 'suspended');
 CREATE TYPE product AS ENUM ('private', 'vip', 'shuttle');
 CREATE TYPE booking_status AS ENUM ('request', 'quoted', 'confirmed', 'delivered', 'cancelled');
-CREATE TYPE payment_status AS ENUM ('unpaid', 'partially_paid', 'paid', 'refunded');
-CREATE TYPE payment_method AS ENUM ('card_online', 'cash_in_vehicle');
+-- K15: müşteriden tahsilatı tedarikçi yapar (private/VIP'de site de yapabilir).
+CREATE TYPE collection_method AS ENUM ('cash', 'card_pos', 'bank_transfer');
+CREATE TYPE collection_status AS ENUM ('pending', 'collected', 'short_collected', 'not_collected', 'refunded');
+CREATE TYPE settlement_status AS ENUM ('open', 'included', 'exception', 'adjusted');
 CREATE TYPE currency AS ENUM ('EUR', 'USD', 'GBP', 'TRY');
 
 -- Ücret ödeyen site sahibi (white-label üye).
@@ -38,12 +40,12 @@ CREATE TABLE site (
   owner_email     text NOT NULL,
   whatsapp_e164   text NOT NULL CHECK (whatsapp_e164 ~ '^\+[0-9]{8,15}$'),
   status          site_status NOT NULL DEFAULT 'preview',
-  -- K12 (öneri): network_pass = site satar, iş pass bedeliyle AG tedarikçi ağına aktarılır (AG ek komisyon 0 €);
-  --              self_operated = site sahibi kendi aracıyla yapar; yalnız doğrulanmış yetkiyle açılır.
-  private_mode    text NOT NULL DEFAULT 'network_pass' CHECK (private_mode IN ('network_pass', 'self_operated')),
+  -- Satış kanalı payının alacaklısı: partner sitede partner_id, AG markalı sitede 'alanya-group'.
+  owner_party_id  text NOT NULL,
+  -- Site işi kendi aracıyla yapabilir (shuttle %90/%10) yalnız yasal yetkisi doğrulandıysa.
   self_operation_verified_at timestamptz,
-  -- K15: bu sitedeki rezervasyonlarda izin verilen ödeme yöntemleri.
-  payment_methods payment_method[] NOT NULL DEFAULT ARRAY['card_online']::payment_method[] CHECK (cardinality(payment_methods) >= 1),
+  collection_methods collection_method[] NOT NULL DEFAULT ARRAY['cash','card_pos']::collection_method[]
+    CHECK (cardinality(collection_methods) >= 1),
   -- Site sahibinin kendi satış fiyatları (cent); yoksa talep fiyatsız gelir.
   sale_private_minor bigint CHECK (sale_private_minor > 0),
   sale_vip_minor  bigint CHECK (sale_vip_minor > 0),
@@ -51,7 +53,7 @@ CREATE TABLE site (
   gsc_property    text,
   created_at      timestamptz NOT NULL DEFAULT now(),
   CHECK ((ownership = 'partner') = (partner_id IS NOT NULL)),
-  CHECK (private_mode <> 'self_operated' OR self_operation_verified_at IS NOT NULL)
+  CHECK (owner_party_id = CASE WHEN ownership = 'partner' THEN partner_id ELSE 'alanya-group' END)
 );
 
 -- Özel alan adı: TXT ile sahiplik kanıtı, sonra CNAME + TLS.
@@ -64,7 +66,8 @@ CREATE TABLE site_domain (
 );
 CREATE UNIQUE INDEX site_domain_one_canonical ON site_domain(site_id) WHERE is_canonical;
 
--- Abonelik: Partner Sunumu V3 — 200 €/ay SaaS aboneliği uydu site sahibinden Alanya Group'a.
+-- K15 kural 10: 200 €/ay SaaS aboneliği shuttle komisyonlarından AYRI takip edilir (ayrı tablolar,
+-- komisyon borçlarıyla mahsup edilmez).
 -- Google Ads bütçesi (40 €/gün) partnerin kendi gideridir; burada TUTULMAZ, merkezin cirosu değildir.
 CREATE TABLE subscription_plan (
   id              text PRIMARY KEY,
@@ -120,7 +123,6 @@ INSERT INTO shuttle_tariff_version (id, approval, published_at, currency, routes
 
 CREATE TABLE split_policy (
   id              text PRIMARY KEY,
-  -- Yalnız 'approved' politika otomatik pay yazar.
   status          text NOT NULL CHECK (status IN ('proposed', 'approved')),
   carrier_bps     int NOT NULL,
   partner_bps     int NOT NULL,
@@ -128,19 +130,8 @@ CREATE TABLE split_policy (
   CHECK (carrier_bps >= 0 AND partner_bps >= 0 AND platform_bps >= 0),
   CHECK (carrier_bps + partner_bps + platform_bps = 10000)
 );
--- OWNER KARARI 03.11.2026: satış tutarının %70'i tedarikçi, %20'si uydu site, %10'u Alanya Group.
+-- K15 OWNER KARARI (KESİN): satış kanalı %20, AGOS %10, tedarikçi %70 — tek kaynak; kodla aynı (testli).
 INSERT INTO split_policy VALUES ('shuttle-split-v1', 'approved', 7000, 2000, 1000);
--- K4 (öneri, Owner onayı bekliyor): AG'nin kendi sitesinden gelen shuttle → %90 tedarikçi, %10 Alanya Group.
-INSERT INTO split_policy VALUES ('shuttle-direct-v1', 'proposed', 9000, 0, 1000);
-
--- K12 Model B: pass bedeli tedarikçinindir, AG ek komisyon 0 €. Tutarlar örnek, sabit tarife değil.
-CREATE TABLE pass_policy (
-  id              text PRIMARY KEY,
-  currency        currency NOT NULL,
-  pass_private_minor bigint NOT NULL CHECK (pass_private_minor > 0),
-  pass_vip_minor  bigint NOT NULL CHECK (pass_vip_minor > 0)
-);
-INSERT INTO pass_policy VALUES ('pass-deck-v3-example', 'EUR', 4750, 6000);
 
 CREATE TABLE shuttle_run (
   id              uuid PRIMARY KEY,
@@ -149,25 +140,55 @@ CREATE TABLE shuttle_run (
   capacity        int NOT NULL CHECK (capacity BETWEEN 1 AND 20),
   seats_taken     int NOT NULL DEFAULT 0 CHECK (seats_taken >= 0),
   status          text NOT NULL CHECK (status IN ('open', 'assigned', 'completed', 'cancelled')),
-  carrier_payee_id text,
+  supplier_id     text,
   version         int NOT NULL DEFAULT 1,
   CHECK (seats_taken <= capacity)              -- aşırı doluluk veritabanında da imkânsız
 );
 CREATE INDEX shuttle_run_slot ON shuttle_run(route_code, slot_start) WHERE status IN ('open', 'assigned');
 
+-- Hesap haftası: ISO hafta, Europe/Istanbul. Kapanış bir kez yapılır; anlık görüntü değişmez.
+CREATE TABLE settlement_week (
+  week_id         text PRIMARY KEY CHECK (week_id ~ '^[0-9]{4}-W[0-9]{2}$'),
+  period_start    timestamptz NOT NULL,        -- Pazartesi 00:00 İstanbul
+  period_end      timestamptz NOT NULL,        -- sonraki Pazartesi 00:00 İstanbul (hariç)
+  payment_due     timestamptz NOT NULL,        -- önerilen: Salı 18:00 İstanbul
+  closed_at       timestamptz NOT NULL DEFAULT now(),
+  report_snapshot jsonb NOT NULL,
+  -- Canlı ödeme / banka transferi / otomatik borç tahsilatı Owner GO olmadan kapalı.
+  payout_execution text NOT NULL DEFAULT 'disabled_owner_go_required' CHECK (payout_execution = 'disabled_owner_go_required'),
+  CHECK (period_end = period_start + interval '7 days'),
+  CHECK (payment_due = period_end + interval '1 day 18 hours')
+);
+
 CREATE TABLE booking (
-  id              uuid PRIMARY KEY,
+  -- ---- Owner K15 alan listesi ----
+  id              uuid PRIMARY KEY,                       -- booking_id
+  selling_site_id text NOT NULL REFERENCES site(id),
+  selling_party_id text NOT NULL,                         -- site sahibi (komisyon alacaklısı)
+  supplier_id     text,                                   -- işi yapan tedarikçi (kendi aracıyla: = selling_party_id)
+  service_type    product NOT NULL,
+  final_booking_price bigint CHECK (final_booking_price > 0),
+  currency        currency,
+  collection_method collection_method,
+  collector       text NOT NULL DEFAULT 'supplier' CHECK (collector IN ('supplier', 'site')),
+  collection_status collection_status NOT NULL DEFAULT 'pending',
+  collected_amount bigint NOT NULL DEFAULT 0 CHECK (collected_amount >= 0),
+  refunded_amount bigint NOT NULL DEFAULT 0 CHECK (refunded_amount >= 0 AND refunded_amount <= collected_amount),
+  completed_at    timestamptz,
+  site_commission_amount bigint,
+  agos_fee_amount bigint,
+  supplier_entitlement bigint,
+  supplier_payment_to_site bigint,
+  supplier_payment_to_agos bigint,
+  site_payment_to_supplier bigint,                        -- private/VIP'de müşteri siteye ödediyse
+  settlement_week_id text REFERENCES settlement_week(week_id),
+  settlement_status settlement_status NOT NULL DEFAULT 'open',
+  payment_reference text,
+  invoice_reference text,
+  adjustment_reference text,
+  -- ---- Rezervasyon ----
   ref             text NOT NULL UNIQUE CHECK (ref ~ '^AG-[2-9A-HJKMNP-Z]{6}$'),
-  site_id         text NOT NULL REFERENCES site(id),
-  source_partner_id text REFERENCES partner(id),
-  product         product NOT NULL,
   status          booking_status NOT NULL DEFAULT 'request',
-  payment_status  payment_status NOT NULL DEFAULT 'unpaid',
-  allowed_payment_methods payment_method[] NOT NULL CHECK (cardinality(allowed_payment_methods) >= 1),
-  preferred_payment_method payment_method,
-  carrier_payee_id text,
-  ops_owner_kind  text NOT NULL CHECK (ops_owner_kind IN ('central', 'partner')),
-  ops_owner_partner_id text REFERENCES partner(id),
   route_code      text,
   pickup_text     text NOT NULL,
   dropoff_text    text NOT NULL,
@@ -180,12 +201,13 @@ CREATE TABLE booking (
   customer_email  text NOT NULL,
   customer_phone  text NOT NULL,
   customer_locale text NOT NULL,
-  price_mode      text CHECK (price_mode IN ('FIXED_SHUTTLE', 'SHUTTLE_MANUAL_APPROVED', 'PARTNER_PRICE_WITH_PASS', 'PARTNER_QUOTE')),
-  price_minor     bigint,
-  pass_minor      bigint CHECK (pass_minor > 0),
-  price_currency  currency,
+  price_mode      text CHECK (price_mode IN ('FIXED_SHUTTLE', 'SHUTTLE_MANUAL_APPROVED', 'SITE_PRICE')),
   price_source_version text,
   price_frozen_at timestamptz,
+  allowed_collection_methods collection_method[] NOT NULL CHECK (cardinality(allowed_collection_methods) >= 1),
+  cancelled_at    timestamptz,
+  disputed_at     timestamptz,
+  dispute_reason  text,
   lookup_token_hash text NOT NULL,
   fingerprint     text NOT NULL,
   is_duplicate    boolean NOT NULL DEFAULT false,
@@ -193,16 +215,50 @@ CREATE TABLE booking (
   shuttle_run_id  uuid REFERENCES shuttle_run(id),
   created_at      timestamptz NOT NULL DEFAULT now(),
   version         int NOT NULL DEFAULT 1,
-  CHECK ((product = 'shuttle') = (route_code IS NOT NULL)),
-  CHECK ((price_minor IS NULL) = (price_currency IS NULL)),
-  -- Fiyat onayı bekleyen (5+ kişi) shuttle onaylanamaz / teslim edilemez.
-  CHECK (product <> 'shuttle' OR status IN ('request', 'cancelled') OR price_minor IS NOT NULL),
-  CHECK ((price_mode = 'PARTNER_PRICE_WITH_PASS') = (pass_minor IS NOT NULL)),
-  CHECK (pass_minor IS NULL OR pass_minor <= price_minor),
-  CHECK ((ops_owner_kind = 'partner') = (ops_owner_partner_id IS NOT NULL))
+  CHECK ((service_type = 'shuttle') = (route_code IS NOT NULL)),
+  CHECK ((final_booking_price IS NULL) = (currency IS NULL)),
+  -- 5+ kişi: fiyat onayı bekleyen shuttle onaylanamaz / teslim edilemez / tahsil edilemez.
+  CHECK (service_type <> 'shuttle' OR status IN ('request', 'cancelled') OR final_booking_price IS NOT NULL),
+  CHECK (collected_amount <= coalesce(final_booking_price, 0)),
+  -- Kural 2: shuttle'da tahsilatı tedarikçi yapar.
+  CHECK (service_type <> 'shuttle' OR collector = 'supplier'),
+  -- Paylar tutarlı: tedarikçi hak edişi + site komisyonu + AGOS = satış.
+  CHECK (supplier_entitlement IS NULL OR supplier_entitlement + site_commission_amount + agos_fee_amount = final_booking_price),
+  -- Private/VIP: AGOS ek işlem komisyonu yok.
+  CHECK (service_type = 'shuttle' OR coalesce(agos_fee_amount, 0) = 0),
+  -- Kendi aracıyla: kendine komisyon yok.
+  CHECK (supplier_id IS DISTINCT FROM selling_party_id OR coalesce(site_commission_amount, 0) = 0)
 );
 CREATE INDEX booking_fingerprint ON booking(fingerprint) WHERE status <> 'cancelled';
-CREATE INDEX booking_site_created ON booking(site_id, created_at DESC);
+CREATE INDEX booking_site_created ON booking(selling_site_id, created_at DESC);
+CREATE INDEX booking_week ON booking(settlement_week_id);
+
+-- Kural 9 ve 8: tahsilat bir kez yazılır; hesaplandığı hafta bir kez yazılır; eski hafta değişmez.
+CREATE FUNCTION booking_settlement_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF OLD.collection_method IS NOT NULL AND (NEW.collection_method IS DISTINCT FROM OLD.collection_method
+       OR NEW.collected_amount IS DISTINCT FROM OLD.collected_amount OR NEW.collector IS DISTINCT FROM OLD.collector) THEN
+    RAISE EXCEPTION 'collection already recorded for booking % (no second collection)', OLD.id;
+  END IF;
+  IF OLD.settlement_week_id IS NOT NULL AND NEW.settlement_week_id IS DISTINCT FROM OLD.settlement_week_id THEN
+    RAISE EXCEPTION 'booking % already settled in % (use an adjustment)', OLD.id, OLD.settlement_week_id;
+  END IF;
+  IF OLD.settlement_week_id IS NOT NULL AND (
+       NEW.final_booking_price IS DISTINCT FROM OLD.final_booking_price
+    OR NEW.site_commission_amount IS DISTINCT FROM OLD.site_commission_amount
+    OR NEW.agos_fee_amount IS DISTINCT FROM OLD.agos_fee_amount
+    OR NEW.supplier_entitlement IS DISTINCT FROM OLD.supplier_entitlement
+    OR NEW.supplier_id IS DISTINCT FROM OLD.supplier_id) THEN
+    RAISE EXCEPTION 'settled amounts of booking % are frozen (use an adjustment)', OLD.id;
+  END IF;
+  RETURN NEW;
+END $$;
+CREATE TRIGGER booking_settlement_guard BEFORE UPDATE ON booking FOR EACH ROW EXECUTE FUNCTION booking_settlement_guard();
+CREATE FUNCTION no_delete() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  RAISE EXCEPTION '% rows are never deleted', TG_TABLE_NAME;
+END $$;
+CREATE TRIGGER booking_no_delete BEFORE DELETE ON booking FOR EACH ROW EXECUTE FUNCTION no_delete();
 
 CREATE TABLE idempotency_key (
   scope           text PRIMARY KEY,           -- intake:<site>:<key>
@@ -225,81 +281,51 @@ CREATE TABLE outbox_event (
 );
 CREATE INDEX outbox_due ON outbox_event(next_attempt_at) WHERE status IN ('pending', 'retry');
 
--- K15: tahsilat ve iade kayıtları (yalnız eklenir). Online kart yalnız merkezden, araçta nakit yalnız tedarikçiden.
-CREATE TABLE payment_event (
-  id              uuid PRIMARY KEY,
-  booking_id      uuid NOT NULL REFERENCES booking(id),
-  kind            text NOT NULL CHECK (kind IN ('collection', 'refund')),
-  method          payment_method NOT NULL,
-  amount_minor    bigint NOT NULL CHECK (amount_minor > 0),
-  currency        currency NOT NULL,
-  party_kind      text NOT NULL CHECK (party_kind IN ('carrier', 'partner', 'platform')),
-  party_id        text NOT NULL,
-  at              timestamptz NOT NULL DEFAULT now(),
-  CHECK (method <> 'card_online' OR party_kind = 'platform'),
-  CHECK (method <> 'cash_in_vehicle' OR party_kind = 'carrier')
-);
-
-CREATE TABLE ledger_entry (
-  id              uuid PRIMARY KEY,
-  booking_id      uuid NOT NULL REFERENCES booking(id),
-  party_kind      text NOT NULL CHECK (party_kind IN ('carrier', 'partner', 'platform')),
-  party_id        text NOT NULL,
-  amount_minor    bigint NOT NULL,
-  currency        currency NOT NULL,
-  kind            text NOT NULL CHECK (kind IN ('shuttle_share', 'pass_share', 'reversal')),
-  policy_id       text NOT NULL,              -- split_policy.id veya pass_policy.id
-  reverses_entry_id uuid UNIQUE REFERENCES ledger_entry(id),  -- bir satır en fazla bir kez ters çevrilir
-  created_at      timestamptz NOT NULL DEFAULT now(),
-  CHECK ((kind = 'reversal') = (reverses_entry_id IS NOT NULL))
-);
-CREATE UNIQUE INDEX ledger_one_share_per_party ON ledger_entry(booking_id, party_kind) WHERE kind <> 'reversal';
-
 CREATE FUNCTION append_only() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
   RAISE EXCEPTION '% is append-only (% blocked)', TG_TABLE_NAME, TG_OP;
 END $$;
-CREATE TRIGGER ledger_entry_no_update BEFORE UPDATE OR DELETE ON ledger_entry
-  FOR EACH ROW EXECUTE FUNCTION append_only();
-CREATE TRIGGER payment_event_no_update BEFORE UPDATE OR DELETE ON payment_event
-  FOR EACH ROW EXECUTE FUNCTION append_only();
 
--- K15: haftalık kapanış (Pazartesi–Pazar, Europe/Istanbul). Yalnız ekstre; ödeme gönderimi kapalı.
-CREATE TABLE settlement_closing (
-  week_start      date PRIMARY KEY CHECK (extract(isodow FROM week_start) = 1),
-  period_end      timestamptz NOT NULL,
-  created_at      timestamptz NOT NULL DEFAULT now(),
-  payout_execution text NOT NULL DEFAULT 'disabled_pending_legal_review'
-    CHECK (payout_execution = 'disabled_pending_legal_review')
-);
-CREATE TABLE settlement_statement (
-  week_start      date NOT NULL REFERENCES settlement_closing(week_start),
-  party_kind      text NOT NULL,
-  party_id        text NOT NULL,
+-- Kural 6: banka dekontları (tedarikçi → site / AGOS). Yalnız eklenir; aynı dekont iki kez girilemez.
+CREATE TABLE bank_receipt (
+  id              uuid PRIMARY KEY,
+  week_id         text NOT NULL CHECK (week_id ~ '^[0-9]{4}-W[0-9]{2}$'),
+  payer_id        text NOT NULL,
+  payee_id        text NOT NULL,
+  amount          bigint NOT NULL CHECK (amount > 0),
   currency        currency NOT NULL,
-  earned_minor    bigint NOT NULL,
-  held_minor      bigint NOT NULL,
-  net_minor       bigint NOT NULL CHECK (net_minor = earned_minor - held_minor),
-  PRIMARY KEY (week_start, party_kind, party_id, currency)
+  bank_reference  text NOT NULL,
+  paid_at         timestamptz NOT NULL,
+  recorded_at     timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (payer_id, bank_reference)
 );
--- Mükerrer koruması: her defter satırı ve her tahsilat EN FAZLA BİR kapanışa girer.
-CREATE TABLE settlement_item (
-  week_start      date NOT NULL REFERENCES settlement_closing(week_start),
-  ledger_entry_id uuid UNIQUE REFERENCES ledger_entry(id),
-  payment_event_id uuid UNIQUE REFERENCES payment_event(id),
-  CHECK ((ledger_entry_id IS NULL) <> (payment_event_id IS NULL))
+CREATE TRIGGER bank_receipt_append_only BEFORE UPDATE OR DELETE ON bank_receipt FOR EACH ROW EXECUTE FUNCTION append_only();
+
+-- Kural 8: düzeltme hareketleri — eski hafta silinmez/değişmez, düzeltme yeni haftaya yazılır.
+CREATE TABLE settlement_adjustment (
+  id              uuid PRIMARY KEY,
+  booking_id      uuid NOT NULL REFERENCES booking(id),
+  week_id         text NOT NULL,
+  original_week_id text NOT NULL REFERENCES settlement_week(week_id),
+  debtor_id       text NOT NULL,
+  creditor_id     text NOT NULL,
+  amount          bigint NOT NULL CHECK (amount <> 0),
+  currency        currency NOT NULL,
+  reason          text NOT NULL,
+  adjustment_reference text NOT NULL,
+  created_at      timestamptz NOT NULL DEFAULT now(),
+  CHECK (week_id > original_week_id)
 );
-CREATE TRIGGER settlement_item_no_update BEFORE UPDATE OR DELETE ON settlement_item
+CREATE TRIGGER settlement_adjustment_append_only BEFORE UPDATE OR DELETE ON settlement_adjustment
+  FOR EACH ROW EXECUTE FUNCTION append_only();
+CREATE TRIGGER settlement_week_append_only BEFORE UPDATE OR DELETE ON settlement_week
   FOR EACH ROW EXECUTE FUNCTION append_only();
 
--- RLS: üye yalnız kendi sitesinin kayıtlarını görür. Uygulama her işlemde
---   SET LOCAL app.partner_id = '<oturumdaki partner>';
--- çalıştırır; değer istemciden değil, doğrulanmış oturumdan gelir. Başka kiracının kaydı 404 döner.
+-- RLS: site sahibi yalnız kendi satışlarını, tedarikçi yalnız kendi işlerini görür. Uygulama her işlemde
+--   SET LOCAL app.party_id = '<oturumdaki taraf>';
+-- çalıştırır; değer istemciden değil, doğrulanmış oturumdan gelir. Başka tarafın kaydı 404 döner.
 ALTER TABLE booking ENABLE ROW LEVEL SECURITY;
-CREATE POLICY booking_partner_read ON booking FOR SELECT
-  USING (source_partner_id = current_setting('app.partner_id', true));
-ALTER TABLE ledger_entry ENABLE ROW LEVEL SECURITY;
-CREATE POLICY ledger_partner_read ON ledger_entry FOR SELECT
-  USING (party_kind = 'partner' AND party_id = current_setting('app.partner_id', true));
+CREATE POLICY booking_party_read ON booking FOR SELECT
+  USING (selling_party_id = current_setting('app.party_id', true) OR supplier_id = current_setting('app.party_id', true));
 
 COMMIT;

@@ -1,19 +1,11 @@
 import assert from "node:assert/strict";
 import type { AddressInfo } from "node:net";
 import { after, before, describe, it } from "node:test";
-import {
-  PASS_POLICY_DECK_V3,
-  SHUTTLE_DIRECT_SPLIT_PROPOSED,
-  SHUTTLE_SPLIT_V1,
-  parseShuttleTariff,
-  parseSiteRecord,
-  type SiteRecord,
-} from "@ag/core";
+import { SHUTTLE_SPLIT_V1, parseShuttleTariff, parseSiteRecord, type SiteRecord } from "@ag/core";
 import { createApiServer } from "./http.ts";
 import { BookingService } from "./service.ts";
 import { MemoryStore } from "./store.ts";
 
-const BOTH = ["card_online", "cash_in_vehicle"];
 const sites = new Map<string, SiteRecord>(
   [
     {
@@ -23,47 +15,46 @@ const sites = new Map<string, SiteRecord>(
       domains: ["www.partner.example"],
       ownerEmail: "owner@partner.example",
       status: "live",
-      privateMode: "network_pass",
       salePrices: { private: 8000, vip: 12000 },
       saleCurrency: "EUR",
-      paymentMethods: BOTH,
+      collectionMethods: ["cash", "card_pos", "bank_transfer"],
     },
     {
+      // Kendi aracıyla çalışan, yetkisi doğrulanmış site
       id: "self-op-site",
       ownership: "partner",
       partnerId: "p-002",
       domains: ["www.selfop.example"],
       ownerEmail: "owner@selfop.example",
       status: "live",
-      privateMode: "self_operated",
       selfOperationVerifiedAt: "2026-11-01T00:00:00Z",
-      paymentMethods: BOTH,
+      collectionMethods: ["cash"],
     },
     {
-      id: "ag-brand-site",
+      // alanyagroup.com
+      id: "alanyagroup-com",
       ownership: "ag_brand",
-      domains: ["www.agbrand.example"],
-      ownerEmail: "ops@agbrand.example",
+      domains: ["www.alanyagroup.example"],
+      ownerEmail: "ops@alanyagroup.example",
       status: "live",
-      paymentMethods: ["card_online"],
+      collectionMethods: ["card_pos"],
     },
   ].map((raw) => {
     const s = parseSiteRecord(raw);
     return [s.id, s];
   }),
 );
-
 const ORIGIN: Record<string, string> = {
   "partner-site": "https://www.partner.example",
   "self-op-site": "https://www.selfop.example",
-  "ag-brand-site": "https://www.agbrand.example",
+  "alanyagroup-com": "https://www.alanyagroup.example",
 };
 const admin = { authorization: "Bearer admin-secret-for-tests" };
+const W45 = "2026-W45";
 
-/** Her senaryo kendi temiz sunucusu ve deposuyla çalışır; bakiyeler birbirine karışmaz. */
-function harness() {
+function harness(startAt = "2026-11-02T08:00:00Z") {
   let seq = 0;
-  let now = new Date("2026-11-03T10:00:00Z");
+  let now = new Date(startAt);
   const service = new BookingService({
     store: new MemoryStore(),
     sites,
@@ -77,8 +68,7 @@ function harness() {
       maxPassengers: 10,
       totalsMinor: [3000, 5000, 6000, 7000],
     }),
-    splitPolicies: { partnerSourced: SHUTTLE_SPLIT_V1, direct: SHUTTLE_DIRECT_SPLIT_PROPOSED },
-    passPolicy: PASS_POLICY_DECK_V3,
+    shuttlePolicy: SHUTTLE_SPLIT_V1,
     pool: { slotMinutes: 60, vehicleCapacity: 10 },
     devOrigins: [],
     clock: () => now,
@@ -88,28 +78,26 @@ function harness() {
   const server = createApiServer({ service, sites, devOrigins: [], adminToken: "admin-secret-for-tests", publicRateLimitPerMinute: 1000 });
   const h = {
     base: "",
+    service,
     setNow(iso: string) {
       now = new Date(iso);
     },
     async post(path: string, body: unknown, headers: Record<string, string> = {}) {
-      const r = await fetch(h.base + path, {
-        method: "POST",
-        headers: { "content-type": "application/json", ...headers },
-        body: JSON.stringify(body),
-      });
+      const r = await fetch(h.base + path, { method: "POST", headers: { "content-type": "application/json", ...headers }, body: JSON.stringify(body) });
       return { status: r.status, body: (await r.json()) as Record<string, any> };
     },
     async get(path: string) {
       return (await fetch(h.base + path, { headers: admin }).then((x) => x.json())) as any;
     },
+    adminPost: (path: string, body: unknown = {}) => h.post(path, body, admin),
     async book(over: Record<string, unknown>, key: string) {
       const body = {
         siteId: "partner-site",
         product: "shuttle",
         routeCode: "AYT-ALN",
         pickup: "Antalya Airport (AYT)",
-        dropoff: "Alanya, Mahmutlar",
-        pickupAt: "2026-12-05T13:20",
+        dropoff: "Alanya",
+        pickupAt: "2026-11-04T13:20",
         passengers: 2,
         customer: { name: "Guest", email: `${key}@example.com`, phone: "+49 151 0000000", locale: "de" },
         consent: true,
@@ -117,13 +105,28 @@ function harness() {
       };
       return h.post("/v1/public/bookings", body, { origin: ORIGIN[body.siteId as string]!, "idempotency-key": key.padEnd(16, "0") });
     },
-    adminPost: (path: string, body: unknown = {}) => h.post(path, body, admin),
-    async balance(kind: string, id: string) {
-      const rows = (await h.get("/v1/admin/ledger/balances")) as any[];
-      return rows.find((r) => r.party.kind === kind && r.party.id === id)?.amountMinor ?? 0;
-    },
     async runOf(ref: string) {
       return ((await h.get("/v1/admin/bookings")) as any[]).find((b) => b.ref === ref).shuttleRunId as string;
+    },
+    /** Shuttle: onay → sefere tedarikçi → tahsilat → tamamlama. */
+    async shuttleJob(over: Record<string, unknown>, key: string, supplierId: string, collect: { method: string; amountMinor?: number } | null) {
+      const r = await h.book(over, key);
+      assert.equal(r.status, 201, JSON.stringify(r.body));
+      const ref = r.body.ref as string;
+      assert.equal((await h.adminPost(`/v1/admin/bookings/${ref}/confirm`)).status, 200);
+      const run = await h.runOf(ref);
+      const a = await h.adminPost(`/v1/admin/shuttle-runs/${run}/assign`, { supplierId });
+      assert.equal(a.status, 200, JSON.stringify(a.body));
+      if (collect) {
+        const c = await h.adminPost(`/v1/admin/bookings/${ref}/collection`, {
+          method: collect.method,
+          collector: "supplier",
+          amountMinor: collect.amountMinor ?? r.body.price.amountMinor,
+        });
+        assert.equal(c.status, 200, JSON.stringify(c.body));
+      }
+      assert.equal((await h.adminPost(`/v1/admin/shuttle-runs/${run}/complete`)).status, 200);
+      return ref;
     },
     start: () =>
       new Promise<void>((r) =>
@@ -137,224 +140,213 @@ function harness() {
   return h;
 }
 
-const central = { kind: "platform" };
-const card = (amountMinor: number) => ({ kind: "collection", method: "card_online", amountMinor, party: central });
-const cash = (amountMinor: number, supplier: string) => ({
-  kind: "collection",
-  method: "cash_in_vehicle",
-  amountMinor,
-  party: { kind: "carrier", id: supplier },
-});
-
 describe("public intake", () => {
   const h = harness();
   before(h.start);
   after(h.stop);
 
-  it("rejects requests without an idempotency key or from an unregistered origin", async () => {
+  it("rejects a missing idempotency key and an unregistered origin", async () => {
     assert.equal((await h.post("/v1/public/bookings", {}, { origin: ORIGIN["partner-site"]! })).status, 400);
-    const valid = {
-      siteId: "partner-site",
-      product: "shuttle",
-      routeCode: "AYT-ALN",
-      pickup: "AYT",
-      dropoff: "Alanya",
-      pickupAt: "2026-12-05T13:20",
-      passengers: 2,
-      customer: { name: "G", email: "g@example.com", phone: "+49 151 0000000", locale: "de" },
-      consent: true,
-    };
-    const r = await h.post("/v1/public/bookings", valid, { origin: "https://www.agbrand.example", "idempotency-key": "k-origin-mismatch-0001" });
-    assert.equal(r.status, 403);
-    assert.equal(r.body.error, "origin_not_allowed");
+    const r = await h.post(
+      "/v1/public/bookings",
+      { siteId: "partner-site", product: "shuttle", routeCode: "AYT-ALN", pickup: "AYT", dropoff: "Alanya", pickupAt: "2026-12-05T13:20", passengers: 2, customer: { name: "G", email: "g@example.com", phone: "+49 151 0000000", locale: "de" }, consent: true },
+      { origin: "https://www.alanyagroup.example", "idempotency-key": "k-origin-mismatch-0001" },
+    );
+    assert.deepEqual([r.status, r.body.error], [403, "origin_not_allowed"]);
   });
 
   it("prices shuttle on the server, ignores client prices, and is idempotent", async () => {
     const first = await h.book({ price: 1 }, "k-idem");
-    assert.equal(first.status, 201);
     assert.deepEqual(first.body.price, { amountMinor: 5000, currency: "EUR" });
-    assert.equal(first.body.status, "request", "a form submission is not a confirmed sale");
+    assert.equal(first.body.status, "request");
     assert.equal((await h.book({ price: 1 }, "k-idem")).body.ref, first.body.ref);
     assert.equal((await h.book({ passengers: 3 }, "k-idem")).status, 409);
   });
 
   it("refuses a payment method the site does not allow", async () => {
-    const r = await h.book({ siteId: "ag-brand-site", paymentMethod: "cash_in_vehicle" }, "k-paymeth");
+    const r = await h.book({ siteId: "alanyagroup-com", paymentMethod: "cash" }, "k-paymeth");
     assert.equal(r.body.error, "payment_method_not_allowed_for_site");
   });
 
-  it("lets the customer look up a booking only with its token", async () => {
+  it("lets the customer look up a booking only with its token; admin needs the token", async () => {
     const created = await h.book({ pickupAt: "2026-12-07T10:00" }, "k-lookup");
-    const ok = await fetch(`${h.base}/v1/public/bookings/${created.body.ref}`, { headers: { "x-lookup-token": created.body.lookupToken } });
-    assert.equal(ok.status, 200);
-    const bad = await fetch(`${h.base}/v1/public/bookings/${created.body.ref}`, { headers: { "x-lookup-token": "nope" } });
-    assert.equal(bad.status, 404);
-  });
-
-  it("keeps admin endpoints closed without the token", async () => {
+    assert.equal((await fetch(`${h.base}/v1/public/bookings/${created.body.ref}`, { headers: { "x-lookup-token": created.body.lookupToken } })).status, 200);
+    assert.equal((await fetch(`${h.base}/v1/public/bookings/${created.body.ref}`, { headers: { "x-lookup-token": "nope" } })).status, 404);
     assert.equal((await fetch(h.base + "/v1/admin/bookings")).status, 401);
   });
 });
 
-describe("shuttle — Owner decision (30/50/60/70, 70/20/10, 5+ manual)", () => {
+describe("K15 — supplier collection and the 20 / 10 / 70 split", () => {
   const h = harness();
   before(h.start);
   after(h.stop);
 
-  it("sample bookings 1–4 pax: prices, one vehicle, separate shares after full payment", async () => {
-    const refs: string[] = [];
-    for (const pax of [1, 2, 3, 4]) {
-      const r = await h.book({ passengers: pax, pickupAt: "2026-12-12T11:10" }, `k-sample-${pax}`);
-      assert.deepEqual(r.body.price, { amountMinor: [3000, 5000, 6000, 7000][pax - 1], currency: "EUR" });
-      refs.push(r.body.ref);
+  it("Owner sample bookings: each booking carries its own site and AGOS receivables", async () => {
+    const expected: Array<[number, number, number, number]> = [
+      [1, 600, 300, 2100],
+      [2, 1000, 500, 3500],
+      [3, 1200, 600, 4200],
+      [4, 1400, 700, 4900],
+    ];
+    for (const [pax, site, agos, supplier] of expected) {
+      const ref = await h.shuttleJob({ passengers: pax, pickupAt: `2026-11-03T1${pax}:00` }, `k-owner-${pax}`, "sup-A", { method: "cash" });
+      const s = ((await h.get("/v1/admin/bookings")) as any[]).find((b) => b.ref === ref).settlement;
+      assert.deepEqual(
+        [s.site_commission_amount, s.agos_fee_amount, s.supplier_entitlement, s.supplier_payment_to_site, s.supplier_payment_to_agos],
+        [site, agos, supplier, site, agos],
+      );
+      assert.deepEqual([s.collector, s.collection_status, s.selling_party_id, s.supplier_id], ["supplier", "collected", "p-001", "sup-A"]);
     }
-    const runId = await h.runOf(refs[0]!);
-    for (const ref of refs) assert.equal(await h.runOf(ref), runId, "1+2+3+4 = 10 seats fill one vehicle");
-    for (const ref of refs) await h.adminPost(`/v1/admin/bookings/${ref}/confirm`);
-    await h.adminPost(`/v1/admin/shuttle-runs/${runId}/assign`, { carrierPayeeId: "sup-A" });
-
-    // Ödemesiz tamamlama: pay yazılmaz, tahsilat beklenir.
-    const done = await h.adminPost(`/v1/admin/shuttle-runs/${runId}/complete`);
-    assert.ok((done.body.bookings as any[]).every((b) => b.result === "awaiting_payment"));
-    assert.equal(await h.balance("carrier", "sup-A"), 0);
-
-    // Tahsilat: ilk ikisi online (merkez), son ikisi araçta nakit (tedarikçi). Son tahsilatla pay yazılır.
-    for (const [i, ref] of refs.entries()) {
-      const amount = [3000, 5000, 6000, 7000][i]!;
-      const r = await h.adminPost(`/v1/admin/bookings/${ref}/payments`, i < 2 ? card(amount) : cash(amount, "sup-A"));
-      assert.equal(r.status, 201, JSON.stringify(r.body));
-      assert.equal(r.body.finance, "shares_earned");
-    }
-    // Toplam satış 210 € → tedarikçi 147 €, site 42 €, Alanya Group 21 € — ayrı satırlar.
-    assert.equal(await h.balance("carrier", "sup-A"), 14700);
-    assert.equal(await h.balance("partner", "p-001"), 4200);
-    assert.equal(await h.balance("platform", "central"), 2100);
-
-    // Mükerrer koruma: aynı rezervasyon için ikinci tahsilat kalanı aşar.
-    assert.equal((await h.adminPost(`/v1/admin/bookings/${refs[0]}/payments`, card(100))).body.error, "exceeds_remaining");
   });
 
-  it("5+ passengers: no automatic price, no supplier share until a manual price is approved", async () => {
-    const quote = await fetch(`${h.base}/v1/public/shuttle-quote?route=AYT-ALN&date=2026-12-13&passengers=5`);
-    assert.deepEqual(await quote.json(), { requiresApproval: true });
-    const r = await h.book({ passengers: 5, pickupAt: "2026-12-13T08:00" }, "k-five");
-    assert.equal(r.body.price, undefined);
+  it("alanyagroup.com is a sales channel under the same rule", async () => {
+    const ref = await h.shuttleJob({ siteId: "alanyagroup-com", pickupAt: "2026-11-04T09:00" }, "k-agcom", "sup-A", { method: "card_pos" });
+    const s = ((await h.get("/v1/admin/bookings")) as any[]).find((b) => b.ref === ref).settlement;
+    assert.deepEqual([s.selling_party_id, s.site_commission_amount, s.agos_fee_amount, s.supplier_entitlement], ["alanya-group", 1000, 500, 3500]);
+  });
+
+  it("a site using its own (verified) vehicle keeps 90 % and pays AGOS 10 %; unverified self-supply is refused", async () => {
+    const ref = await h.shuttleJob({ siteId: "self-op-site", pickupAt: "2026-11-05T09:00" }, "k-self", "p-002", { method: "cash" });
+    const s = ((await h.get("/v1/admin/bookings")) as any[]).find((b) => b.ref === ref).settlement;
+    assert.deepEqual([s.self_supplied, s.site_commission_amount, s.agos_fee_amount, s.supplier_entitlement], [true, 0, 500, 4500]);
+
+    const r = await h.book({ pickupAt: "2026-11-05T15:00" }, "k-unverified");
+    await h.adminPost(`/v1/admin/bookings/${r.body.ref}/confirm`);
+    const a = await h.adminPost(`/v1/admin/shuttle-runs/${await h.runOf(r.body.ref)}/assign`, { supplierId: "p-001" });
+    assert.deepEqual([a.status, a.body.error], [409, "self_operation_not_verified"]);
+  });
+
+  it("collection rules: supplier only, allowed method only, once per booking, not above the price", async () => {
+    const r = await h.book({ siteId: "alanyagroup-com", pickupAt: "2026-11-06T09:00" }, "k-rules");
+    const ref = r.body.ref;
+    assert.equal((await h.adminPost(`/v1/admin/bookings/${ref}/collection`, { method: "card_pos", collector: "supplier", amountMinor: 5000 })).body.error, "supplier_not_assigned");
+    await h.adminPost(`/v1/admin/bookings/${ref}/confirm`);
+    await h.adminPost(`/v1/admin/shuttle-runs/${await h.runOf(ref)}/assign`, { supplierId: "sup-B" });
+    const tries: Array<[Record<string, unknown>, string]> = [
+      [{ method: "card_pos", collector: "site", amountMinor: 5000 }, "shuttle_collection_is_by_supplier"],
+      [{ method: "cash", collector: "supplier", amountMinor: 5000 }, "method_not_allowed_for_booking"],
+      [{ method: "card_pos", collector: "supplier", amountMinor: 5001 }, "exceeds_booking_price"],
+    ];
+    for (const [body, err] of tries) assert.equal((await h.adminPost(`/v1/admin/bookings/${ref}/collection`, body)).body.error, err);
+    assert.equal((await h.adminPost(`/v1/admin/bookings/${ref}/collection`, { method: "card_pos", collector: "supplier", amountMinor: 5000 })).status, 200);
+    assert.equal(
+      (await h.adminPost(`/v1/admin/bookings/${ref}/collection`, { method: "card_pos", collector: "supplier", amountMinor: 5000 })).body.error,
+      "collection_already_recorded",
+      "no second collection record",
+    );
+  });
+
+  it("5+ passengers stay unpriced until a manual price is approved; no entitlement is shown before that", async () => {
+    const r = await h.book({ passengers: 5, pickupAt: "2026-11-06T12:00" }, "k-five");
     assert.equal(r.body.next, "price_requires_approval");
-    const ref = r.body.ref;
-    assert.equal((await h.adminPost(`/v1/admin/bookings/${ref}/confirm`)).body.error, "price_requires_approval");
-    assert.equal((await h.adminPost(`/v1/admin/bookings/${ref}/payments`, card(1000))).body.error, "price_not_set");
-    assert.equal((await h.adminPost(`/v1/admin/bookings/${ref}/approve-price`, { amountMinor: 8000, currency: "EUR" })).status, 200);
-    assert.equal((await h.adminPost(`/v1/admin/bookings/${ref}/approve-price`, { amountMinor: 9000, currency: "EUR" })).body.error, "price_already_set");
-    await h.adminPost(`/v1/admin/bookings/${ref}/confirm`);
-    const runId = await h.runOf(ref);
-    await h.adminPost(`/v1/admin/shuttle-runs/${runId}/assign`, { carrierPayeeId: "sup-five" });
-    await h.adminPost(`/v1/admin/bookings/${ref}/payments`, card(8000));
-    await h.adminPost(`/v1/admin/shuttle-runs/${runId}/complete`);
-    assert.equal(await h.balance("carrier", "sup-five"), 5600);
-  });
-
-  it("K4: a direct Alanya Group site booking writes NO automatic shares and goes to finance review", async () => {
-    const r = await h.book({ siteId: "ag-brand-site", pickupAt: "2026-12-14T09:00" }, "k-direct");
-    const ref = r.body.ref;
-    await h.adminPost(`/v1/admin/bookings/${ref}/confirm`);
-    const runId = await h.runOf(ref);
-    await h.adminPost(`/v1/admin/shuttle-runs/${runId}/assign`, { carrierPayeeId: "sup-direct" });
-    await h.adminPost(`/v1/admin/bookings/${ref}/payments`, card(5000));
-    const done = await h.adminPost(`/v1/admin/shuttle-runs/${runId}/complete`);
-    assert.equal(done.body.bookings[0].result, "split_policy_not_approved");
-    assert.equal(await h.balance("carrier", "sup-direct"), 0);
-    const outbox = (await h.get("/v1/admin/outbox")) as any[];
-    assert.ok(outbox.some((e) => e.type === "finance.review_required" && e.payload.reason === "split_policy_not_approved"));
+    const row = ((await h.get("/v1/admin/bookings")) as any[]).find((b) => b.ref === r.body.ref);
+    assert.equal(row.settlement, null, "no supplier entitlement before the price is fixed");
+    assert.equal((await h.adminPost(`/v1/admin/bookings/${r.body.ref}/confirm`)).body.error, "price_requires_approval");
+    assert.equal((await h.adminPost(`/v1/admin/bookings/${r.body.ref}/approve-price`, { amountMinor: 8000, currency: "EUR" })).status, 200);
+    assert.equal((await h.adminPost(`/v1/admin/bookings/${r.body.ref}/confirm`)).status, 200);
   });
 });
 
-describe("private / VIP — K12", () => {
+describe("Private / VIP — site sets the supplier entitlement, no AGOS fee", () => {
   const h = harness();
   before(h.start);
   after(h.stop);
 
-  it("Model B (NETWORK_PASS): 80 € → supplier 47,50 €, site 32,50 €, Alanya Group 0 €", async () => {
-    const r = await h.book({ product: "private", routeCode: undefined, pickupAt: "2026-12-11T09:00" }, "k-pass");
+  it("pass to a supplier: customer pays supplier, supplier passes the difference to the site", async () => {
+    const r = await h.book({ product: "private", routeCode: undefined, pickupAt: "2026-11-04T09:00" }, "k-priv");
+    const ref = r.body.ref;
     assert.deepEqual(r.body.price, { amountMinor: 8000, currency: "EUR" });
-    const ref = r.body.ref;
-    assert.equal((await h.adminPost(`/v1/admin/bookings/${ref}/complete`, { carrierPayeeId: "sup-P" })).status, 409, "confirm first");
+    assert.equal((await h.adminPost(`/v1/admin/bookings/${ref}/assign`, { mode: "pool" })).status, 501);
+    assert.equal((await h.adminPost(`/v1/admin/bookings/${ref}/assign`, { mode: "pass", supplierId: "sup-P", supplierEntitlementMinor: 9000 })).body.error, "supplierEntitlementMinor_invalid");
+    assert.equal((await h.adminPost(`/v1/admin/bookings/${ref}/assign`, { mode: "self" })).body.error, "self_operation_not_verified");
+    assert.equal((await h.adminPost(`/v1/admin/bookings/${ref}/assign`, { mode: "pass", supplierId: "sup-P", supplierEntitlementMinor: 4750 })).status, 200);
     await h.adminPost(`/v1/admin/bookings/${ref}/confirm`);
-    // Ön ödeme online, kalan araçta nakit.
-    await h.adminPost(`/v1/admin/bookings/${ref}/payments`, card(2000));
-    const done = await h.adminPost(`/v1/admin/bookings/${ref}/complete`, { carrierPayeeId: "sup-P" });
-    assert.equal(done.body.result, "awaiting_payment");
-    const rest = await h.adminPost(`/v1/admin/bookings/${ref}/payments`, cash(6000, "sup-P"));
-    assert.equal(rest.body.finance, "shares_earned");
-    assert.equal(await h.balance("carrier", "sup-P"), 4750);
-    assert.equal(await h.balance("partner", "p-001"), 3250);
-    assert.equal(await h.balance("platform", "central"), 0);
+    await h.adminPost(`/v1/admin/bookings/${ref}/collection`, { method: "cash", collector: "supplier", amountMinor: 8000 });
+    const done = await h.adminPost(`/v1/admin/bookings/${ref}/complete`);
+    const s = done.body.settlement;
+    assert.deepEqual(
+      [s.site_commission_amount, s.agos_fee_amount, s.supplier_entitlement, s.supplier_payment_to_site, s.supplier_payment_to_agos],
+      [3250, 0, 4750, 3250, 0],
+    );
   });
 
-  it("Model A (SELF_OPERATED): only with verified authority; no Alanya Group transaction commission", async () => {
-    assert.throws(() =>
-      parseSiteRecord({ id: "x-site", ownership: "partner", partnerId: "p", domains: ["x.example"], ownerEmail: "a@b.co", status: "live", privateMode: "self_operated" }),
-    /selfOperationVerifiedAt/);
-    const r = await h.book({ siteId: "self-op-site", product: "vip", routeCode: undefined, pickupAt: "2026-12-06T09:00" }, "k-self");
-    assert.equal(r.body.next, "site_owner_will_send_quote");
-    assert.equal(r.body.price, undefined);
-    const outbox = (await h.get("/v1/admin/outbox")) as any[];
-    assert.ok(outbox.some((e) => e.type === "private.request_received.notify_site_owner"));
-    assert.ok(!JSON.stringify(outbox).includes("@example.com"), "outbox carries no PII");
+  it("customer pays the site: the site owes the supplier its entitlement", async () => {
+    const r = await h.book({ product: "vip", routeCode: undefined, pickupAt: "2026-11-04T11:00" }, "k-vip");
+    const ref = r.body.ref;
+    await h.adminPost(`/v1/admin/bookings/${ref}/assign`, { mode: "pass", supplierId: "sup-V", supplierEntitlementMinor: 6000 });
+    await h.adminPost(`/v1/admin/bookings/${ref}/confirm`);
+    const c = await h.adminPost(`/v1/admin/bookings/${ref}/collection`, { method: "bank_transfer", collector: "site", amountMinor: 12000 });
+    assert.deepEqual([c.body.settlement.site_payment_to_supplier, c.body.settlement.supplier_payment_to_site], [6000, 0]);
   });
 });
 
-describe("K15 — payments, refunds and weekly closing", () => {
+describe("K15 — weekly closing, receipts, exceptions and corrections", () => {
   const h = harness();
   before(h.start);
   after(h.stop);
+  let paidRef = "";
 
-  it("refund after shares reverses them once; cancellation flags the refund due", async () => {
-    const r = await h.book({ pickupAt: "2026-11-05T10:00" }, "k-refund");
-    const ref = r.body.ref;
-    await h.adminPost(`/v1/admin/bookings/${ref}/confirm`);
-    const runId = await h.runOf(ref);
-    await h.adminPost(`/v1/admin/shuttle-runs/${runId}/assign`, { carrierPayeeId: "sup-R" });
-    assert.equal((await h.adminPost(`/v1/admin/bookings/${ref}/payments`, cash(5000, "sup-OTHER"))).body.error, "cash_only_by_assigned_supplier");
-    await h.adminPost(`/v1/admin/bookings/${ref}/payments`, card(5000));
-    await h.adminPost(`/v1/admin/shuttle-runs/${runId}/complete`);
-    assert.equal(await h.balance("carrier", "sup-R"), 3500);
-    const refund = await h.adminPost(`/v1/admin/bookings/${ref}/payments`, { ...card(5000), kind: "refund" });
-    assert.equal(refund.body.finance, "shares_reversed_review_required");
-    assert.equal(await h.balance("carrier", "sup-R"), 0);
-    assert.equal(await h.balance("partner", "p-001"), 0);
-
-    const c = await h.book({ pickupAt: "2026-11-06T10:00" }, "k-cancel");
-    await h.adminPost(`/v1/admin/bookings/${c.body.ref}/payments`, card(1500));
-    const cancelled = await h.adminPost(`/v1/admin/bookings/${c.body.ref}/cancel`);
-    assert.equal(cancelled.body.refundDueMinor, 1500);
+  it("prepares a week with normal jobs and every kind of exception", async () => {
+    paidRef = await h.shuttleJob({ pickupAt: "2026-11-03T10:00" }, "k-w-paid", "sup-W", { method: "cash" }); // 50 €
+    await h.shuttleJob({ siteId: "alanyagroup-com", passengers: 4, pickupAt: "2026-11-03T11:00" }, "k-w-ag", "sup-W", { method: "card_pos" }); // 70 €
+    await h.shuttleJob({ pickupAt: "2026-11-04T10:00" }, "k-w-short", "sup-W", { method: "cash", amountMinor: 3000 }); // eksik
+    await h.shuttleJob({ pickupAt: "2026-11-04T11:00" }, "k-w-none", "sup-W", null); // tahsilat kaydı yok
+    const disputed = await h.shuttleJob({ pickupAt: "2026-11-04T12:00" }, "k-w-dispute", "sup-W", { method: "cash" });
+    assert.equal((await h.adminPost(`/v1/admin/bookings/${disputed}/dispute`, { reason: "customer no-show" })).status, 200);
+    const cancelled = await h.book({ pickupAt: "2026-11-05T10:00" }, "k-w-cancel");
+    await h.adminPost(`/v1/admin/bookings/${cancelled.body.ref}/cancel`);
   });
 
-  it("closes a week only after it ends, only once, and never counts an item twice", async () => {
-    const r = await h.book({ pickupAt: "2026-11-07T10:00", passengers: 1 }, "k-week");
-    const ref = r.body.ref;
-    await h.adminPost(`/v1/admin/bookings/${ref}/confirm`);
-    const runId = await h.runOf(ref);
-    await h.adminPost(`/v1/admin/shuttle-runs/${runId}/assign`, { carrierPayeeId: "sup-W" });
-    await h.adminPost(`/v1/admin/bookings/${ref}/payments`, cash(3000, "sup-W"));
-    await h.adminPost(`/v1/admin/shuttle-runs/${runId}/complete`);
-
-    assert.equal((await h.adminPost("/v1/admin/settlements/close-week", { weekStart: "2026-11-02" })).body.error, "week_not_finished");
+  it("refuses to close before Sunday 23:59 Istanbul; then closes once", async () => {
+    h.setNow("2026-11-08T20:59:00Z");
+    assert.equal((await h.adminPost(`/v1/admin/settlements/${W45}/close`)).body.error, "week_not_finished");
     h.setNow("2026-11-09T06:00:00Z");
-    const closing = await h.adminPost("/v1/admin/settlements/close-week", { weekStart: "2026-11-02" });
-    assert.equal(closing.status, 201);
-    assert.equal(closing.body.payoutExecution, "disabled_pending_legal_review");
-    const net = Object.fromEntries((closing.body.statements as any[]).map((s) => [`${s.party.kind}:${s.party.id}`, s.netMinor]));
-    // 30 € nakit tedarikçide: payı 21 € → 9 € borçlu; site 6 €, Alanya Group 3 € alacaklı.
-    assert.equal(net["carrier:sup-W"], -900);
-    assert.equal(net["partner:p-001"], 600);
-    const sum = (closing.body.statements as any[]).reduce((a, s) => a + s.netMinor, 0);
-    assert.equal(sum + (closing.body.unallocatedMinor.EUR ?? 0), 0, "money is conserved");
+    const c = await h.adminPost(`/v1/admin/settlements/${W45}/close`);
+    assert.equal(c.status, 201, JSON.stringify(c.body));
+    assert.equal(c.body.included.length, 2);
+    assert.deepEqual(
+      (c.body.exceptions as any[]).map((e) => e.reason).sort(),
+      ["cancelled", "completed_without_collection_record", "disputed", "short_collected"],
+    );
+    assert.equal(c.body.payout_execution, "disabled_owner_go_required");
+    const st = (c.body.supplier_statements as any[]).find((s) => s.supplier_id === "sup-W");
+    // 50 € (site-1) + 70 € (alanyagroup.com): siteye 10 + 14, AGOS 5 + 7
+    assert.deepEqual([st.collected, st.entitlement, st.owes_agos, st.total_owed], [12000, 8400, 1200, 3600]);
+    assert.equal((await h.adminPost(`/v1/admin/settlements/${W45}/close`)).body.error, "week_already_closed");
+  });
 
-    assert.equal((await h.adminPost("/v1/admin/settlements/close-week", { weekStart: "2026-11-02" })).body.error, "week_already_closed");
-    h.setNow("2026-11-16T06:00:00Z");
-    const next = await h.adminPost("/v1/admin/settlements/close-week", { weekStart: "2026-11-09" });
-    assert.deepEqual(next.body.entryIds, [], "already closed ledger entries are not closed again");
-    assert.deepEqual(next.body.paymentIds, []);
+  it("matches bank receipts, rejects a duplicate receipt, and reports what is still owed after Tuesday 18:00", async () => {
+    const receipt = (payeeId: string, amountMinor: number, bankReference: string) =>
+      h.adminPost("/v1/admin/receipts", { weekId: W45, payerId: "sup-W", payeeId, amountMinor, currency: "EUR", bankReference, paidAt: "2026-11-10T08:00:00Z" });
+    assert.equal((await receipt("p-001", 1000, "TR-0001")).status, 201);
+    assert.equal((await receipt("agos", 1200, "TR-0002")).status, 201);
+    assert.equal((await receipt("agos", 1200, "TR-0002")).body.error, "duplicate_bank_reference");
+    h.setNow("2026-11-10T16:00:00Z"); // Salı 19:00 İstanbul
+    const r = await h.get(`/v1/admin/settlements/${W45}`);
+    assert.equal(r.closed, true);
+    const ob = (c: string) => (r.obligations as any[]).find((o) => o.creditor_id === c);
+    assert.deepEqual([ob("p-001").status, ob("agos").status, ob("alanya-group").status, ob("alanya-group").late], ["paid", "paid", "unpaid", true]);
+    assert.ok((r.debts_and_disputes as any[]).some((d) => d.kind === "late_payment" && d.creditor_id === "alanya-group" && d.amount === 1400));
+    assert.ok((r.debts_and_disputes as any[]).some((d) => d.kind === "booking_dispute"));
+  });
+
+  it("refund after closing: W45 stays as it was; a correction appears in W46", async () => {
+    h.setNow("2026-11-11T09:00:00Z"); // W46
+    const refund = await h.adminPost(`/v1/admin/bookings/${paidRef}/refund`, { amountMinor: 5000 });
+    assert.equal(refund.status, 200, JSON.stringify(refund.body));
+    assert.equal(refund.body.settlement.settlement_status, "adjusted");
+    assert.match(refund.body.settlement.adjustment_reference, /^ADJ-/);
+    const w45 = await h.get(`/v1/admin/settlements/${W45}`);
+    assert.equal((w45.site_receivables as any[]).find((s) => s.site_party_id === "p-001").total, 1000, "old week unchanged");
+    const w46 = await h.get("/v1/admin/settlements/2026-W46");
+    assert.deepEqual(
+      (w46.adjustments as any[]).map((a) => [a.creditor_id, a.amount]).sort(),
+      [
+        ["agos", -500],
+        ["p-001", -1000],
+      ],
+    );
+    assert.equal(w46.included.length, 0, "the refunded booking is not counted again");
   });
 });
 
@@ -365,45 +357,23 @@ describe("K8 — tariff versions", () => {
       new BookingService({
         store,
         sites,
-        shuttleTariff: parseShuttleTariff({
-          id,
-          approval: "approved",
-          publishedAt: "2026-01-01",
-          currency: "EUR",
-          routes: ["AYT-ALN"],
-          validFrom: "2026-01-01",
-          maxPassengers: 10,
-          totalsMinor: totals,
-        }),
-        splitPolicies: { partnerSourced: SHUTTLE_SPLIT_V1, direct: SHUTTLE_DIRECT_SPLIT_PROPOSED },
-        passPolicy: PASS_POLICY_DECK_V3,
+        shuttleTariff: parseShuttleTariff({ id, approval: "approved", publishedAt: "2026-01-01", currency: "EUR", routes: ["AYT-ALN"], validFrom: "2026-01-01", maxPassengers: 10, totalsMinor: totals }),
+        shuttlePolicy: SHUTTLE_SPLIT_V1,
         pool: { slotMinutes: 60, vehicleCapacity: 10 },
         devOrigins: [],
         clock: () => new Date("2026-11-03T10:00:00Z"),
         random: { id: () => `${id}-${Math.random()}`, index: (m) => Math.floor(Math.random() * m), token: () => `${id}-tok` },
         verifyHuman: async () => true,
       });
-    const v1 = make([3000, 5000, 6000, 7000], "v1");
-    const created = await v1.submit({
-      raw: {
-        siteId: "partner-site",
-        product: "shuttle",
-        routeCode: "AYT-ALN",
-        pickup: "AYT",
-        dropoff: "Alanya",
-        pickupAt: "2026-12-20T10:00",
-        passengers: 2,
-        customer: { name: "V", email: "v@example.com", phone: "+90 538 000 0000", locale: "en" },
-        consent: true,
-      },
+    const created = await make([3000, 5000, 6000, 7000], "v1").submit({
+      raw: { siteId: "partner-site", product: "shuttle", routeCode: "AYT-ALN", pickup: "AYT", dropoff: "Alanya", pickupAt: "2026-12-20T10:00", passengers: 2, customer: { name: "V", email: "v@example.com", phone: "+90 538 000 0000", locale: "en" }, consent: true },
       origin: ORIGIN["partner-site"],
       ip: "127.0.0.1",
       idempotencyKey: "k-version-0000001",
     });
     assert.ok(created.ok);
     const ref = (created.body as any).ref as string;
-    const v2 = make([3500, 5500, 6500, 7500], "v2");
-    const listed = (await v2.listBookings()).body as any[];
+    const listed = (await make([3500, 5500, 6500, 7500], "v2").listBookings()).body as any[];
     assert.deepEqual(listed.find((b) => b.ref === ref).price, { amountMinor: 5000, currency: "EUR", mode: "FIXED_SHUTTLE" });
   });
 });
