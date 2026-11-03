@@ -253,6 +253,12 @@ export class MemoryStore implements Store {
     return this.#receipts.filter((r) => weekId === undefined || r.week_id === weekId);
   }
   async appendAdjustments(a: readonly Adjustment[]) {
+    // Enforce unique business-reference atomically, including duplicates inside the same batch.
+    const refs = new Set(this.#adjustments.map((x) => x.adjustment_reference));
+    for (const item of a) {
+      if (refs.has(item.adjustment_reference)) throw new Error("duplicate adjustment reference");
+      refs.add(item.adjustment_reference);
+    }
     this.#adjustments.push(...a);
   }
   async listAdjustments() {

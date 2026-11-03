@@ -114,7 +114,7 @@ describe("A3 offsets and overpayments", () => {
     assert.equal((await h.service.createOffset(MANAGER, { ...body, fromWeekId: W46, writtenApprovalReference: "ONAY-1" })).body.error, "week_not_closed");
   });
 
-  it("A3.8 [RULE] the same offset submitted twice must be recorded once (unique adjustment reference)", { todo: "QA-F2 · Codex Paket-01" }, async () => {
+  it("A3.8 [RULE] the same offset submitted twice must be recorded once (unique adjustment reference)", async () => {
     const one = await h.service.createOffset(MANAGER, { ...body, writtenApprovalReference: "ONAY-DUP-1" });
     const two = await h.service.createOffset(MANAGER, { ...body, writtenApprovalReference: "ONAY-DUP-1" });
     assert.equal(one.status, 201);

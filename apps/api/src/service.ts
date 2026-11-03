@@ -711,6 +711,9 @@ export class BookingService {
           booking_id: null,
           dispute_id: d.id,
         };
+        if ((await tx.listAdjustments()).some((x) => x.adjustment_reference === adj.adjustment_reference)) {
+          return fail(409, "duplicate_adjustment_reference");
+        }
         await tx.appendAdjustments([adj]);
         adjIds.push(adj.id);
       }
@@ -754,6 +757,9 @@ export class BookingService {
         booking_id: null,
         dispute_id: null,
       };
+      if ((await tx.listAdjustments()).some((x) => x.adjustment_reference === adj.adjustment_reference)) {
+        return fail(409, "duplicate_adjustment_reference");
+      }
       await tx.appendAdjustments([adj]);
       return ok(adj, 201);
     });
