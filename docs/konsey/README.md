@@ -75,6 +75,7 @@
 | F, G | [Geliştirme sırası ve SEL-442 yol haritası](./F-G-gelistirme-sirasi-ve-yol-haritasi.md) | — |
 | H | [Açık Owner kararları ve önerilerim](./H-owner-kararlari.md) | — |
 | **Kanonik** | [Tek karar / skill / test eşlemesi](./TEK-KARAR-SKILL-ESLEMESI.md) | [`config/policy-decisions.json`](../../config/policy-decisions.json) (karar kaydı aynası) |
+| QA-F3 | [Kiracı izolasyonu: inceleme ve uygulama şartnamesi](./QA-F3-KIRACI-IZOLASYONU.md) | `qa-independent/` A6.8–A6.10 (`todo`), `SITE_TOKENS` |
 | Paket-01 / 02 | [Codex Paket-01 akran incelemesi, Paket-02 şartnamesi](./PAKET-01-INCELEME-VE-PAKET-02.md) | `qa-independent/` A3.13 ve A4.12 (`todo`, Paket-01b) |
 | V2.5 | [İlk teslim: karşılaştırma, bulgu önceliği, Codex Paket-01](./V2-5-ilk-teslim.md) | `packages/db/src/schema-probes.test.ts`, `packages/core/src/policy-decisions.test.ts` |
 | V2 | [AGOS Skills V2 devri: uygulama raporu](./V2-devir-uygulama.md) | Finans regresyon testleri (`packages/core/src/settlement.regression.test.ts`, `apps/api/src/policy-freeze.test.ts`); [reklam entegrasyonu hazırlığı](./reklam-entegrasyonu-hazirlik.md) (DOĞRULANMADI) |
