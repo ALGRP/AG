@@ -197,7 +197,7 @@ describe("A4 statement disputes timing (T3)", () => {
     assert.equal((await h.close(W45)).status, 201, "the earliest active week is the valid first close");
   });
 
-  it("A4.14 [RULE] one mistyped historical receipt date or week must not force hundreds of empty first closes", { todo: "PR1-N6 · Codex Paket-01d (dekont tarih/hafta doğrulaması)" }, async () => {
+  it("A4.14 [RULE] one mistyped historical receipt date or week must not force hundreds of empty first closes", async () => {
     for (const bad of [{ weekId: W45, paidAt: "2016-03-01T08:00:00Z" }, { weekId: "2020-W01", paidAt: "2026-11-05T08:00:00Z" }]) {
       const h = harness();
       h.setNow("2026-11-04T10:00:00Z");

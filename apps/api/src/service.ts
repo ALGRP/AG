@@ -659,8 +659,9 @@ export class BookingService {
     const purpose = input.purpose ?? "settlement";
     if (purpose !== "settlement" && purpose !== "subscription" && purpose !== "overpayment_refund") return fail(422, "purpose_invalid");
     if (typeof weekId !== "string") return fail(422, "weekId_invalid");
+    let receiptWeek: ReturnType<typeof weekBounds>;
     try {
-      weekBounds(weekId);
+      receiptWeek = weekBounds(weekId);
     } catch {
       return fail(422, "weekId_invalid");
     }
@@ -669,6 +670,10 @@ export class BookingService {
     if (currency !== this.#d.shuttleTariff.currency) return fail(422, "currency_invalid");
     if (typeof bankReference !== "string" || !/^[A-Za-z0-9./_ -]{3,96}$/.test(bankReference) || !/^[A-Z0-9./_-]{3,64}$/.test(normalizeBankReference(bankReference))) return fail(422, "bankReference_invalid");
     if (typeof paidAt !== "string" || Number.isNaN(Date.parse(paidAt))) return fail(422, "paidAt_invalid");
+    // A remittance cannot precede its settlement week. Subscriptions are tracked separately.
+    if (purpose !== "subscription" && Date.parse(paidAt) < Date.parse(receiptWeek.start_utc)) {
+      return fail(422, "receipt_before_settlement_week");
+    }
     const r: BankReceipt = {
       id: this.#d.random.id(),
       week_id: weekId,
@@ -681,6 +686,18 @@ export class BookingService {
       purpose,
     };
     return this.#d.store.transaction(async (tx) => {
+      // PR1-N6: a suspiciously old, *unanchored* week cannot bootstrap a historical ledger.
+      // Late real remittances remain possible when an actual booking or closed statement anchors the week.
+      // This is a LOCAL_ONLY date sanity gate, not a production retention policy.
+      const ageMs = Date.parse(r.paid_at) - Date.parse(receiptWeek.end_utc);
+      if (ageMs > 28 * 86400_000 && !(await tx.getClosedWeek(weekId))) {
+        const active = (await tx.listBookings()).some((b) => {
+          if (b.isTest) return false;
+          return [b.createdAt, b.completedAt, b.cancelledAt, ...b.moneyEvents.map((e) => e.at)]
+            .some((at) => at && settlementWeekId(at) === weekId);
+        });
+        if (!active) return fail(422, "unverified_historical_receipt_week");
+      }
       if ((await tx.listReceipts()).some((x) => normalizeBankReference(x.bank_reference) === normalizeBankReference(r.bank_reference) && x.payer_id === r.payer_id)) return fail(409, "duplicate_bank_reference");
       await tx.appendReceipt(r);
       return ok(r, 201);
