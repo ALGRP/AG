@@ -13,6 +13,7 @@ import { after, before, describe, it } from "node:test";
 
 const ROOT = resolve(import.meta.dirname, "../../..");
 const MIGRATION = resolve(ROOT, "packages/db/migrations/0001_network_core.sql");
+const RLS_MIGRATION = resolve(ROOT, "packages/db/migrations/0002_tenant_rls.sql");
 const PROBES = resolve(ROOT, "packages/db/probes/0001_probes.sql");
 const QA_PROBES = resolve(ROOT, "qa-independent/sql/qa_probes.sql");
 const ENABLED = process.env.AG_TEST_PG === "1";
@@ -63,6 +64,10 @@ describe("DB şema adayı — negatif problar (PostgreSQL)", { skip: ENABLED ? f
     p0001 = errorsByMarker(PROBES, psql(dbA, ["-f", PROBES]).out, /^-- (P\d+|OK\d*)\b/);
     pQa = errorsByMarker(QA_PROBES, psql(dbB, ["-f", QA_PROBES]).out, /^\\echo (SETUP_DONE|SETUP|RLS_SETUP|END|Q\d+|C\d+|R\d+)\b/);
     q21 = psql(dbB, ["-At", "-c", "SELECT count(*) FROM information_schema.columns WHERE table_name = 'settlement_adjustment' AND column_name ~ '(mfa|actor|approved_by|decided_by|role)'"]).out.trim();
+    // The independent 0001 financial-rule probes must run first against the baseline.
+    // After those are recorded, the isolated dbB is migrated to candidate 0002 for QA-F3 RLS checks.
+    const m2 = psql(dbB, ["-v", "ON_ERROR_STOP=1", "-f", RLS_MIGRATION]);
+    assert.equal(m2.status, 0, `tenant RLS candidate: ${m2.out}`);
     rls = psql(dbB, ["-At", "-c", `SELECT relname || ':' || relrowsecurity || ':' || relforcerowsecurity FROM pg_class WHERE relname IN (${LEDGER_TABLES.map((t) => `'${t}'`).join(",")}) ORDER BY relname`]).out.trim();
     foreign = psql(dbB, [
       "-At",
@@ -97,7 +102,7 @@ describe("DB şema adayı — negatif problar (PostgreSQL)", { skip: ENABLED ? f
     assert.ok(Number(q21) > 0, `bulunan sütun: ${q21}`);
   });
 
-  it("QA-F3 (DB): p1 oturumu p2'nin para hareketini ve dekontunu göremez; defter tablolarında RLS açık ve zorunlu", { todo: "QA-F3 · Paket-02/03 (kiracı izolasyonu)" }, () => {
+  it("QA-F3 (DB): p1 oturumu p2'nin para hareketini ve dekontunu göremez; defter tablolarında RLS açık ve zorunlu", () => {
     assert.equal(foreign, "0", `p1 oturumunun gördüğü yabancı satır: ${foreign}`);
     assert.deepEqual(rls.split("\n"), LEDGER_TABLES.map((t) => `${t}:true:true`));
   });
