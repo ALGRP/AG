@@ -32,6 +32,7 @@ import {
   type SplitPolicy,
   type StatementDispute,
 } from "@ag/core";
+import { normalizeBankReference } from "./store.ts";
 import type { OutboxEvent, Store, StoredBooking } from "./store.ts";
 
 export interface ServiceDeps {
@@ -611,7 +612,7 @@ export class BookingService {
     if (typeof payerId !== "string" || !ID.test(payerId) || typeof payeeId !== "string" || !ID.test(payeeId)) return fail(422, "party_invalid");
     if (!Number.isSafeInteger(amountMinor) || (amountMinor as number) <= 0) return fail(422, "amountMinor_invalid");
     if (currency !== this.#d.shuttleTariff.currency) return fail(422, "currency_invalid");
-    if (typeof bankReference !== "string" || !/^[A-Za-z0-9./_-]{3,64}$/.test(bankReference)) return fail(422, "bankReference_invalid");
+    if (typeof bankReference !== "string" || !/^[A-Za-z0-9./_ -]{3,96}$/.test(bankReference) || !/^[A-Z0-9./_-]{3,64}$/.test(normalizeBankReference(bankReference))) return fail(422, "bankReference_invalid");
     if (typeof paidAt !== "string" || Number.isNaN(Date.parse(paidAt))) return fail(422, "paidAt_invalid");
     const r: BankReceipt = {
       id: this.#d.random.id(),
@@ -625,7 +626,7 @@ export class BookingService {
       purpose,
     };
     return this.#d.store.transaction(async (tx) => {
-      if ((await tx.listReceipts()).some((x) => x.bank_reference === r.bank_reference && x.payer_id === r.payer_id)) return fail(409, "duplicate_bank_reference");
+      if ((await tx.listReceipts()).some((x) => normalizeBankReference(x.bank_reference) === normalizeBankReference(r.bank_reference) && x.payer_id === r.payer_id)) return fail(409, "duplicate_bank_reference");
       await tx.appendReceipt(r);
       return ok(r, 201);
     });

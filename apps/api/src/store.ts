@@ -13,6 +13,9 @@ import type {
   WeeklyReport,
 } from "@ag/core";
 
+/** Same payer + bank reference is one receipt, regardless of whitespace/case. */
+export const normalizeBankReference = (ref: string): string => ref.replace(/\s+/g, "").toUpperCase();
+
 // Depo arayüzü. Üretimde karşılığı merkezi rezervasyon PostgreSQL'idir (CRS); şema adayı packages/db.
 // MemoryStore yalnız yerel geliştirme ve test içindir.
 
@@ -241,7 +244,7 @@ export class MemoryStore implements Store {
     return this.#outbox.filter((e) => status === undefined || e.status === status);
   }
   async appendReceipt(r: BankReceipt) {
-    if (this.#receipts.some((x) => x.bank_reference === r.bank_reference && x.payer_id === r.payer_id)) {
+    if (this.#receipts.some((x) => normalizeBankReference(x.bank_reference) === normalizeBankReference(r.bank_reference) && x.payer_id === r.payer_id)) {
       throw new Error("duplicate bank reference");
     }
     this.#receipts.push(r);

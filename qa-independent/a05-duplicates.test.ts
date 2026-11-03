@@ -85,7 +85,7 @@ describe("A5 duplicate submissions", () => {
     assert.equal((await rc("2026-W46", "TR-0002")).body.error, "duplicate_bank_reference");
   });
 
-  it("A5.6 [RULE] the same bank receipt typed in a different letter case must be detected as a duplicate", { todo: "QA-F8 · Codex Paket-01" }, async () => {
+  it("A5.6 [RULE] the same bank receipt typed in a different letter case must be detected as a duplicate", async () => {
     const h = harness();
     h.setNow("2026-11-04T10:00:00Z");
     await h.shuttleJob({}, "sup-a", 5000); // owes agos 5 EUR, site 10 EUR
