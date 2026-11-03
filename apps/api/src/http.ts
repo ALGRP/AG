@@ -245,7 +245,7 @@ export function createApiServer(opts: HttpOptions): Server {
           return reply(res, wkx[2] === "disputes" ? await opts.service.raiseStatementDispute(wkx[1]!, v) : await opts.service.recordStatementSent(wkx[1]!, v));
         }
         const wk = /^\/v1\/admin\/settlements\/(\d{4}-W\d{2})(\/close)?$/.exec(path);
-        if (wk && req.method === "GET" && !wk[2]) return reply(res, await opts.service.weekReport(wk[1]!));
+        if (wk && req.method === "GET" && !wk[2]) return reply(res, await opts.service.weekReportForActor(actor, wk[1]!));
         if (wk && req.method === "POST" && wk[2]) {
           if (isSite) return send(res, 403, { error: "scope_forbidden" });
           return reply(res, await opts.service.closeWeek(wk[1]!));

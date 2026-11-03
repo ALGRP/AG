@@ -902,6 +902,34 @@ export class BookingService {
     return ok({ ...report, closed: Boolean(closed) });
   }
 
+  /** QA-F3: never return a platform settlement snapshot directly to a site principal. */
+  async weekReportForActor(actor: Actor, weekId: string): Promise<ServiceResult<unknown>> {
+    const result = await this.weekReport(weekId);
+    if (!result.ok || !actor.scope || actor.scope.kind === "platform") return result;
+    if (actor.scope.kind !== "site") return fail(403, "scope_forbidden");
+    const partyId = actor.scope.partyId;
+    const siteId = actor.scope.siteId;
+    const report = result.body as ReturnType<typeof weeklyReport> & { closed: boolean };
+    const ownerBookingIds = new Set(
+      (await this.#d.store.listBookings()).filter((b) => b.siteId === siteId).map((b) => b.id),
+    );
+    return ok({
+      ...report,
+      entries: report.entries.filter((e) => e.selling_site_id === siteId),
+      exceptions: report.exceptions.filter((e) => e.selling_site_id === siteId),
+      customer_balances: report.customer_balances.filter((x) => ownerBookingIds.has(x.booking_id)),
+      adjustments: report.adjustments.filter((x) => x.debtor_id === partyId || x.creditor_id === partyId),
+      obligations: report.obligations.filter((x) => x.debtor_id === partyId || x.creditor_id === partyId),
+      site_receivables: report.site_receivables.filter((x) => x.site_party_id === partyId),
+      statement_disputes: report.statement_disputes.filter((x) => x.raised_by === partyId),
+      debts_and_disputes: report.debts_and_disputes.filter((x) => x.debtor_id === partyId || x.creditor_id === partyId),
+      supplier_statements: [], // supplier books are platform-only
+      agos_fees: { by_supplier: [], total_by_currency: {}, received_by_currency: {} },
+      unmatched_receipts: [], // never reveal other parties' unmatched bank receipts
+      subscription_receipts: report.subscription_receipts.filter((x) => x.payer_id === partyId || x.payee_id === partyId),
+    });
+  }
+
   async closeWeek(weekId: string): Promise<ServiceResult<unknown>> {
     let bounds;
     try {

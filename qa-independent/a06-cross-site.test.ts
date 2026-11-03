@@ -45,7 +45,7 @@ describe("A6 cross-site access", () => {
     assert.equal(r.status, 403, `cancel of rival-site booking returned ${r.status}`);
   });
 
-  it("A6.5 [RULE] statements: a site sees only its own receivables", { todo: "QA-F3 · Paket-02 (kiracı yetkisi, SEL-332)" }, async () => {
+  it("A6.5 [RULE] statements: a site sees only its own receivables", async () => {
     h.setNow("2026-11-04T10:00:00Z");
     await h.shuttleJob({ siteId: "partner-site" }, "sup-a", 5000);
     await h.shuttleJob({ siteId: "rival-site" }, "sup-a", 5000);
@@ -72,7 +72,7 @@ describe("A6 cross-site access", () => {
   // ---- QA-F3 acceptance with a site-scoped credential (LOCAL_ONLY; the credential, not a header, carries the scope) ----
   const asPartner = { authorization: `Bearer ${SITE_TOKEN.partner}` };
 
-  it("A6.8 [RULE] a site-scoped credential sees only its own site, whatever x-site-id says", { todo: "QA-F3 · Codex Paket-02 (site kapsamlı kimlik)" }, async () => {
+  it("A6.8 [RULE] a site-scoped credential sees only its own site, whatever x-site-id says", async () => {
     for (const extra of [{}, { "x-site-id": "rival-site" }, { "x-site-id": "partner-site" }]) {
       const r = await h.adminGet("/v1/admin/bookings", { ...asPartner, ...extra });
       if (r.status === 403) continue;
