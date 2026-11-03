@@ -487,3 +487,35 @@ Yeni yarış bulunmadı. Bu sonuçlar yalnız yerel depo içindir.
 - RLS: makbuz yalnız tahsil eden tarafa ve platforma görünür.
 
 **QA-F11 şartnamesine ek:** başlık saldırıları ve belirteç ayrıntıları ([§4a](./QA-F11-SATIS-KAYNAGI.md)).
+
+## 15. QA-F11 akran incelemesi (`d14d879` → `f6d5662`)
+
+Sabitlenen sürüm `f6d566241157cf7a7e7779df452196aa1f0b77fc`. `npm run check`: **212 test: 201 geçti, 0 kaldı, 10 todo, 1 skip** (Codex ile aynı).
+
+**Fikstür değişiklikleri incelendi:** `harness.ts`, `api.test.ts`, `sample-week.ts`, `policy-freeze.test.ts` ve A5'teki her zaman `true` dönen sahte doğrulayıcı, `local:<alan adı>:<nonce>` belirteci üreten yerel doğrulayıcıyla değiştirilmiş. Rezervasyon yardımcıları belirteci otomatik ekliyor. **Hiçbir iş assertion'ı gevşetilmemiş**; A10.2'den yalnız `todo` kaldırılmış. A10.9–A10.17 yeni testler.
+
+**Karar: `f6d5662` NEEDS REVIEW.** Doğrulanan güvenlik davranışı:
+- Rakip sitenin belirteciyle satış yazılamıyor; yanlış `action` veya eksik `hostname` → 403.
+- `Host`, `X-Forwarded-Host` ve `Referer` sahteciliği etkisiz.
+- Doğrulayıcı hatası veya zaman aşımı → 403, kayıt yok. `main.ts`: 5 saniye `AbortSignal`, HTTP durum kontrolü, `catch` → kapalı başarısızlık.
+- Belirteç tekrarı: aynı belirteçle 8 eşzamanlı istek → 1 rezervasyon; yanlış sitede harcanan belirteç tekrar kullanılamıyor.
+- Yerel olmayan her `NODE_ENV`'de `devOrigins` boş.
+- Yerel sahte belirteç yalnız `development` / `test` ve `TURNSTILE_SECRET` yokken kabul ediliyor. **Uydurulabilir; güvenlik değildir.**
+- `form.js` belirteç yokken göndermiyor; `data-action="booking"` eklendi.
+- Gerçek Turnstile ağı, site anahtarı ve gizli anahtar **test edilmedi**.
+
+**Yeni bulgu PR2-N3 (P2), A10.18 `todo`:**
+- `requestHash` gövdenin tamamından hesaplanıyor; `humanToken` da dahil.
+- `form.js` artık ağ hatasında Turnstile'ı sıfırlıyor, ama aynı idempotency anahtarını koruyor.
+- Sonuç: sunucu rezervasyonu oluşturdu ama yanıt kayboldu; tarayıcı yeni belirteç ve aynı anahtarla yeniden gönderiyor → **409 `idempotency_key_reused_with_different_body`**. Müşteri hata görür; yeni anahtarla tekrar denerse mükerrer rezervasyon oluşur.
+- Yeniden üretildi.
+- Öneri: `requestHash`, `humanToken` hariç tutularak hesaplansın. Önbellekteki yanıt, yeni belirteci doğrulamadan dönsün; yeni belirteç harcanmaz.
+
+**Notlar:**
+- **A10.7 (QA-L7):** yerelde tek geliştirme kökeninden her site adına rezervasyon. Artık A10.14 (yerel olmayan modda `devOrigins` boş) ve belirteç-alan adı bağlantısı aynı riski kapatıyor. Yerel geliştirmede birden çok siteyi test etmek amaçlanan davranış. Öneri: A10.7 gerekçesiyle `skip` (A1.3 emsali); inceleyici onayıyla.
+- Turnstile `hostname` alt alan adı içerebilir (`www.` ile ve olmadan). Site kaydında iki biçim de bulunmalı.
+- Yerel tekrar koruması 10 dakika; Cloudflare belirteci 300 saniyede sona erer ve kendisi tek kullanımlık.
+
+**Sıradaki iş:**
+1. PR2-N3 (A10.18), küçük tek commit.
+2. PKG-F04b: [`PKG-F04b-NAKITSIZ-KREDI.md`](./PKG-F04b-NAKITSIZ-KREDI.md). A14.1–A14.4 ve "paket F04" `todo`. H-25 açık.

@@ -75,6 +75,7 @@
 | F, G | [Geliştirme sırası ve SEL-442 yol haritası](./F-G-gelistirme-sirasi-ve-yol-haritasi.md) | — |
 | H | [Açık Owner kararları ve önerilerim](./H-owner-kararlari.md) | — |
 | **Kanonik** | [Tek karar / skill / test eşlemesi](./TEK-KARAR-SKILL-ESLEMESI.md) | [`config/policy-decisions.json`](../../config/policy-decisions.json) (karar kaydı aynası) |
+| PKG-F04b | [Onaylı nakitsiz müşteri kredisi (H-25 açık)](./PKG-F04b-NAKITSIZ-KREDI.md) | `qa-independent/a14-credit-note.test.ts` (`todo`) |
 | QA-F11 | [Satış kaynağı doğrulaması](./QA-F11-SATIS-KAYNAGI.md) | `qa-independent/` A10.2 (`todo`), A10.8 (koruma) |
 | QA-F9 | [Makbuz tahsisi: varsayılan red (H-26)](./QA-F9-MAKBUZ-TAHSIS.md) | `qa-independent/` A5.7, A5.9 (`todo`), A5.8 (koruma) |
 | QA-F14 | [Tahsil edilmiş, tamamlanmamış rezervasyon görünürlüğü](./QA-F14-TAHSIL-EDILMIS-TAMAMLANMAMIS.md) | `qa-independent/` A2.8, A2.10 (`todo`), A2.9 (koruma) |
