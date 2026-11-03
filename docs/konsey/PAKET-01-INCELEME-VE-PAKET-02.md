@@ -444,3 +444,24 @@ Notlar (karar gerektirmez):
 - F14-N1 (P3, sunum): fazla tahsil edilmiş ve tamamlanmamış işte iki istisna satırı aynı tutarı (8000) gösteriyor. Okuyan aynı parayı iki kez saymamalı; raporda tek satırda birleştirme ileride düşünülebilir.
 
 **Sıradaki iş:** QA-F9: [`QA-F9-MAKBUZ-TAHSIS.md`](./QA-F9-MAKBUZ-TAHSIS.md). A5.4, A5.7, A5.9 `todo`; A5.8 koruma testi. Ardından QA-F11, sonra PKG-F04b (H-25).
+
+## 14. QA-F9 akran incelemesi (`f457d35` → `fe14851`)
+
+Sabitlenen sürüm `fe1485139a410797f807493a0c95dfc1c20c37b1`. `npm run check`: **202 test: 190 geçti, 0 kaldı, 11 todo, 1 skip** (Codex ile aynı). A5.4, A5.7, A5.9 assertion'ları değişmeden geçiyor; A5.8 koruması yeşil; A5.10 ve A5.11 Codex'in ek testleri. `report:sample` sonrası örnek dosyalar değişmedi. PostgreSQL koşulmadı (şema değişmedi).
+
+**Karar: `fe14851` PASS (yerel).**
+
+| Saldırgan kontrol | Sonuç |
+| -- | -- |
+| HTTP üzerinden 3 eşzamanlı istek, `HTTP-1` / `http-1` / `Http-1`, üç farklı rezervasyon | 1 × 200, 2 × 409 `reference_used_on_other_booking` |
+| İptal edilmiş veya tam iade edilmiş rezervasyonun makbuzu yeni rezervasyonda | 409 (A5.10) |
+| Private iş: site tahsilatı `SLIP-S1`, aynı numara tedarikçi tahsilatı | 200 / 200 (taraflar ayrı) |
+| Aynı site aynı numarayı başka rezervasyonda (`slip-s1`) | 409 |
+| Tahsilattan sonra tedarikçiyi değiştirme (makbuz anahtarını kaydırma denemesi) | 409 `collection_already_recorded` (değişiklik zaten yasak) |
+| Aynı rezervasyonda harf varyantı | 409 `reference_already_recorded` |
+
+**`MemoryStore` değişikliği:** Eski `#inTx` boole değeri, bir işlem beklerken gelen **başka bir isteği** iç içe çağrı sanıp kuyruğu atlatıyordu. Bu gerçek bir yerel yarıştı (kodu okuyarak doğruladım; önceki eşzamanlılık problarımın geçmesi bu yarışın tetiklenmediği sıralamalardandı). `AsyncLocalStorage` ile yalnız aynı işlemin içinden gelen çağrı yeniden girer; diğerleri sıraya girer. A5.11 sıralamayı doğruluyor. Geri alma yalnız dış işlemde (önceki gibi). Beklenmeyen alt görev, işlem bittikten sonra çağırırsa sıraya girer (kilitlenme yok). Bu yalnız yerel depo içindir; PostgreSQL yalıtımı hakkında bir şey kanıtlamaz.
+
+Notlar (P3): makbuz kontrolü tüm rezervasyonları tarıyor (yerelde sorun değil); kalıcı garanti Paket-03'teki `collection_slip` benzersiz kısıtında. **H-26 açık**; tahsis modeli yazılmadı.
+
+**Sıradaki iş: QA-F11** · [`QA-F11-SATIS-KAYNAGI.md`](./QA-F11-SATIS-KAYNAGI.md). A10.2 `todo`; A10.8 yeni koruma testi (pazarlama alanları atıf değiştirmiyor; bugün geçiyor).
