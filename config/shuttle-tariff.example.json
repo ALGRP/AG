@@ -1,0 +1,11 @@
+{
+  "_status": "EXAMPLE — hat kodları ve geçerlilik tarihleri DOĞRULANMADI (Linear: RUNTIME_PRICE_AUTHORITY=UNVERIFIED). Canlı fiyat kaynağı CRS fiyat motorudur.",
+  "id": "shuttle-example-2026-v1",
+  "currency": "EUR",
+  "routes": ["AYT-ALANYA", "ALANYA-AYT", "GZP-ALANYA", "ALANYA-GZP"],
+  "validFrom": "2026-11-01",
+  "validTo": "2027-10-31",
+  "maxPassengers": 10,
+  "totalsMinor": [3000, 5000, 6000],
+  "extraPerPassengerMinor": 1000
+}

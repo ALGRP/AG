@@ -1,0 +1,10 @@
+[
+  {
+    "id": "ornek-alanya-transfer",
+    "ownership": "partner",
+    "partnerId": "partner-demo-001",
+    "domains": ["ornek-alanya-transfer.example", "www.ornek-alanya-transfer.example"],
+    "ownerEmail": "owner@ornek-alanya-transfer.example",
+    "status": "preview"
+  }
+]

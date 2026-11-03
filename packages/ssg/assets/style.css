@@ -1,0 +1,38 @@
+:root{--accent:#0b5ed7;--accent-text:#fff;--ink:#14213d;--muted:#5c6577;--bg:#fff;--soft:#f3f5f9;--line:#dfe3ea;--radius:12px}
+[hidden]{display:none!important}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;font:16px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--ink);background:var(--bg)}
+a{color:var(--accent)}
+.wrap{max-width:1100px;margin:0 auto;padding:0 16px}
+header.site{border-bottom:1px solid var(--line);background:var(--bg)}
+header.site .wrap{display:flex;align-items:center;gap:16px;min-height:60px;flex-wrap:wrap}
+.logo{font-weight:700;font-size:1.15rem;color:var(--ink);text-decoration:none;margin-right:auto}
+nav.main a{margin-right:14px;text-decoration:none;color:var(--ink)}
+.lang a{margin-left:8px;font-size:.9rem}
+.wa{background:#1f8f4e;color:#fff;border-radius:999px;padding:6px 14px;text-decoration:none;font-weight:600}
+.hero{background:var(--soft);padding:24px 0 32px}
+.hero h1{font-size:clamp(1.6rem,4vw,2.3rem);line-height:1.2;margin:8px 0 16px}
+.card{background:var(--bg);border:1px solid var(--line);border-radius:var(--radius);padding:16px}
+form.booking{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+form.booking fieldset{grid-column:1/-1;border:0;padding:0;margin:0;display:flex;gap:16px;flex-wrap:wrap}
+label{display:flex;flex-direction:column;font-size:.9rem;color:var(--muted);gap:4px}
+label.check{flex-direction:row;align-items:flex-start;grid-column:1/-1}
+input,select,textarea{font:inherit;padding:10px;border:1px solid var(--line);border-radius:8px;color:var(--ink);background:#fff;min-height:44px}
+textarea{grid-column:1/-1}
+input[type=radio],input[type=checkbox]{min-height:0;margin:3px 0 0;flex:none}
+.full{grid-column:1/-1}
+button{font:inherit;font-weight:700;background:var(--accent);color:var(--accent-text);border:0;border-radius:8px;padding:12px 18px;min-height:48px;cursor:pointer}
+button[disabled]{opacity:.6}
+.hp{position:absolute;left:-10000px;width:1px;height:1px;overflow:hidden}
+.result{grid-column:1/-1;font-weight:600}
+.price{grid-column:1/-1;color:var(--ink);margin:0}
+.price:empty,.result:empty{display:none}
+main .content{padding-top:24px;padding-bottom:24px}
+main .content h2{margin-top:32px}
+table{border-collapse:collapse;width:100%;max-width:520px}
+td,th{border:1px solid var(--line);padding:8px;text-align:left}
+.reviews{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;list-style:none;padding:0}
+.crumbs{font-size:.85rem;color:var(--muted);margin:0}
+.crumbs a{color:var(--muted)}
+footer.site{border-top:1px solid var(--line);margin-top:40px;padding:24px 0;font-size:.9rem;color:var(--muted)}

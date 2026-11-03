@@ -1,0 +1,18 @@
+{
+  "id": "ornek-alanya-transfer",
+  "brand": "Örnek Alanya Transfer",
+  "domain": "www.ornek-alanya-transfer.example",
+  "ownership": "partner",
+  "defaultLocale": "en",
+  "locales": ["en", "tr"],
+  "indexable": false,
+  "contact": { "whatsapp": "+900000000000", "email": "info@ornek-alanya-transfer.example" },
+  "legal": { "companyName": "Örnek Turizm (SENTETİK ÖRNEK)" },
+  "theme": { "accent": "#0b5ed7", "accentText": "#ffffff" },
+  "shuttleRoutes": [
+    { "code": "AYT-ALANYA", "label": { "en": "Antalya Airport (AYT) → Alanya", "tr": "Antalya Havalimanı (AYT) → Alanya" } },
+    { "code": "ALANYA-AYT", "label": { "en": "Alanya → Antalya Airport (AYT)", "tr": "Alanya → Antalya Havalimanı (AYT)" } },
+    { "code": "GZP-ALANYA", "label": { "en": "Gazipaşa Airport (GZP) → Alanya", "tr": "Gazipaşa Havalimanı (GZP) → Alanya" } },
+    { "code": "ALANYA-GZP", "label": { "en": "Alanya → Gazipaşa Airport (GZP)", "tr": "Alanya → Gazipaşa Havalimanı (GZP)" } }
+  ]
+}
