@@ -12,6 +12,8 @@ export interface HttpOptions {
    * Gerçek yönetim girişi (kimlik sağlayıcı + zorunlu 2FA) AÇIK karardır (Linear SEL-332).
    */
   readonly adminToken?: string;
+  /** Synthetic site credentials for LOCAL_ONLY test/development; not an IdP or production authentication. */
+  readonly siteTokens?: Readonly<Record<string, string>>;
   /** Güvenilir ters vekil (Cloudflare/Nginx) arkasındaysa istemci IP'si bu başlıktan okunur. */
   readonly trustProxyHeader?: string;
   readonly publicRateLimitPerMinute?: number;
@@ -147,17 +149,42 @@ export function createApiServer(opts: HttpOptions): Server {
       // ---- Yönetim uçları (merkezi panel) ----
       if (path.startsWith("/v1/admin/")) {
         const auth = req.headers.authorization ?? "";
-        if (!opts.adminToken || !auth.startsWith("Bearer ") || !safeEqual(auth.slice(7), opts.adminToken)) {
-          return send(res, 401, { error: "unauthorized" });
+        if (!auth.startsWith("Bearer ")) return send(res, 401, { error: "unauthorized" });
+        const token = auth.slice(7);
+        let actor: Actor | undefined;
+        if (opts.adminToken && safeEqual(token, opts.adminToken)) {
+          actor = { id: "static-admin-token", role: "admin", mfa: false, scope: { kind: "platform" } };
+        } else {
+          // A site token carries a single siteId. Origin, x-site-id and request bodies grant no authority.
+          const match = Object.entries(opts.siteTokens ?? {}).find(([candidate]) => safeEqual(token, candidate));
+          const site = match ? opts.sites.get(match[1]) : undefined;
+          if (site && match) actor = {
+            id: `local-site:${site.id}`, role: "operator", mfa: false,
+            scope: { kind: "site", siteId: site.id, partyId: site.ownerPartyId, foreignStatus: 404 },
+          };
         }
-        // Geçici yönetim anahtarı bir kişiyi kimliklendirmez ve 2FA taşımaz (SEL-332). 2FA zorunlu işlemler
-        // (manuel fiyat onayı, itiraz kararı, mahsup) bu yüzden HTTP üzerinden kapalıdır: "mfa_required".
-        const actor: Actor = { id: "static-admin-token", role: "admin", mfa: false };
-        if (req.method === "GET" && path === "/v1/admin/bookings") return reply(res, await opts.service.listBookings());
-        if (req.method === "GET" && path === "/v1/admin/outbox") return reply(res, await opts.service.outbox());
+        if (!actor) return send(res, 401, { error: "unauthorized" });
+
+        // A platform credential may voluntarily narrow its view, but the header NEVER expands a site identity.
+        const headerSite = req.headers["x-site-id"];
+        if (actor.scope?.kind === "platform" && typeof headerSite === "string") {
+          const site = opts.sites.get(headerSite);
+          if (!site) return send(res, 403, { error: "scope_forbidden" });
+          actor = { ...actor, scope: { kind: "site", siteId: site.id, partyId: site.ownerPartyId, foreignStatus: 403 } };
+        }
+        const isSite = actor.scope?.kind === "site";
+        if (req.method === "GET" && path === "/v1/admin/bookings") return reply(res, await opts.service.listBookingsForActor(actor));
+        if (req.method === "GET" && path === "/v1/admin/outbox") {
+          if (isSite) return send(res, 403, { error: "scope_forbidden" });
+          return reply(res, await opts.service.outbox());
+        }
 
         const confirm = /^\/v1\/admin\/bookings\/([A-Z0-9-]+)\/confirm$/.exec(path);
-        if (req.method === "POST" && confirm) return reply(res, await opts.service.confirm(confirm[1]!));
+        if (req.method === "POST" && confirm) {
+          const denied = await opts.service.canAccessBooking(actor, confirm[1]!);
+          if (denied) return reply(res, denied);
+          return reply(res, await opts.service.confirm(confirm[1]!));
+        }
 
         const body = req.method === "POST" ? await readJson(req) : ({ ok: true, value: {} } as const);
         if (!body.ok) return send(res, body.status, { error: body.error });
@@ -166,6 +193,10 @@ export function createApiServer(opts: HttpOptions): Server {
         const bk = /^\/v1\/admin\/bookings\/([A-Z0-9-]+)\/([a-z-]+)$/.exec(path);
         if (req.method === "POST" && bk) {
           const ref = bk[1]!;
+          const allowedSiteOperation = ["confirm", "cancel", "dispute", "invoice"].includes(bk[2]!);
+          if (isSite && !allowedSiteOperation) return send(res, 403, { error: "scope_forbidden" });
+          const denied = await opts.service.canAccessBooking(actor, ref);
+          if (denied) return reply(res, denied);
           switch (bk[2]) {
             case "confirm":
               return reply(res, await opts.service.confirm(ref));
@@ -191,20 +222,38 @@ export function createApiServer(opts: HttpOptions): Server {
               return reply(res, await opts.service.setInvoiceReference(ref, v));
           }
         }
-        if (req.method === "POST" && path === "/v1/admin/receipts") return reply(res, await opts.service.addReceipt(v));
-        if (req.method === "POST" && path === "/v1/admin/settlements/offsets") return reply(res, await opts.service.createOffset(actor, v));
+        if (req.method === "POST" && path === "/v1/admin/receipts") {
+          if (isSite) return send(res, 403, { error: "scope_forbidden" });
+          return reply(res, await opts.service.addReceipt(v));
+        }
+        if (req.method === "POST" && path === "/v1/admin/settlements/offsets") {
+          if (isSite) return send(res, 403, { error: "scope_forbidden" });
+          return reply(res, await opts.service.createOffset(actor, v));
+        }
         const dsp = /^\/v1\/admin\/settlements\/disputes\/([A-Za-z0-9-]+)\/decide$/.exec(path);
-        if (req.method === "POST" && dsp) return reply(res, await opts.service.decideStatementDispute(actor, dsp[1]!, v));
+        if (req.method === "POST" && dsp) {
+          if (isSite) return send(res, 403, { error: "scope_forbidden" });
+          return reply(res, await opts.service.decideStatementDispute(actor, dsp[1]!, v));
+        }
         const wkx = /^\/v1\/admin\/settlements\/(\d{4}-W\d{2})\/(disputes|statement-sent)$/.exec(path);
         if (req.method === "POST" && wkx) {
+          if (isSite && wkx[2] !== "disputes") return send(res, 403, { error: "scope_forbidden" });
+          if (isSite) {
+            if (actor.scope?.kind !== "site") return send(res, 403, { error: "scope_forbidden" });
+            return reply(res, await opts.service.raiseStatementDispute(wkx[1]!, { ...v, raisedBy: actor.scope.partyId }));
+          }
           return reply(res, wkx[2] === "disputes" ? await opts.service.raiseStatementDispute(wkx[1]!, v) : await opts.service.recordStatementSent(wkx[1]!, v));
         }
         const wk = /^\/v1\/admin\/settlements\/(\d{4}-W\d{2})(\/close)?$/.exec(path);
         if (wk && req.method === "GET" && !wk[2]) return reply(res, await opts.service.weekReport(wk[1]!));
-        if (wk && req.method === "POST" && wk[2]) return reply(res, await opts.service.closeWeek(wk[1]!));
+        if (wk && req.method === "POST" && wk[2]) {
+          if (isSite) return send(res, 403, { error: "scope_forbidden" });
+          return reply(res, await opts.service.closeWeek(wk[1]!));
+        }
 
         const run = /^\/v1\/admin\/shuttle-runs\/([A-Za-z0-9-]+)\/(assign|complete)$/.exec(path);
         if (req.method === "POST" && run) {
+          if (isSite) return send(res, 403, { error: "scope_forbidden" });
           return reply(res, run[2] === "assign" ? await opts.service.assignRun(run[1]!, v.supplierId) : await opts.service.completeRun(run[1]!));
         }
         return send(res, 404, { error: "not_found" });

@@ -60,10 +60,17 @@ export interface ServiceDeps {
  * İşlemi yapan kimlik. Gerçek kimlik sağlayıcı + 2FA (SEL-332) gelene kadar HTTP katmanındaki geçici admin
  * anahtarı `mfa: false` taşır; 2FA zorunlu işlemler (K17 fiyat onayı, itiraz kararı, mahsup) bu yüzden kapalıdır.
  */
+export type ActorScope =
+  | { readonly kind: "platform" }
+  | { readonly kind: "site"; readonly siteId: string; readonly partyId: string; readonly foreignStatus?: 403 | 404 }
+  | { readonly kind: "supplier"; readonly partyId: string };
+
 export interface Actor {
   readonly id: string;
   readonly role: "admin" | "finance_manager" | "operator";
   readonly mfa: boolean;
+  /** Local direct callers omit scope; HTTP always derives scope from a server-side credential. */
+  readonly scope?: ActorScope;
 }
 
 export type ServiceResult<T> = { ok: true; status: number; body: T } | { ok: false; status: number; body: ApiError };
@@ -373,6 +380,23 @@ export class BookingService {
 
   async listBookings(): Promise<ServiceResult<unknown>> {
     return ok((await this.#d.store.listBookings(200)).map((b) => this.#adminView(b)));
+  }
+  /** QA-F3: a site principal may only see bookings belonging to its authenticated site. */
+  async listBookingsForActor(actor: Actor): Promise<ServiceResult<unknown>> {
+    const all = await this.#d.store.listBookings(200);
+    if (!actor.scope || actor.scope.kind === "platform") return ok(all.map((b) => this.#adminView(b)));
+    if (actor.scope.kind !== "site") return fail(403, "scope_forbidden");
+    const siteId = actor.scope.siteId;
+    return ok(all.filter((b) => b.siteId === siteId).map((b) => this.#adminView(b)));
+  }
+
+  /** Scope is checked by the service before an HTTP booking mutation, not by an untrusted header. */
+  async canAccessBooking(actor: Actor, ref: string): Promise<ServiceResult<never> | null> {
+    if (!actor.scope || actor.scope.kind === "platform") return null;
+    if (actor.scope.kind !== "site") return fail(403, "scope_forbidden");
+    const row = await this.#d.store.getBookingByRef(ref);
+    if (!row || row.siteId !== actor.scope.siteId) return fail(actor.scope.foreignStatus ?? 404, "not_found");
+    return null;
   }
 
   async outbox(): Promise<ServiceResult<unknown>> {

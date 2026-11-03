@@ -32,7 +32,7 @@ describe("A6 cross-site access", () => {
     }
   });
 
-  it("A6.3 [RULE] tenant isolation: a principal acting for site A must not read site B's bookings", { todo: "QA-F3 · Paket-02 (kiracı yetkisi, SEL-332)" }, async () => {
+  it("A6.3 [RULE] tenant isolation: a principal acting for site A must not read site B's bookings", async () => {
     // The only credential the API knows is the global static admin token. There is no site-/party-scoped principal,
     // so a "site A" operator necessarily holds the same token. We show the token is global, whatever site is claimed.
     const r = await h.adminGet("/v1/admin/bookings", { "x-site-id": "partner-site" });
@@ -40,7 +40,7 @@ describe("A6 cross-site access", () => {
     assert.deepEqual([...sitesSeen].sort(), ["partner-site"], `credential sees: ${[...sitesSeen].join(", ")}`);
   });
 
-  it("A6.4 [RULE] tenant isolation: a principal acting for site A must not change site B's booking", { todo: "QA-F3 · Paket-02 (kiracı yetkisi, SEL-332)" }, async () => {
+  it("A6.4 [RULE] tenant isolation: a principal acting for site A must not change site B's booking", async () => {
     const r = await h.adminPost(`/v1/admin/bookings/${b.ref}/cancel`, {}, { "x-site-id": "partner-site" });
     assert.equal(r.status, 403, `cancel of rival-site booking returned ${r.status}`);
   });
@@ -89,7 +89,7 @@ describe("A6 cross-site access", () => {
     assert.ok([...parties].every((p) => p === "p-001"), `statement for partner-site credential contains parties: ${[...parties].join(", ")}`);
   });
 
-  it("A6.9 [RULE] a site-scoped credential cannot use platform operations", { todo: "QA-F3 · Codex Paket-02 (platform uçları)" }, async () => {
+  it("A6.9 [RULE] a site-scoped credential cannot use platform operations", async () => {
     const calls: [string, () => Promise<{ status: number }>][] = [
       ["GET outbox", () => h.adminGet("/v1/admin/outbox", asPartner)],
       ["POST receipts", () => h.adminPost("/v1/admin/receipts", { weekId: W45, payerId: "sup-a", payeeId: "agos", amountMinor: 1, currency: "EUR", bankReference: "TR-SCOPE-1", paidAt: "2026-11-04T08:00:00Z" }, asPartner)],
@@ -101,7 +101,7 @@ describe("A6 cross-site access", () => {
     assert.deepEqual(got, calls.map(([name]) => `${name}:403`));
   });
 
-  it("A6.10 [RULE] another site's booking reference is not found for a site-scoped credential, and stays unchanged", { todo: "QA-F3 · Codex Paket-02 (varlık sızdırmaz)" }, async () => {
+  it("A6.10 [RULE] another site's booking reference is not found for a site-scoped credential, and stays unchanged", async () => {
     const r = await h.adminPost(`/v1/admin/bookings/${b.ref}/cancel`, {}, asPartner);
     assert.equal(r.status, 404, `cancel of rival-site booking with partner-site credential returned ${r.status}`);
     assert.notEqual((await h.row(b.ref)).status, "cancelled");

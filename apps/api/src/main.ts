@@ -45,6 +45,18 @@ if (env.NODE_ENV !== "development" && env.NODE_ENV !== "test") {
   }
 }
 const devOrigins = (env.AG_DEV_ORIGINS ?? "http://localhost:4321").split(",").filter(Boolean);
+// Temporary local-only site credentials; never use as a substitute for SEL-332 verified IdP.
+const siteTokens: Record<string, string> = {};
+if (env.NODE_ENV === "development" || env.NODE_ENV === "test") {
+  const raw = env.AG_SITE_TOKENS ? JSON.parse(env.AG_SITE_TOKENS) as unknown : {};
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error("AG_SITE_TOKENS must be a JSON object");
+  for (const [token, siteId] of Object.entries(raw)) {
+    if (token.length < 24 || typeof siteId !== "string" || !sites.has(siteId) || (env.AG_ADMIN_TOKEN && token === env.AG_ADMIN_TOKEN)) {
+      throw new Error("invalid local site token configuration");
+    }
+    siteTokens[token] = siteId;
+  }
+}
 
 const turnstileSecret = env.TURNSTILE_SECRET;
 async function verifyHuman(token: string | undefined, ip: string): Promise<boolean> {
@@ -81,6 +93,7 @@ createApiServer({
   service,
   sites,
   devOrigins,
+  siteTokens,
   ...(env.AG_ADMIN_TOKEN ? { adminToken: env.AG_ADMIN_TOKEN } : {}),
   ...(env.AG_TRUST_PROXY_HEADER ? { trustProxyHeader: env.AG_TRUST_PROXY_HEADER } : {}),
 }).listen(port, "127.0.0.1", () => {
