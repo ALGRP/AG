@@ -1,7 +1,7 @@
 // Area 2 — partial collection (multiple partials, before/after completion, after a week closed).
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { W45, W46, W47, harness, sumFor } from "./harness.ts";
+import { SITE_TOKEN, W45, W46, W47, harness, sumFor } from "./harness.ts";
 
 const quad = (entries: any[], ref: string) => ["collected_delta", "site_delta", "agos_delta", "supplier_delta"].map((f) => sumFor(entries, ref, f));
 
@@ -143,3 +143,78 @@ describe("A2 partial collection", () => {
     );
   });
 });
+
+describe("A2 QA-F14 collected but not completed (Paket-02)", () => {
+  /** Book, confirm, assign, collect; the run is NOT completed. Returns ref and run id. */
+  const collectedOpen = async (h: ReturnType<typeof harness>, siteId: string, amount: number) => {
+    const b = await h.book({ siteId });
+    const ref = b.body.ref as string;
+    await h.service.confirm(ref);
+    const run = await h.runOf(ref);
+    await h.service.assignRun(run, "sup-a");
+    await h.collect(ref, amount);
+    return { ref, run };
+  };
+  const reasonsFor = (rep: any, ref: string) => (rep.exceptions as any[]).filter((e) => e.booking_ref === ref).map((e) => e.reason).sort();
+
+  it("A2.8 [RULE] lifecycle: visible each week while uncompleted, no shares before completion, shares once completed, closed weeks frozen", { todo: "QA-F14 · Codex Paket-02" }, async () => {
+    const h = harness();
+    h.setNow("2026-11-04T08:00:00Z");
+    const { ref, run } = await collectedOpen(h, "partner-site", 3000);
+    h.setNow("2026-11-09T06:00:00Z");
+    const w45 = (await h.close(W45)).body;
+    h.setNow("2026-11-16T06:00:00Z");
+    const w46 = (await h.close(W46)).body;
+    h.setNow("2026-11-18T08:00:00Z");
+    await h.service.completeRun(run);
+    h.setNow("2026-11-23T06:00:00Z");
+    const w47 = (await h.close(W47)).body;
+    const w45again = await h.report(W45);
+    assert.deepEqual(
+      {
+        w45: { reasons: reasonsFor(w45, ref), shares: quad(w45.entries, ref) },
+        w46: { reasons: reasonsFor(w46, ref), shares: quad(w46.entries, ref) },
+        w47: { reasons: reasonsFor(w47, ref), shares: quad(w47.entries, ref) },
+        w45Frozen: JSON.stringify(w45again.exceptions) === JSON.stringify(w45.exceptions),
+      },
+      {
+        w45: { reasons: ["collected_not_completed"], shares: [0, 0, 0, 0] },
+        w46: { reasons: ["collected_not_completed"], shares: [0, 0, 0, 0] },
+        w47: { reasons: [], shares: [3000, 600, 300, 2100] },
+        w45Frozen: true,
+      },
+    );
+    const ex = (w45.exceptions as any[]).find((e) => e.booking_ref === ref);
+    assert.equal(ex.collected_amount, 3000, "the exception carries the cash held by the supplier");
+  });
+
+  it("A2.9 cancellation after collection keeps its own reason; no second 'collected_not_completed' line (QA-F14 guard)", async () => {
+    const h = harness();
+    h.setNow("2026-11-04T08:00:00Z");
+    const { ref } = await collectedOpen(h, "partner-site", 5000);
+    await h.service.cancel(ref);
+    h.setNow("2026-11-09T06:00:00Z");
+    const w45 = (await h.close(W45)).body;
+    assert.deepEqual(reasonsFor(w45, ref), ["cancelled_after_collection"]);
+  });
+
+  it("A2.10 [RULE] a site credential sees its own collected-not-completed exception, never another site's", { todo: "QA-F14 · Codex Paket-02 (QA-F3 filtresiyle)" }, async () => {
+    const h = harness();
+    await h.start();
+    try {
+      h.setNow("2026-11-04T08:00:00Z");
+      const own = await collectedOpen(h, "partner-site", 2000);
+      const rival = await collectedOpen(h, "rival-site", 2000);
+      h.setNow("2026-11-09T06:00:00Z");
+      const r = await h.adminGet(`/v1/admin/settlements/${W45}`, { authorization: `Bearer ${SITE_TOKEN.partner}` });
+      assert.equal(r.status, 200);
+      assert.deepEqual(
+        { own: reasonsFor(r.body, own.ref), rivalVisible: JSON.stringify(r.body).includes(rival.ref) },
+        { own: ["collected_not_completed"], rivalVisible: false },
+      );
+    } finally {
+      await h.stop();
+    }
+  });
+});
+
