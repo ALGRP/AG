@@ -107,3 +107,22 @@ describe("A10 attribution rules", () => {
     void sumFor;
   });
 });
+
+describe("A10 QA-F11 marketing data is never attribution authority", () => {
+  it("A10.8 utm/gclid/referrer/attribution fields in the body never move the sale to another site (QA-F11 guard)", async () => {
+    const h = harness();
+    await h.start();
+    try {
+      const r = await h.httpPost(
+        "/v1/public/bookings",
+        raw("partner-site", { pickupAt: "2026-12-20T10:00", utm_source: "rival-site", gclid: "Cj0KCQ-test", referrer: "https://www.rival.example/", attribution: { siteId: "rival-site" }, sellingSiteId: "rival-site" }),
+        { origin: ORIGIN["partner-site"]!, "idempotency-key": "qa-attr-key-00000099" },
+      );
+      assert.equal(r.status, 201);
+      assert.equal((await h.row(r.body.ref)).siteId, "partner-site");
+    } finally {
+      await h.stop();
+    }
+  });
+});
+
