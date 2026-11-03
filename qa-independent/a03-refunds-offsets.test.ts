@@ -144,6 +144,13 @@ describe("A3 offsets and overpayments", () => {
     w45 = await h.report(W45);
     assert.equal(ob().status, "paid");
   });
+
+  it("A3.13 [RULE] the same written approval typed in a different letter case must not create a second offset", { todo: "PR1-N2 · Codex Paket-01b (mahsup referansı normalizasyonu)" }, async () => {
+    const lower = await h.service.createOffset(MANAGER, { ...body, writtenApprovalReference: "onay-case-1" });
+    const upper = await h.service.createOffset(MANAGER, { ...body, writtenApprovalReference: "ONAY-CASE-1" });
+    assert.equal(lower.status, 201);
+    assert.equal(upper.status, 409, "the same written approval was recorded as two offsets (case variant)");
+  });
 });
 
 describe("A3 automatic netting = offset without written approval", () => {

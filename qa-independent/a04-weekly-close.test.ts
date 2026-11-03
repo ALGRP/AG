@@ -175,4 +175,14 @@ describe("A4 statement disputes timing (T3)", () => {
     const t = rep.statement_disputes.find((x: any) => x.id === (d.body as any).id).timing;
     assert.equal(t.within_window, true, `deadline computed as ${t.deadline} (exactly 168 h), not end of the 7th calendar day`);
   });
+
+  it("A4.12 [RULE] a first close more than four weeks after the first activity must still be possible (no deadlock)", { todo: "PR1-N1 · Codex Paket-01b (ilk kapanış kilitlenmesi)" }, async () => {
+    const h = harness();
+    h.setNow("2026-11-04T10:00:00Z");
+    await h.shuttleJob({}, "sup-a", 5000); // W45 activity
+    h.setNow("2026-12-16T06:00:00Z"); // ~5 weeks later, nothing closed yet
+    const w45 = await h.close(W45);
+    assert.equal(w45.status, 201, `earliest active week refused (${w45.body.error}); W46 is refused with close_first_active_week, so no week can be closed`);
+    assert.equal((await h.close(W46)).status, 201, "the following week closes in order");
+  });
 });
