@@ -42,18 +42,21 @@ Tam SHA-256, dosya ağacı özeti (`tree_sha256`) ve plugin kimlikleri JSON enva
 
 ## 3. Çelişkiler: kurulu skill ↔ güncel Owner kuralları
 
-S1–S10 daha önce [`skills/ORG-SKILL-UPDATES-2026-11-03.md`](../../skills/ORG-SKILL-UPDATES-2026-11-03.md) dosyasında satır satır yazıldı. Bu envanterde yeni bulunanlar S11–S15.
+S1–S10 numaraları [`skills/ORG-SKILL-UPDATES-2026-11-03.md`](../../skills/ORG-SKILL-UPDATES-2026-11-03.md) dosyasıyla aynıdır; orada satır satır önerilen metin var. Bu envanterde yeni bulunanlar S11–S15.
 
 | # | Skill | Mevcut metin | Güncel kural | Öneri |
 | -- | -- | -- | -- | -- |
 | S1 | agos-pricing-matrix | "Alanya Group kendisi satıp işletir" | K15: işi tedarikçi yapar ve tahsil eder | Başlığı ve akışı değiştir |
-| S2 | agos-pricing-matrix | "+10 €/kişi (5 = 80 €)" | 5+ otomatik fiyat yok; 80 € açılmaz | Kaldır; K17 sınır kuralını yaz |
+| S2 | agos-pricing-matrix | "+10 €/kişi (5 = 80 €)" | 5+ otomatik fiyat yok; 80 € açılmaz | Konsorsiyumda K17 kuralı; eski satır silinmez, `legacy-shuttle-tariff-2026-08` kimliğiyle tarihsel bölüme (V2 devir) |
 | S3 | agos-pricing-matrix | %20 tabanı "teyit et" | T2: fiilen tahsil edilen tutar | Kesinleştir |
 | S4 | agos-pricing-matrix | test verisi "1–8 yolcu" | Otomatik 1–4 | Düzelt |
-| S5 | agos-pool-finance | "Shuttle AG'nin kendi işi" | Shuttle tedarikçiye atanır | Düzelt |
-| S6 | agos-pool-finance | "nakit/kart otomatik mahsup" | T1: mahsup yalnız yazılı onay + 2FA | Kaldır |
-| S7–S10 | agos-pricing-matrix / agos-pool-finance | Hat kodları, veri modeli, haftalık kapanış metni, ×1,30 kapsam notu | K8, K15, T3 | ORG-SKILL-UPDATES dosyasındaki öneriler |
-| **S11** | agos-governance §3 | "Nakit işte komisyon borcu … mahsup tedarikçi düzeyinde yapılır" | T1: otomatik mahsup yok | Kaldır; mahsup ayrı onaylı kayıt |
+| S5 | agos-pricing-matrix | Hat kuralı (AYT ↔ GZP yok, iki bacak) | K8: her yön ayrı kod, kapsam, aktif/pasif | Kalır; K8 ayrıntısı eklenir |
+| S6 | agos-pricing-matrix | Veri modeli "(veya taban + ek yolcu kuralı)" | Ek yolcu kuralı yok; 5+ hat bazında min/max | Düzelt |
+| S7 | agos-pool-finance | "Shuttle AG'nin kendi işi" | K15: shuttle tedarikçiye atanır | Düzelt |
+| S8 | agos-pool-finance | "nakit/kart otomatik mahsup" | T1: konsorsiyumda mahsup yalnız yazılı onay + 2FA | Konsorsiyumdan ayır; AG'nin kendi havuz cari hesabı için `pool-ledger-auto-netting-legacy` kimliğiyle koru (V2 devir) |
+| S9 | agos-pool-finance | Haftalık kapanış metni | T3: kapanmış hafta değişmez, itiraz 7 gün | Ek metin |
+| S10 | agos-pool-finance / agos-pricing-matrix | ×1,30 havuz kuralı | Konsorsiyum shuttle'ına uygulanmaz | Kalır; `pool-offer-markup-1.30` kimliğiyle |
+| **S11** | agos-governance §3 | "Nakit işte komisyon borcu … mahsup tedarikçi düzeyinde yapılır" | T1: otomatik mahsup yok | Konsorsiyumdan ayır; havuz ürününde politika kimliğiyle koru. Konsorsiyumda mahsup ayrı, yazılı onaylı kayıttır |
 | **S12** | agos-governance, agos-pool-finance | Supabase'e özgü uygulama: `app_role()`, Supabase Dashboard'dan MFA silme, security definer fonksiyonları | SEL-331: çekirdek mevcut CRS. SEL-332: kimlik sağlayıcı kararı açık | Kuralı sağlayıcıdan bağımsız yaz; Supabase ayrıntısını `references/` altına "tarihsel taslak" diye taşı |
 | **S13** | agos-governance | Tenant izolasyonu bölümü yok | Konsorsiyum çok kiracılı: siteler birbirinin verisini, komisyonunu, reklam hesabını göremez | Bölüm ekle: tenant kimliği her kayıtta, satır düzeyi yetki, kiracı bazlı kimlik bilgisi kasası, çapraz kiracı negatif testleri |
 | **S14** | ag-domain-network-seo | Fiyat WordPress shortcode'undan gelir; uydu kurulumu ve domain doğrulama yok | K1: ana site Next.js; partner uydular statik HTML/SSG, fiyat derlemede merkezi tarifeden | Bölüm ekle; WordPress kısmı ana site göçü bitene kadar kalır |
@@ -63,7 +66,7 @@ S1–S10 daha önce [`skills/ORG-SKILL-UPDATES-2026-11-03.md`](../../skills/ORG-
 
 | Risk | Kaynaklar | Öneri |
 | -- | -- | -- |
-| **Haftalık kapanış üç yerde** | `agos-consortium-settlement` (repo, benim taslağım) · `agos-weekly-settlement` (SEL-456) · `agos-pool-finance` (kapanış bölümü) | Tek skill: **agos-weekly-settlement**. SEL-456'da önce tanımlandığı için o ad korunur. Benim taslağım ayrı skill olarak kurulmamalı; içeriği (T1/T2/T3 kuralları, 21 senaryo) birleştirme girdisi olur. pool-finance kapanışı oraya devreder. |
+| **Haftalık kapanış üç yerde** | `agos-consortium-settlement` (repo) · `agos-weekly-settlement` (SEL-456) · `agos-pool-finance` (kapanış bölümü) | **V2 devir kararı:** tek yetkili finans skill'i **agos-consortium-settlement**. `agos-weekly-settlement` ona yönlenir; benzersiz içeriği görülünce birleştirilir. pool-finance konsorsiyum kapanışını oraya devreder. Benim önceki önerim ("agos-weekly-settlement adı korunsun") bu kararla değişti. |
 | **20/10/70 tablosu birden çok yerde** | agos-consortium-policy (SEL-456) · agos-pricing-matrix · repo taslağı | Pay tablosunun tek yeri `agos-consortium-policy`. Diğerleri ona atıf yapar, tabloyu kopyalamaz. |
 | **İki kod adayı** | SEL-456 saf JS MVP (29/29 test) · PR #9 TypeScript `@ag/core` (78/78 test) | Fiyat, komisyon ve kapanış mantığı iki ayrı kodda. "Tek fiyat kaynağı" ilkesine aykırı ayrışma riski. Biri kanonik seçilmeli (H-4). |
 | **SEL-456 "tam tahsil" ifadesi** | SEL-456 madde 9: "tam tahsil/ifa kanıtı" | T2 kısmi tahsilatta pay doğurur. Aday metni T2'den önce yazılmış olabilir. Birleştirmede kontrol edilmeli. |

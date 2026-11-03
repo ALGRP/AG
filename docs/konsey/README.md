@@ -40,7 +40,7 @@
 3. **Eski fiyat kuralını düzelt:**
    - Önce `agos-pricing-matrix`, sonra `agos-consortium-policy`.
    - Önce taban ölçümü (eski skill) alınır, sonra aday ölçülür (D).
-4. **Haftalık kapanışı tek skill'de topla:** `agos-weekly-settlement` (B §3.3).
+4. **Haftalık kapanışı tek skill'de topla:** `agos-consortium-settlement` tek yetkili finans skill'i; `agos-weekly-settlement` ona yönlenir (V2 devir; B §3.3).
 5. **`agos-governance`:**
    - Sağlayıcıdan bağımsız 2FA kuralı.
    - Tenant izolasyonu bölümü.
@@ -74,6 +74,7 @@
 | E | [PR #9 bağımsız QA planı ve yeniden değerlendirme](./E-pr9-bagimsiz-qa-plani.md) | [`qa-independent/`](../../qa-independent/) (83 test, 34 SQL probu; 27 `[RULE]` testi bilerek kırmızı) |
 | F, G | [Geliştirme sırası ve SEL-442 yol haritası](./F-G-gelistirme-sirasi-ve-yol-haritasi.md) | — |
 | H | [Açık Owner kararları ve önerilerim](./H-owner-kararlari.md) | — |
+| V2 | [AGOS Skills V2 devri: uygulama raporu](./V2-devir-uygulama.md) | Finans regresyon testleri (`packages/core/src/settlement.regression.test.ts`, `apps/api/src/policy-freeze.test.ts`); [reklam entegrasyonu hazırlığı](./reklam-entegrasyonu-hazirlik.md) (DOĞRULANMADI) |
 
 ## Bu oturumda yapılmayanlar
 

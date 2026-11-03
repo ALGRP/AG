@@ -142,6 +142,11 @@ Etiketler:
 
 ### 3.4 Sonuç ve sonraki adım
 
+> **Güncelleme (V2 devir, commit 4b305b7):**
+> - D-F03 ve D-F04 düzeltmeleri bu bölümdeki F6 ve F5'i kapattı: `A3.11`, `A3.4` ve `A3.5` yeşile döndü.
+> - `qa-independent`: 83 test, 59 geçer, **24 açık**.
+> - F1–F4 ve F7–F14 açık. Ayrıntı: [V2-devir-uygulama.md](./V2-devir-uygulama.md).
+
 - Yazarın öz değerlendirmesi ana yolları doğru gösterdi, ama 10 alanda kenar durumları kaçırdı. Yazar ile inceleyiciyi ayırmanın değeri tam olarak bu.
 - **Faz 1'de kod değişikliği yapılmadı.**
 - Önerilen sıra:

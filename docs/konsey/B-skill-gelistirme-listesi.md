@@ -15,7 +15,7 @@
 | 1 | Konsorsiyum iş kuralları ve partner yönetimi | **agos-consortium-policy** | SEL-456 adayını incele ve birleştir | SEL-456 adayı · K15/K12/K18 · repo taslağının kural bölümü |
 | 2 | Shuttle fiyatlandırma ve komisyon hesaplama | **agos-pricing-matrix** | Mevcut skill iyileştirilir | Kurulu sürüm `86ef0045…` · S1–S4, S7 · K17/K8 |
 | 3 | Private/VIP tedarikçi pass ve iş havuzu | **agos-pool-finance** | Mevcut skill iyileştirilir | Kurulu sürüm `9876d38a…` · S5, S6, S12, S15 |
-| 4 | Tedarikçi tahsilatı ve haftalık hesap kapanışı | **agos-weekly-settlement** | Birleştirme | SEL-456 adayı + repo `agos-consortium-settlement` (`37bb05f8…`) + pool-finance kapanış bölümü |
+| 4 | Tedarikçi tahsilatı ve haftalık hesap kapanışı | **agos-consortium-settlement** (tek yetkili finans skill'i; V2 devir) | Birleştirme; `agos-weekly-settlement` buna yönlenir | Repo `agos-consortium-settlement` + SEL-456 `agos-weekly-settlement` adayı + pool-finance kapanış bölümü |
 | 5 | Google Ads / MCC hesap bağlantıları | **agos-tenant-ads-onboarding** (Google için `references/google-ads.md`) + **agos-ads-budget-control** | SEL-456 adaylarını incele | SEL-456 · SEL-446/453 (AG'nin kendi hesabı ayrı tutulur) |
 | 6 | Meta Business ve reklam hesabı | **agos-tenant-ads-onboarding** (Meta için `references/meta.md`) | SEL-456 adayını incele | SEL-456 |
 | 7 | Uydu site oluşturma ve SEO | **ag-domain-network-seo** (+ `references/uydu-kurulum.md`) | Mevcut skill iyileştirilir | Kurulu sürüm `6565636b…` · K1 · PR #9 `@ag/ssg` kuralları |
@@ -31,7 +31,7 @@
 | -- | -- | -- |
 | 1 | agos-pricing-matrix | **Bugün etkin ve yanlış öğretiyor** (80 €, +10 €/kişi). Fiyat işi yapan her ajan bunu uygulayabilir. En ucuz ve en acil düzeltme. |
 | 2 | agos-consortium-policy | Tek kural kaynağı. Diğer skill'ler pay tablosunu buradan alır; önce bu sabitlenmezse kopyalar ayrışır. |
-| 3 | agos-weekly-settlement | Para hareketi kuralları. Mükerrer üç kaynak tek yerde toplanmalı. |
+| 3 | agos-consortium-settlement | Para hareketi kuralları. Mükerrer üç kaynak tek yerde toplanmalı (V2 devir: bu ad tek yetkili). |
 | 4 | agos-governance | Çok kiracılı kodun her satırı buna dayanır: tenant, 2FA, kimlik. Supabase'e bağlı metin, CRS kararıyla çelişiyor. |
 | 5 | agos-release-gate | Bundan sonraki her kabulün biçimi. Yazar ile kabul edenin ayrımı burada kurallaşır. |
 | 6 | agos-pool-finance | Otomatik mahsup kaldırılır, kapanış settlement'a devredilir. |
@@ -64,7 +64,7 @@
   - veri iadesi
 - Her kural bir karar kimliği taşır (ör. `2026-11-03/K15`); kaynağı Linear'daki Owner kaydıdır.
 
-### 3.3 agos-weekly-settlement (birleştirme)
+### 3.3 agos-consortium-settlement (birleştirme; `agos-weekly-settlement` buna yönlenir)
 - T1/T2/T3 kuralları ve fark modeli: `pay(net tahsilat) − pay(önceki kapanış)`.
 - Hafta sınırları ve Salı 18:00 son ödeme.
 - Dekont amaçları, itiraz akışı, mahsup için yazılı onay.

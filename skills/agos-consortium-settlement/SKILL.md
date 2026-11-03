@@ -1,11 +1,32 @@
 ---
 name: agos-consortium-settlement
-description: "AGOS konsorsiyum shuttle ve private/VIP hesaplaşması: tedarikçi tahsilatı, %20 site / %10 AGOS / %70 tedarikçi payı, fiilî tahsilat üzerinden komisyon, iade ve yeniden hesap, haftalık kapanış, dekont eşleştirme, kapanmış haftaya itiraz, 5+ kişi manuel fiyat sınırı ve hat kodları. Komisyon, hak ediş, haftalık ekstre, tahsilat, iade, itiraz, mahsup, 5+ fiyat veya shuttle hattı işlerinde kullan."
+description: "AGOS konsorsiyumunun TEK YETKİLİ finans skill'i: tedarikçi tahsilatı, %20 site / %10 AGOS / %70 tedarikçi payı, fiilî tahsilat üzerinden komisyon, iade ve yeniden hesap, iptal ters kaydı, haftalık kapanış (agos-weekly-settlement bu skill'e yönlenir), dekont eşleştirme, kapanmış haftaya itiraz, 5+ kişi manuel fiyat sınırı ve hat kodları. Komisyon, hak ediş, haftalık ekstre, tahsilat, iade, iptal, itiraz, mahsup, 5+ fiyat veya shuttle hattı işlerinde kullan."
 ---
 
-# AGOS konsorsiyum hesaplaşması (TASLAK aday · 03.11.2026)
+# AGOS konsorsiyum hesaplaşması (TASLAK aday · 03.11.2026, V2 devriyle güncellendi)
 
-Durum: K15 ticari kararı **kesin**. T1, T2, T3, K17, K8 ve K1 **Owner karar taslağıdır** (kabul bekliyor). Bu skill depo içi taslaktır; org skill'lerine işlenmesi için `skills/ORG-SKILL-UPDATES-2026-11-03.md` dosyasına bak.
+Durum:
+- K15 ticari kararı **kesin**.
+- T1/T2/T3 ve K17 kontrol mekanizması **yalnız yerel QA için onaylı**; bu canlı kabul değildir.
+- K8 hat kapsamları ve tarihleri, K17 sayısal sınırları, Private/VIP orantılı tahsilat sözleşmesi ve küsurat dağıtım politikası **açık**.
+- Bu dosya depo içi taslaktır; org skill'lerine öneriler `skills/ORG-SKILL-UPDATES-2026-11-03.md` dosyasında.
+
+**Tek yetkili finans skill'i (V2 devir):**
+- `agos-weekly-settlement` (SEL-456 adayı) ayrı kurulmaz, bu skill'e yönlenir. Benzersiz içeriği görüldüğünde buraya birleştirilir.
+- İkinci bir hesap motoru tutulmaz. Kanonik motor `@ag/core` adayıdır; bağımsız kabul şartı geçerli.
+
+## Kapsam ve politika kimlikleri
+
+Eski kurallar **silinmez**, ama konsorsiyum kapsamında uygulanmaz. Her biri kendi politika kimliğiyle korunur (kimlikler öneridir; Owner teyidi gerekir).
+
+| Politika kimliği | Kural | Nerede geçerli | Konsorsiyumda |
+| -- | -- | -- | -- |
+| `shuttle-split-v1` | %20 site / %10 AGOS / %70 tedarikçi; kendi aracıyla 0 / %10 / %90 | Konsorsiyum shuttle | **Geçerli** |
+| `legacy-shuttle-tariff-2026-08` | 1–3 kişi 30/50/60 €, +10 €/kişi (5 = 80 €) | Ağustos 2026 lansman tarifesi | Geçersiz; 1–4 kişi 30/50/60/70, 5+ yalnız K17 |
+| `b2b-distributor-2026-11-02` | Dış B2B dağıtıcı %10–15; 1–5 kişi 30/50/60/70/80 € | Dış kanal (SEL-88, SEL-197) | Uygulanmaz; 5 kişi 80 € çelişkisi açık (H-8) |
+| `pool-offer-markup-1.30` | Şoför teklifi × 1,30; fiyatı belli işte tavan | AG'nin kendi private/VIP havuz ürünü | Shuttle'a uygulanmaz; konsorsiyum private'ında hak edişi site belirler |
+| `pool-ledger-auto-netting-legacy` | Nakit/kart otomatik mahsup | AG'nin kendi havuz cari hesabı | Yok; mahsup yalnız yazılı onay + 2FA |
+| `central-card-collection-legacy` | Kart tahsilatının merkeze yazılması | Eski merkezî tahsilat önerisi | Yok; tahsilatı tedarikçi yapar (K15) |
 
 Kaynak kod: `packages/core/src/settlement.ts`, `shuttle.ts`, `commission.ts`; API `apps/api/src/service.ts`; şema `packages/db/migrations/0001_network_core.sql`.
 
@@ -64,12 +85,20 @@ Yuvarlama: tedarikçi ve site payı aşağı yuvarlanır; kalan cent AGOS'a. Tek
 - Tedarikçi fazla komisyon ödediyse → ödeyene iade (`credit_due`; iade dekontu `overpayment_refund`).
 - İade sonrası komisyon yeniden hesaplanır: sonraki haftaya negatif `refund_correction` fark kaydı.
 - Mahsup yalnız tarafların **yazılı onayı** (`written_approval_reference`) ve 2FA'lı yetkiliyle.
+- **D-F03:** Yeni komisyon (tedarikçi → site) ile iade düzeltmesi (site → tedarikçi) aynı kalemde netleşmez. Ekstrede iki ayrı brüt kalem görünür; netleştirme yalnız yazılı onaylı mahsupla yapılır.
+- **D-F04:** Müşteriye yapılan iade (onaylı iyi niyet iadesi dahil) müşteri borcu yaratmaz. Müşteri borcu = fiyat − brüt tahsilat.
 - Her iade ve düzeltme ayrı kayıt ve kanıt referansı taşır.
 
 ## Haftalık kapanış
 
 - Hafta: ISO, Europe/Istanbul. Pzt 00:00 – Paz 23:59. Önerilen ödeme son tarihi Salı 18:00.
-- Fark modeli: `split(hafta sonuna kadarki net tahsilat) − split(önceki kapanışların tabanı)` → `SettlementEntry`. Bir rezervasyon bir haftada en fazla bir kayıt.
+- Fark modeli: `pay(hafta sonuna kadarki net tahsilat, rezervasyonun dondurulmuş politikası) − önceki kapanışlarda KAYITLI paylar` → `SettlementEntry`. Bir rezervasyon bir haftada en fazla bir kayıt.
+- **D-F05:** Önceki paylar güncel politikayla yeniden hesaplanmaz; gerçek fark kayıtlarının toplamı kullanılır. Bölüşüm politikası fiyatla birlikte dondurulur. Bilinmeyen politika hata verir; güncel politika onun yerine sessizce kullanılmaz.
+- **D-F06:** Önceden hesaplanmış iş iptal edilirse iptalin olduğu hafta bir kez tam ters kayıt (`cancellation_reversal`) yazılır. Müşteri iadesi istisna listesinde izlenir.
+- **Küsurat (D-F02, AÇIK, H-23):**
+  - Bugünkü kural: tedarikçi ve site payı aşağı yuvarlanır, kalan kuruş AGOS'a. Kümülatif AGOS payı hiçbir zaman tam %10'un altına düşmez.
+  - Ama tek bir haftanın küçük farkında AGOS payı eksiye düşebilir. Örnek: 49,99 € sonrası son 1 kuruş → AGOS −1, site +1, tedarikçi +1.
+  - Politika kararı gelmeden algoritma değiştirilmez.
 - Kapanış: yalnız hafta bitince, bir kez, sırayla. Kapanış görüntüsü donar.
 - Durduran istisnalar: iptal, tahsilattan sonra iptal, itiraz, mükerrer şüphesi. Fazla tahsilat durdurmaz.
 - Çıktılar:
@@ -119,6 +148,11 @@ Yuvarlama: tedarikçi ve site payı aşağı yuvarlanır; kalan cent AGOS'a. Tek
 | 19 | Kapanmış hafta raporu | dondurulmuş, itirazlar dahil | api.test |
 | 20 | Üretim açılışı | 8 koşul eksikse çıkış 1 (bugün her durumda) | elle: `NODE_ENV=production node apps/api/src/main.ts` |
 | 21 | DB negatif probları | 16/16 ERROR | `packages/db/probes/0001_probes.sql` |
+| 22 | Aynı hafta: yeni komisyon +4 €, iade düzeltmesi −10 € (aynı taraflar) | iki ayrı brüt kalem, netleşme yok | `settlement.regression.test` D-F03 |
+| 23 | Tam iade / iyi niyet iadesi / kısmi tahsilat sonrası iade | müşteri borcu oluşmaz veya artmaz | `settlement.regression.test` D-F04 |
+| 24 | Hesaplanmış iş sonraki hafta iptal (iadeli / iadesiz) | iptal haftasında bir kez tam ters kayıt | `settlement.regression.test` D-F06 |
+| 25 | Politika değişikliği sonrası kalan tahsilat | rezervasyonun dondurulmuş politikasıyla; toplam pay v1 ile aynı | `settlement.regression.test` D-F05, `policy-freeze.test` |
+| 26 | 49,99 € sonrası son 1 kuruş | bugün AGOS −1 (todo, H-23 bekliyor) | `settlement.regression.test` D-F02 |
 
 ## Yapma
 

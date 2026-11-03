@@ -98,15 +98,17 @@ Durum: **TASLAK**. Kod yerel adaydır; Owner kabulü, insan bağımsız inceleme
 
 Org skill'leri senkronize ve salt okunurdur. Önerilen metin değişiklikleri: [`skills/ORG-SKILL-UPDATES-2026-11-03.md`](../skills/ORG-SKILL-UPDATES-2026-11-03.md). Uygulamayı skill sahibi yapar (SEL-456 skill adaylarıyla üç yönlü birleştirme).
 
+Numaralar `skills/ORG-SKILL-UPDATES-2026-11-03.md` ile aynıdır (S5, S6, S9 orada).
+
 | # | Skill / satır | Mevcut metin (özet) | Çelişen karar |
 | -- | -- | -- | -- |
 | S1 | agos-pricing-matrix §A başlığı | "Alanya Group kendisi satıp işletir" | K15: shuttle'ı tedarikçi yapar ve tahsil eder; satış kanalı %20, AGOS %10, tedarikçi %70 |
 | S2 | agos-pricing-matrix §A tarife | "4. yolcudan itibaren her ek yolcu +10 € (… 5 = 80 €)" | Owner fiyat kararı + K17.4: 5+ otomatik fiyat yok; 80 € aktif edilmez |
 | S3 | agos-pricing-matrix üye kuralı | "üye %20 komisyon (taban: müşteri fiyatı varsayımı — teyit et)"; açık soru 8 | T2: taban **fiilen tahsil edilen** tutar (fiyatla sınırlı). Soru kapandı (taslak) |
 | S4 | agos-pricing-matrix test verisi | "Shuttle 1-8 yolcu" | Otomatik fiyat 1–4; 5+ manuel ve sınırlı |
-| S5 | agos-pool-finance §3 | "Shuttle Alanya Group'un kendi işidir; havuza girmez" | K15: shuttle tedarikçiye atanır. Havuza girmemesi uyumlu; "kendi işi" ifadesi değil |
-| S6 | agos-pool-finance kararlar | "nakit/kart otomatik mahsup" | T1.4: mahsup yalnız tarafların yazılı onayıyla |
-| S7 | agos-pool-finance / pricing ×1,30 | Havuz teklif kuralı | Uyumlu: yalnız private/VIP havuz; shuttle'a uygulanmaz. Bu PR'da havuz modu yok (501) |
+| S7 | agos-pool-finance §3 | "Shuttle Alanya Group'un kendi işidir; havuza girmez" | K15: shuttle tedarikçiye atanır. Havuza girmemesi uyumlu; "kendi işi" ifadesi değil |
+| S8 | agos-pool-finance kararlar | "nakit/kart otomatik mahsup" | T1.4: mahsup yalnız tarafların yazılı onayıyla |
+| S10 | agos-pool-finance / pricing ×1,30 | Havuz teklif kuralı | Uyumlu: yalnız private/VIP havuz; shuttle'a uygulanmaz. Bu PR'da havuz modu yok (501) |
 
 ### Açık kalanlar
 
