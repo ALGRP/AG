@@ -1,6 +1,0 @@
-schema_version: "1.1"
-name: yedi-gun-sonra-itiraz
-expected_outcome: |
-  Otomatik reddedilmez: hesap hatası, yasal hak ve sahtecilik şüphesi 7 gün nedeniyle reddedilemez.
-  İtiraz numara, itiraz eden ve gerekçeyle kaydedilir; kayıtlar karşılaştırılır; 2FA'lı yetkili
-  yönetici gerekçeli karar verir; kabul edilen fark sonraki açık döneme yazılır.

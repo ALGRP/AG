@@ -1,5 +1,0 @@
-schema_version: "1.1"
-name: kismi-tahsilat-t2
-expected_outcome: |
-  Bu hafta site 6 €, AGOS 3 €, tedarikçi 21 €. Kalan 20 € müşteri borcudur, ödemeye girmez. Tahsil
-  edildiği hafta ek pay 4 € / 2 € / 14 € olur. Orijinal fiyat 50 € kalır.

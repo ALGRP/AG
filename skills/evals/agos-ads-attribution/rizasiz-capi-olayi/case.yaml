@@ -1,5 +1,0 @@
-schema_version: "1.1"
-name: rizasiz-capi-olayi
-expected_outcome: |
-  Rıza (KVKK) olmadan kişisel veri gönderilmez. Olaylar ilgili tenant'ın kendi Pixel/CAPI kimliğiyle
-  ayrı tutulur, tarayıcı ve sunucu olayları tekilleştirilir. Bu aşamada canlı olay gönderilmez.

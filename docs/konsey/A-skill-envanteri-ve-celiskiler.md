@@ -16,7 +16,13 @@
 | Mac'te kurulu 38 skill | **GÖRÜLMEDİ** | Mac dosya sistemi bu bulut oturumundan erişilemez |
 | Codex ve Hermes skill/talimat setleri | **GÖRÜLMEDİ** | Konum doğrulanmalı |
 
-**Sonuç:** Üç yönlü birleştirme (kurulu, aday, ortak taban) bu oturumda **tamamlanamaz**. Üç eksik girdi var:
+> **V2.5 (03.11) güncellemesi:**
+> - V2 paketi Mac envanterini getirdi: 12 skill (10 yerel + 2 yönetilen org skill'i).
+> - Yönetilen ikisinin (`agos-pricing-matrix` `86ef0045…`, `agos-pool-finance` `9876d38a…`) hash'i bu oturumdakiyle **aynı**; kurulu sürüm değişmemiş.
+> - 10 yerel Mac skill'i bu oturumdan görülemez (BLOCKED).
+> - `agos-consortium-settlement` için ortak taban bulundu (`96ebf0a` blob'u `451b53a…`). Ayrıntı: [V2-5-ilk-teslim.md](./V2-5-ilk-teslim.md) §5.
+
+**Sonuç (ilk tur):** Üç yönlü birleştirme (kurulu, aday, ortak taban) bu oturumda **tamamlanamaz**. Üç eksik girdi var:
 1. SEL-456 zip'inin kendisi.
 2. Mac manifesti.
 3. Adayların hangi sürümden türetildiği (taban).

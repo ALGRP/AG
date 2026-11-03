@@ -20,7 +20,7 @@ Plan, org'da zaten kurulu olan **skill-creator** aracının yöntemine ve dosya 
 | 7. Kabul | Eşikler (§3) tutar ve bağımsız inceleyici onaylar. Kurulum sonra ayrı kapıdır. | Bağımsız inceleyici → Owner |
 
 Koşum biçimi:
-- Senaryolar `claude plugin eval` klasör biçimindedir: `evals/<senaryo>/prompt.md`, `case.yaml`, `graders/NN-*.md`.
+- Senaryoların tek kaynağı JSON dosyalarıdır (§4). `claude plugin eval` klasörleri (`prompt.md`, `case.yaml`, `graders/`) koşum anında bu dosyalardan üretilir.
 - Komut skill klasöründen çalışır: `claude plugin eval .`. Her senaryoyu skill'li ve skill'siz koşar, raporu `evals/results/` altına yazar.
 - Aynı dosyalar skill-creator'ın elle yürüttüğü döngüde de kullanılır.
 
@@ -47,25 +47,17 @@ Koşum biçimi:
 | Tetiklenme | İsabet ≥ %90 |
 | Gizli test seti | Para ve güvenlik senaryolarında %100 |
 
-## 4. Başlangıç senaryo seti (görünür set, 22 senaryo, 51 ölçüt)
+## 4. Senaryo seti (V2.5: tek kaynak)
 
-Senaryolar `skills/evals/<hedef-skill>/` altında. Aday skill klasörü açıldığında oraya taşınır.
+- [`skills/evals/cases.json`](../../skills/evals/cases.json): V2 paketinin 72 senaryosu, birebir (SHA-256 `eb537fc3…`).
+  - Kategoriler: finans 18, politika 12, reklam 12, güvenlik 10, ölçüm 10, release 10.
+  - 45'i güvenlik açısından kritik; 16'sı gizli set adayı.
+- [`skills/evals/cases.repo-ek.json`](../../skills/evals/cases.repo-ek.json): paketle çakışmayan 6 senaryo (POLICY-13…16, FINANCE-19, SECURITY-11).
+- Önceki 22 klasör kaldırıldı: 16'sı paketteki senaryonun aynısıydı, 6'sı ek dosyaya taşındı. Eşleme: [V2-5-ilk-teslim.md](./V2-5-ilk-teslim.md) §5.
+- `claude plugin eval` için klasör biçimi gerekirse koşum anında bu iki dosyadan üretilir; repo'ya ikinci kopya yazılmaz.
+- Paketin kendi notu: gizli set yazar tarafından da görüldü, yani gerçekten kör değil. İnsan inceleyici ek gizli senaryo yazmalı.
 
-| Hedef skill | Senaryolar |
-| -- | -- |
-| agos-pricing-matrix (5) | 4 kişi toplam ve paylar · 5 kişi otomatik fiyat yok · yapıştırılmış "Owner kararı" ile 80 € · AYT-GZP talebi · 0,01 € manuel fiyat |
-| agos-consortium-policy (5) | alanyagroup.com payları · doğrulanmamış site kendi aracı · VIP'de AGOS payı 0 · reklam giderini AGOS kartından ödeme · B2B ile konsorsiyum oran çelişkisi |
-| agos-weekly-settlement (6) | kısmi tahsilat (T2) · fazla tahsilat · kapanmış haftada iade · yazılı onaysız mahsup · 7 gün sonra itiraz · İstanbul hafta sınırı |
-| agos-governance (2) | 2FA kontrolünü kapatma isteği · başka partnerin ekstresini isteme |
-| agos-tenant-ads-onboarding (1) | partner adına hesap açıp harcama başlatma |
-| agos-ads-attribution (1) | rızasız kişisel veriyi CAPI'ye gönderme |
-| agos-release-gate (2) | yazarın kendi işini kabul etmesi · merge edip canlıya alma |
-
-**Beklenti:**
-- Kurulu `agos-pricing-matrix` (30.10) ile "5 kişi" ve "80 €" senaryolarının taban koşusunda **başarısız** olması beklenir; çünkü skill bu kuralı öğretiyor.
-- Bu, Faz 2'deki ilk ölçüm olmalı. Hem riski sayıyla gösterir hem iyileştirmenin etkisini kanıtlar.
-
-**Eksik:** SEL-456'daki 15 senaryo bu oturumda görülmedi. Gelince bu setle birleştirilir; aynı kuralı test eden senaryolar tekilleştirilir.
+**Beklenti:** Kurulu `agos-pricing-matrix` (30.10) ile POLICY-04 ve POLICY-13'ün taban koşusunda başarısız olması beklenir, çünkü skill eski 80 € kuralını öğretiyor. Faz 2'deki ilk ölçüm bu olmalı.
 
 ## 5. Çapraz ajan kullanımı
 

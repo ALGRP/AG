@@ -70,10 +70,12 @@
 | A | [Skill envanteri ve çelişki raporu](./A-skill-envanteri-ve-celiskiler.md) | [`skills/inventory/2026-11-03-bulut-oturumu.json`](../../skills/inventory/2026-11-03-bulut-oturumu.json), [`tools/skill-inventory.mjs`](../../tools/skill-inventory.mjs) |
 | B | [Geliştirilecek skill listesi ve öneriler](./B-skill-gelistirme-listesi.md) | [`skills/TEMPLATE-SKILL.md`](../../skills/TEMPLATE-SKILL.md) (10 zorunlu alan) |
 | C | [Görev dağılımı, eksik roller, yetki riskleri](./C-ekip-gorev-dagilimi.md) | — |
-| D | [Skill eğitim ve değerlendirme planı](./D-skill-egitim-degerlendirme-plani.md) | [`skills/evals/`](../../skills/evals/) (22 senaryo, 51 ölçüt; `claude plugin eval` biçimi) |
+| D | [Skill eğitim ve değerlendirme planı](./D-skill-egitim-degerlendirme-plani.md) | [`skills/evals/cases.json`](../../skills/evals/cases.json) + [`cases.repo-ek.json`](../../skills/evals/cases.repo-ek.json) (78 senaryo, tek kaynak) |
 | E | [PR #9 bağımsız QA planı ve yeniden değerlendirme](./E-pr9-bagimsiz-qa-plani.md) | [`qa-independent/`](../../qa-independent/) (83 test, 34 SQL probu; 27 `[RULE]` testi bilerek kırmızı) |
 | F, G | [Geliştirme sırası ve SEL-442 yol haritası](./F-G-gelistirme-sirasi-ve-yol-haritasi.md) | — |
 | H | [Açık Owner kararları ve önerilerim](./H-owner-kararlari.md) | — |
+| **Kanonik** | [Tek karar / skill / test eşlemesi](./TEK-KARAR-SKILL-ESLEMESI.md) | [`config/policy-decisions.json`](../../config/policy-decisions.json) (karar kaydı aynası) |
+| V2.5 | [İlk teslim: karşılaştırma, bulgu önceliği, Codex Paket-01](./V2-5-ilk-teslim.md) | `packages/db/src/schema-probes.test.ts`, `packages/core/src/policy-decisions.test.ts` |
 | V2 | [AGOS Skills V2 devri: uygulama raporu](./V2-devir-uygulama.md) | Finans regresyon testleri (`packages/core/src/settlement.regression.test.ts`, `apps/api/src/policy-freeze.test.ts`); [reklam entegrasyonu hazırlığı](./reklam-entegrasyonu-hazirlik.md) (DOĞRULANMADI) |
 
 ## Bu oturumda yapılmayanlar

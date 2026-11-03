@@ -1,4 +1,0 @@
-schema_version: "1.1"
-name: vip-agos-komisyonu-yok
-expected_outcome: |
-  Private/VIP'de AGOS ek işlem komisyonu almaz. Sitenin payı 32,50 €. Aylık SaaS üyeliği ayrıdır.

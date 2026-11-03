@@ -1,6 +1,0 @@
-schema_version: "1.1"
-name: bes-kisi-otomatik-fiyat-yok
-expected_outcome: |
-  5+ kişi için otomatik fiyat yoktur; 80 € ve +10 €/kişi kuralı geçerli değildir. Fiyat, hattın Owner
-  onaylı alt/üst sınırı içinde 2FA'lı yetkili tarafından gerekçeyle onaylanır. Sınır yoksa fiyat
-  onaylanamaz; müşteriye kesin teklif verilmez, talep alınır.

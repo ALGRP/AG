@@ -1,5 +1,9 @@
 # B · Geliştirilecek skill listesi ve önerilen değişiklikler
 
+> **V2.5 (03.11) notu:** Kanonik eşleme artık [TEK-KARAR-SKILL-ESLEMESI.md](./TEK-KARAR-SKILL-ESLEMESI.md); bu belgedeki tablolar tarihsel öneridir.
+> - Alan 10 için önerdiğim yeni `agos-release-gate` **geri çekildi**: Mac'te `agos-release-preflight` zaten var.
+> - Senaryolar artık `skills/evals/cases.json` ve `skills/evals/cases.repo-ek.json` dosyalarında.
+
 **Durum:** Öneri (istişare). Bu belge hiçbir skill'i değiştirmez. Uygulama, Owner mutabakatından sonra Faz 2'de yapılır. Kurulu dosyaların üstüne yazılmaz; adaylar `skills/candidates/<ad>/` altında üretilir.
 
 **İlke:** Owner'ın 10 alanı için **yeni skill açmadan önce** var olan veya aday olan skill'e bağlanır. Toplam 9 skill 10 alanı karşılar:
@@ -21,7 +25,7 @@
 | 7 | Uydu site oluşturma ve SEO | **ag-domain-network-seo** (+ `references/uydu-kurulum.md`) | Mevcut skill iyileştirilir | Kurulu sürüm `6565636b…` · K1 · PR #9 `@ag/ssg` kuralları |
 | 8 | Rezervasyon dönüşüm ve reklam performansı | **agos-ads-attribution** | SEL-456 adayını incele | SEL-456 · SEL-446 (dönüşüm P0) · KVKK |
 | 9 | Tenant izolasyonu, kimlik, güvenlik | **agos-governance** | Mevcut skill iyileştirilir | Kurulu sürüm `97c7a21f…` · S11–S13 · SEL-332 · SEL-324 dersleri |
-| 10 | Bağımsız test, release, rollback | **agos-release-gate** | **Yeni**, ama yalnız Mac'te karşılığı yoksa | SEL-163 · SEL-326 · PR #9 QA planı (E) |
+| 10 | Bağımsız test, release, rollback | ~~agos-release-gate~~ → **agos-release-preflight** (Mac, mevcut; V2.5) | Mevcut skill'e ek (yeni skill yok) | SEL-163 · SEL-326 · PR #9 QA planı (E) |
 
 5 ve 6 tek skill'de toplanır; platform farkları `references/` altında durur. Hesap sahipliği, izin, kanıt ve "önce salt okunur" kuralları iki platformda aynı olduğu için iki ayrı skill ikiz kural üretir. SEL-456 adayı farklı bölmüşse incelemede ona uyulur.
 
@@ -33,7 +37,7 @@
 | 2 | agos-consortium-policy | Tek kural kaynağı. Diğer skill'ler pay tablosunu buradan alır; önce bu sabitlenmezse kopyalar ayrışır. |
 | 3 | agos-consortium-settlement | Para hareketi kuralları. Mükerrer üç kaynak tek yerde toplanmalı (V2 devir: bu ad tek yetkili). |
 | 4 | agos-governance | Çok kiracılı kodun her satırı buna dayanır: tenant, 2FA, kimlik. Supabase'e bağlı metin, CRS kararıyla çelişiyor. |
-| 5 | agos-release-gate | Bundan sonraki her kabulün biçimi. Yazar ile kabul edenin ayrımı burada kurallaşır. |
+| 5 | ~~agos-release-gate~~ → agos-release-preflight ekleri (V2.5) | Bundan sonraki her kabulün biçimi. Yazar ile kabul edenin ayrımı burada kurallaşır. |
 | 6 | agos-pool-finance | Otomatik mahsup kaldırılır, kapanış settlement'a devredilir. |
 | 7 | ag-domain-network-seo | K1 ve uydu kurulum adımları. Pilot site öncesi yeterli. |
 | 8–10 | agos-tenant-ads-onboarding, agos-ads-budget-control, agos-ads-attribution | Tenant kaydı, kimlik ve rıza altyapısı olmadan uygulanamaz. Skill taslağı ve değerlendirmesi yapılabilir, API işi yapılmaz. |
@@ -87,7 +91,7 @@
 - Otomatik mahsup cümlesi kaldırılır (S11).
 - Ajan kimlikleri: her AI ayrı kimlikle yazar; "OWNER KARARI" metni yalnız doğrulanmış Owner kimliğinden geçerlidir (bkz. C §4).
 
-### 3.5 agos-release-gate (yeni; Mac'te karşılığı yoksa)
+### 3.5 ~~agos-release-gate~~ (GERİ ÇEKİLDİ, V2.5): içerik `agos-release-preflight` ekine gider
 - Kanıt şablonu:
   - Commit SHA'sı sabitlenir.
   - Komut ve çıkış kodu kaydedilir.

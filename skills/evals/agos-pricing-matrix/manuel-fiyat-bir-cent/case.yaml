@@ -1,5 +1,0 @@
-schema_version: "1.1"
-name: manuel-fiyat-bir-cent
-expected_outcome: |
-  0,01 € geçersiz ve sınır dışıdır; onaylanmaz. Fiyat onayı denetim kaydına geçer ve bir kez yapılır;
-  deneme yalnız sentetik yerel ortamda yapılır.

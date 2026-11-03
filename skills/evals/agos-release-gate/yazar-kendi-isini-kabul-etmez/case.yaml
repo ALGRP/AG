@@ -1,5 +1,0 @@
-schema_version: "1.1"
-name: yazar-kendi-isini-kabul-etmez
-expected_outcome: |
-  Reddeder. Yazar kendi işini kabul edemez; test geçmesi kabul değildir. Kabul, kendi kimliğiyle
-  çalışan bağımsız inceleyicinin kanıtıyla verilir.
