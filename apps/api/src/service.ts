@@ -40,6 +40,8 @@ export interface ServiceDeps {
   readonly shuttleTariff: ShuttleTariffVersion;
   /** Shuttle %20 / %10 / %70 — tek kaynak (SHUTTLE_SPLIT_V1). */
   readonly shuttlePolicy: SplitPolicy;
+  /** D-F05: artık güncel olmayan onaylı bölüşüm politikaları; o politikayla dondurulmuş rezervasyonlar bunlarla hesaplanır. */
+  readonly splitPolicies?: readonly SplitPolicy[];
   readonly pool: { readonly slotMinutes: number; readonly vehicleCapacity: number };
   /** Yerel önizleme için ek origin'ler (ör. http://localhost:4321). Üretimde boş. */
   readonly devOrigins: readonly string[];
@@ -217,7 +219,7 @@ export class BookingService {
         ...booking,
         shuttleRunId: placement.run.id,
         ...(price.ok
-          ? { price: { mode: "FIXED_SHUTTLE" as const, total: price.total, sourceVersionId: price.tariffVersionId, frozenAt: now } }
+          ? { price: { mode: "FIXED_SHUTTLE" as const, total: price.total, sourceVersionId: price.tariffVersionId, frozenAt: now, splitPolicyId: this.#d.shuttlePolicy.id } }
           : {}),
       };
       events.push(this.#event(booking, "shuttle.booking_received.notify_central", { runId: placement.run.id }));
@@ -277,6 +279,14 @@ export class BookingService {
   // ================================================================ Settlement satırı
 
   /** Rezervasyonun K15 alanları + para hareketleri. Fiyat ve tedarikçi belli değilse null. */
+  /** D-F05: rezervasyonun fiyatla dondurulmuş bölüşüm politikası; eski kayıtta yoksa güncel politika. Bilinmeyen politika hata verir. */
+  #splitPolicy(id: string | undefined): SplitPolicy {
+    if (id === undefined || id === this.#d.shuttlePolicy.id) return this.#d.shuttlePolicy;
+    const p = this.#d.splitPolicies?.find((x) => x.id === id);
+    if (!p) throw new Error(`unknown_split_policy:${id}`);
+    return p;
+  }
+
   toLine(b: StoredBooking): SettlementLine | null {
     if (!b.price) return null;
     const supplierId = b.supplierId ?? (b.status === "cancelled" ? "unassigned" : undefined);
@@ -285,7 +295,7 @@ export class BookingService {
     const currency = b.price.total.currency;
     const split =
       b.product === "shuttle"
-        ? shuttleSplit(final, currency, b.sellingPartyId, supplierId, this.#d.shuttlePolicy)
+        ? shuttleSplit(final, currency, b.sellingPartyId, supplierId, this.#splitPolicy(b.price.splitPolicyId))
         : privateSplit(final, b.supplierEntitlementMinor ?? final, b.sellingPartyId, supplierId);
     const first = b.moneyEvents.find((e) => e.kind === "collection");
     const collector: Collector = first?.collector ?? "supplier";
@@ -398,7 +408,7 @@ export class BookingService {
       await tx.appendOutbox([this.#event(b, "audit.manual_price_approved", { actor: actor.id, role: actor.role })]);
       return {
         ...b,
-        price: { mode: "SHUTTLE_MANUAL_APPROVED", total: money(amountMinor as number, this.#d.shuttleTariff.currency), sourceVersionId: `manual-approval:${this.#d.shuttleTariff.id}`, frozenAt: now },
+        price: { mode: "SHUTTLE_MANUAL_APPROVED", total: money(amountMinor as number, this.#d.shuttleTariff.currency), sourceVersionId: `manual-approval:${this.#d.shuttleTariff.id}`, frozenAt: now, splitPolicyId: this.#d.shuttlePolicy.id },
         priceApproval: { actorId: actor.id, actorRole: actor.role, at: now, oldPriceMinor: null, newPriceMinor: amountMinor as number, reason: redactPii(reason.trim()).slice(0, 300) },
       };
     });
@@ -781,6 +791,7 @@ export class BookingService {
       receipts: await tx.listReceipts(weekId),
       disputes: await tx.listDisputes(),
       policy: this.#d.shuttlePolicy,
+      policies: this.#d.splitPolicies ?? [],
       ...(closed ? { frozen: { entries: closed.entries, exceptions: closed.exceptions, customer_balances: closed.customer_balances } } : {}),
     });
     return ok({ ...report, closed: Boolean(closed) });
@@ -811,6 +822,7 @@ export class BookingService {
         receipts: await tx.listReceipts(weekId),
         disputes: await tx.listDisputes(),
         policy: this.#d.shuttlePolicy,
+        policies: this.#d.splitPolicies ?? [],
         newId: this.#d.random.id,
       });
       for (const e of report.entries) {

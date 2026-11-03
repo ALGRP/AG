@@ -779,17 +779,7 @@
         "note": "Müşteri bekleme süresine itiraz etti"
       }
     ],
-    "customer_balances": [
-      {
-        "booking_id": "id-0015",
-        "booking_ref": "AG-Q3ES5G",
-        "supplier_id": "sup-yildiz",
-        "final_booking_price": 5000,
-        "collected_amount": 0,
-        "remaining": 5000,
-        "currency": "EUR"
-      }
-    ],
+    "customer_balances": [],
     "adjustments": [],
     "obligations": [
       {

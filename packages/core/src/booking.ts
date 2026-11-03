@@ -43,6 +43,8 @@ export interface PriceSnapshot {
   /** tariff_version_id veya teklif id'si — fiyat sonradan sessizce değişmez. */
   readonly sourceVersionId: string;
   readonly frozenAt: string;
+  /** D-F05: shuttle bölüşüm politikası fiyatla birlikte dondurulur; politika sonradan değişse de bu rezervasyon için geçerli kalır. */
+  readonly splitPolicyId?: string;
 }
 
 /**

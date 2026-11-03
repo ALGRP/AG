@@ -288,7 +288,7 @@ export interface SettlementEntry {
   readonly collector: Collector;
   readonly currency: Currency;
   readonly policy_id: string;
-  readonly kind: "collection" | "refund_correction";
+  readonly kind: "collection" | "refund_correction" | "cancellation_reversal";
   readonly base_before: number;
   readonly base_after: number;
   readonly collected_delta: number;
@@ -477,6 +477,10 @@ export function exceptionReasons(l: SettlementLine, until: string): ExceptionRea
 /** Hesaplamayı durduran istisnalar (fazla tahsilat durdurmaz: pay satış fiyatına kadar hesaplanır). */
 const BLOCKING: readonly ExceptionReason[] = ["cancelled", "cancelled_after_collection", "disputed", "suspected_duplicate"];
 
+/** Bir rezervasyonun kayıtlı kümülatif payları (gerçek fark kayıtlarının toplamı). */
+type Shares = { readonly base: number; readonly site: number; readonly agos: number; readonly supplier: number };
+const NO_SHARES: Shares = Object.freeze({ base: 0, site: 0, agos: 0, supplier: 0 });
+
 function inWeek(iso: string | null, w: WeekBounds): boolean {
   return iso !== null && ts(iso) >= ts(w.start_utc) && ts(iso) < ts(w.end_utc);
 }
@@ -497,6 +501,8 @@ export function weeklyReport(input: {
   readonly receipts: readonly BankReceipt[];
   readonly disputes?: readonly StatementDispute[];
   readonly policy?: SplitPolicy;
+  /** D-F05: rezervasyonlarda dondurulmuş eski bölüşüm politikaları. `policy` ve SHUTTLE_SPLIT_V1 her zaman tanınır. */
+  readonly policies?: readonly SplitPolicy[];
   readonly newId?: () => string;
   /** Kapanmış hafta: farklar ve istisnalar kapanış anındaki haliyle (kural 8). */
   readonly frozen?: { readonly entries: readonly SettlementEntry[]; readonly exceptions: readonly ExceptionItem[]; readonly customer_balances: readonly CustomerBalance[] };
@@ -504,6 +510,16 @@ export function weeklyReport(input: {
   const week = weekBounds(input.weekId);
   const late = ts(input.now) >= ts(week.payment_due_utc);
   const policy = input.policy ?? SHUTTLE_SPLIT_V1;
+  // D-F05: her shuttle rezervasyonu kendi dondurulmuş politikasıyla hesaplanır; tanınmayan politika güncel olanla
+  // sessizce değiştirilmez (fail-closed).
+  const registry = new Map<string, SplitPolicy>();
+  for (const p of [SHUTTLE_SPLIT_V1, ...(input.policies ?? []), policy]) registry.set(p.id, p);
+  const policyFor = (l: SettlementLine): SplitPolicy => {
+    if (l.service_type !== "shuttle") return policy;
+    const p = registry.get(l.policy_id);
+    if (!p) throw new RangeError(`unknown split policy ${l.policy_id} (booking ${l.booking_ref})`);
+    return p;
+  };
   let seq = 0;
   const newId = input.newId ?? (() => `${week.week_id}-E${++seq}`);
 
@@ -512,11 +528,36 @@ export function weeklyReport(input: {
   const balances: CustomerBalance[] = input.frozen ? [...input.frozen.customer_balances] : [];
 
   if (!input.frozen) {
-    const prior = new Map<string, number>();
+    // D-F05: önceki paylar gerçek kayıtlardan (kapanmış haftaların farkları) alınır; güncel politikayla yeniden hesaplanmaz.
+    const prior = new Map<string, Shares>();
     for (const e of input.priorEntries) {
       if (e.week_id >= week.week_id) continue;
-      prior.set(e.booking_id, (prior.get(e.booking_id) ?? 0) + e.collected_delta);
+      const p = prior.get(e.booking_id) ?? NO_SHARES;
+      prior.set(e.booking_id, { base: p.base + e.collected_delta, site: p.site + e.site_delta, agos: p.agos + e.agos_delta, supplier: p.supplier + e.supplier_delta });
     }
+    const pushEntry = (l: SettlementLine, kind: SettlementEntry["kind"], before: Shares, after: Shares, policyId: string, selfSupplied: boolean) =>
+      entries.push({
+        entry_id: newId(),
+        week_id: week.week_id,
+        booking_id: l.booking_id,
+        booking_ref: l.booking_ref,
+        service_type: l.service_type,
+        selling_party_id: l.selling_party_id,
+        selling_site_id: l.selling_site_id,
+        supplier_id: l.supplier_id,
+        collector: l.collector,
+        currency: l.currency,
+        policy_id: policyId,
+        kind,
+        base_before: before.base,
+        base_after: after.base,
+        collected_delta: after.base - before.base,
+        site_delta: after.site - before.site,
+        agos_delta: after.agos - before.agos,
+        supplier_delta: after.supplier - before.supplier,
+        self_supplied: selfSupplied,
+        payment_reference: null,
+      });
     for (const l of input.lines) {
       const sum = collectionSummary(l.money_events, l.final_booking_price, week.end_utc);
       const reasons = exceptionReasons(l, week.end_utc);
@@ -538,59 +579,54 @@ export function weeklyReport(input: {
           });
         }
       }
-      if (reasons.some((r) => BLOCKING.includes(r))) continue;
+      const before = prior.get(l.booking_id) ?? NO_SHARES;
+      if (reasons.some((r) => BLOCKING.includes(r))) {
+        // D-F06: iptal, önceden kaydedilmiş payı silmez; iptalin olduğu hafta tam ters hareket yazılır (bir kez).
+        const cancelledByWeekEnd = l.cancelled && l.cancelled_at !== null && ts(l.cancelled_at) < ts(week.end_utc);
+        if (cancelledByWeekEnd && before.base > 0) pushEntry(l, "cancellation_reversal", before, NO_SHARES, l.policy_id, l.self_supplied);
+        continue;
+      }
       if (l.completed_at === null || ts(l.completed_at) >= ts(week.end_utc)) continue; // T2: transfer tamamlanmadan pay yok
 
       const base = Math.max(0, Math.min(sum.net, l.final_booking_price));
-      const before = prior.get(l.booking_id) ?? 0;
-      if (base < l.final_booking_price) {
+      // D-F04: müşteri borcu brüt tahsilata göre; müşteriye yapılan iade (onaylı iyi niyet iadesi dahil) borcu yeniden yaratmaz.
+      const paidByCustomer = Math.min(sum.collected, l.final_booking_price);
+      if (paidByCustomer < l.final_booking_price) {
         balances.push({
           booking_id: l.booking_id,
           booking_ref: l.booking_ref,
           supplier_id: l.supplier_id,
           final_booking_price: l.final_booking_price,
-          collected_amount: base,
-          remaining: l.final_booking_price - base,
+          collected_amount: paidByCustomer,
+          remaining: l.final_booking_price - paidByCustomer,
           currency: l.currency,
         });
       }
-      if (base === before) continue;
-      const a = splitOnCollected(l, before, policy);
-      const b = splitOnCollected(l, base, policy);
-      entries.push({
-        entry_id: newId(),
-        week_id: week.week_id,
-        booking_id: l.booking_id,
-        booking_ref: l.booking_ref,
-        service_type: l.service_type,
-        selling_party_id: l.selling_party_id,
-        selling_site_id: l.selling_site_id,
-        supplier_id: l.supplier_id,
-        collector: l.collector,
-        currency: l.currency,
-        policy_id: b.policy_id,
-        kind: base > before ? "collection" : "refund_correction",
-        base_before: before,
-        base_after: base,
-        collected_delta: base - before,
-        site_delta: b.site_commission_amount - a.site_commission_amount,
-        agos_delta: b.agos_fee_amount - a.agos_fee_amount,
-        supplier_delta: b.supplier_entitlement - a.supplier_entitlement,
-        self_supplied: b.self_supplied,
-        payment_reference: null,
-      });
+      if (base === before.base) continue;
+      const b = splitOnCollected(l, base, policyFor(l));
+      pushEntry(
+        l,
+        base > before.base ? "collection" : "refund_correction",
+        before,
+        { base, site: b.site_commission_amount, agos: b.agos_fee_amount, supplier: b.supplier_entitlement },
+        b.policy_id,
+        b.self_supplied,
+      );
     }
   }
   const adjustments = input.adjustments.filter((a) => a.week_id === week.week_id);
 
   // ---- Borçlar
-  type Acc = { debtor: string; creditor: string; kind: Obligation["kind"]; currency: Currency; amount: number; bookings: Set<string>; adj: Set<string> };
+  // D-F03: borç yönüne göre ayrı kalem. Yeni komisyon (borçlu → alacaklı) ile iade düzeltmesi (alacaklı → borçlu)
+  // aynı tutarda netleşmez; netleştirme yalnız yazılı onaylı mahsupla (Adjustment "offset").
+  type Acc = { debtor: string; creditor: string; kind: Obligation["kind"]; currency: Currency; credit: boolean; amount: number; bookings: Set<string>; adj: Set<string> };
   const acc = new Map<string, Acc>();
   const add = (debtor: string, creditor: string, kind: Obligation["kind"], currency: Currency, amount: number, booking?: string, adj?: string) => {
     if (amount === 0 && !adj) return;
-    const key = `${debtor}|${creditor}|${kind}|${currency}`;
+    const credit = amount < 0;
+    const key = `${debtor}|${creditor}|${kind}|${currency}|${credit ? "C" : "D"}`;
     let x = acc.get(key);
-    if (!x) acc.set(key, (x = { debtor, creditor, kind, currency, amount: 0, bookings: new Set(), adj: new Set() }));
+    if (!x) acc.set(key, (x = { debtor, creditor, kind, currency, credit, amount: 0, bookings: new Set(), adj: new Set() }));
     x.amount += amount;
     if (booking) x.bookings.add(booking);
     if (adj) x.adj.add(adj);
@@ -608,9 +644,12 @@ export function weeklyReport(input: {
   const weekReceipts = input.receipts.filter((r) => r.week_id === week.week_id);
   const used = new Set<string>();
   const obligations: Obligation[] = [...acc.values()]
-    .sort((x, y) => `${x.debtor}|${x.creditor}|${x.kind}`.localeCompare(`${y.debtor}|${y.creditor}|${y.kind}`))
+    .sort((x, y) => `${x.debtor}|${x.creditor}|${x.kind}|${x.credit ? 0 : 1}`.localeCompare(`${y.debtor}|${y.creditor}|${y.kind}|${y.credit ? 0 : 1}`))
     .map((x) => {
-      const pay = weekReceipts.filter((r) => r.purpose === "settlement" && r.payer_id === x.debtor && r.payee_id === x.creditor && r.currency === x.currency && !used.has(r.id));
+      // Borçlunun ödemesi yalnız borç yönündeki kaleme eşlenir; alacak kalemini alacaklının iadesi kapatır.
+      const pay = x.credit
+        ? []
+        : weekReceipts.filter((r) => r.purpose === "settlement" && r.payer_id === x.debtor && r.payee_id === x.creditor && r.currency === x.currency && !used.has(r.id));
       pay.forEach((r) => used.add(r.id));
       // T1: alacaklının fazla ödemeyi ödeyene iadesi
       const back = weekReceipts.filter((r) => r.purpose === "overpayment_refund" && r.payer_id === x.creditor && r.payee_id === x.debtor && r.currency === x.currency && !used.has(r.id));

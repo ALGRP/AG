@@ -87,7 +87,7 @@ export function renderWeeklyReportHtml(r: WeeklyReport, opts: { title: string; n
         esc(l.booking_ref),
         esc(l.service_type),
         esc(l.selling_site_id),
-        l.kind === "collection" ? "Tahsilat" : '<span class="pill overpaid">İade düzeltmesi</span>',
+        l.kind === "collection" ? "Tahsilat" : l.kind === "cancellation_reversal" ? '<span class="pill overpaid">İptal ters kaydı</span>' : '<span class="pill overpaid">İade düzeltmesi</span>',
         `${eur(l.base_before)} → ${eur(l.base_after)}`,
         eur(l.collected_delta),
         eur(l.supplier_delta),
@@ -145,7 +145,7 @@ ${table(
   ]);
   const adjSource = opts.nextWeek ?? r;
   const adj = adjSource.adjustments.map((a) => [esc(a.adjustment_reference), esc(a.kind === "offset" ? "Mahsup (yazılı onay)" : "İtiraz kararı"), esc(a.original_week_id), esc(a.week_id), esc(a.debtor_id), esc(a.creditor_id), eur(a.amount), esc(a.written_approval_reference ?? "—"), esc(a.reason)]);
-  const corrections = (opts.nextWeek ?? r).entries.filter((e) => e.kind === "refund_correction").map((e) => [esc(e.booking_ref), esc(e.week_id), esc(e.supplier_id), eur(e.collected_delta), eur(e.site_delta), eur(e.agos_delta), eur(e.supplier_delta)]);
+  const corrections = (opts.nextWeek ?? r).entries.filter((e) => e.kind !== "collection").map((e) => [esc(e.booking_ref) + (e.kind === "cancellation_reversal" ? " (iptal)" : ""), esc(e.week_id), esc(e.supplier_id), eur(e.collected_delta), eur(e.site_delta), eur(e.agos_delta), eur(e.supplier_delta)]);
   const subs = (opts.subscriptions ?? []).map((s) => [esc(s.site_id), esc(s.period), eur(s.amount), pill(s.status)]);
   const subReceipts = r.subscription_receipts.map((x) => [esc(x.bank_reference), esc(x.payer_id), eur(x.amount), esc(ist(x.paid_at))]);
 

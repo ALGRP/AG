@@ -396,7 +396,7 @@ CREATE TABLE settlement_entry (
   id              uuid PRIMARY KEY,
   week_id         text NOT NULL REFERENCES settlement_week(week_id),
   booking_id      uuid NOT NULL REFERENCES booking(id),
-  kind            text NOT NULL CHECK (kind IN ('collection', 'refund_correction')),
+  kind            text NOT NULL CHECK (kind IN ('collection', 'refund_correction', 'cancellation_reversal')),
   base_before     bigint NOT NULL CHECK (base_before >= 0),
   base_after      bigint NOT NULL CHECK (base_after >= 0),
   collected_delta bigint NOT NULL CHECK (collected_delta <> 0 AND collected_delta = base_after - base_before),
