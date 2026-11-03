@@ -211,8 +211,7 @@ describe("D-F05 — önceki paylar güncel politikayla yeniden hesaplanmaz", () 
 
   it(
     "paket F05: aynı tabanda kayıtlı pay (900/600/3500) dondurulmuş politikadan (1000/500/3500) farklıysa sessizce atlanmaz",
-    { todo: "PKG-F05b · Codex Paket-01: 'share_mismatch' istisnası; otomatik düzeltme H-24 kararına bağlı" },
-    () => {
+        () => {
       const a = line({ booking_id: "f5c" });
       const recorded: SettlementEntry = { ...run(W45, [a]).entries[0]!, site_delta: 900, agos_delta: 600, supplier_delta: 3500 };
       const w46 = run(W46, [a], [recorded]);

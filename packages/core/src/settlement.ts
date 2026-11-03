@@ -304,7 +304,8 @@ export type ExceptionReason =
   | "cancelled_after_collection"
   | "overcollected"
   | "disputed"
-  | "suspected_duplicate";
+  | "suspected_duplicate"
+  | "share_mismatch";
 
 export interface ExceptionItem {
   readonly booking_id: string;
@@ -602,12 +603,37 @@ export function weeklyReport(input: {
           currency: l.currency,
         });
       }
+      const frozenPolicy = policyFor(l);
+      const expectedBefore = splitOnCollected(l, before.base, frozenPolicy);
+      const mismatch = prior.has(l.booking_id) &&
+        (before.site !== expectedBefore.site_commission_amount ||
+         before.agos !== expectedBefore.agos_fee_amount ||
+         before.supplier !== expectedBefore.supplier_entitlement);
+      if (mismatch) {
+        // H-24: flag the discrepancy; do not silently repair old recorded shares.
+        exceptions.push({
+          booking_id: l.booking_id,
+          booking_ref: l.booking_ref,
+          supplier_id: l.supplier_id,
+          selling_site_id: l.selling_site_id,
+          reason: "share_mismatch",
+          final_booking_price: l.final_booking_price,
+          collected_amount: sum.net,
+          customer_refund_due: 0,
+          currency: l.currency,
+          note: `prior recorded site/agos/supplier=${before.site}/${before.agos}/${before.supplier}; expected=${expectedBefore.site_commission_amount}/${expectedBefore.agos_fee_amount}/${expectedBefore.supplier_entitlement} (${frozenPolicy.id}); human reconciliation required`,
+        });
+      }
       if (base === before.base) continue;
-      const b = splitOnCollected(l, base, policyFor(l));
+      const b = splitOnCollected(l, base, frozenPolicy);
+      // Continue booking for new cash/refund, without automatically curing the prior mismatch.
+      const accountingBefore: Shares = mismatch
+        ? { base: before.base, site: expectedBefore.site_commission_amount, agos: expectedBefore.agos_fee_amount, supplier: expectedBefore.supplier_entitlement }
+        : before;
       pushEntry(
         l,
         base > before.base ? "collection" : "refund_correction",
-        before,
+        accountingBefore,
         { base, site: b.site_commission_amount, agos: b.agos_fee_amount, supplier: b.supplier_entitlement },
         b.policy_id,
         b.self_supplied,
