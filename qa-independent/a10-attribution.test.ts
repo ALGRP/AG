@@ -254,3 +254,18 @@ describe("A10 QA-F11 site-bound challenge and header-forgery guards (LOCAL_ONLY)
     }
   });
 });
+
+describe("A10 QA-F11 idempotent retry after a lost response", () => {
+  it("A10.18 [RULE] a retry with the same idempotency key and a fresh challenge returns the original booking, not 409", { todo: "PR2-N3 · Codex Paket-02 (requestHash humanToken içeriyor; form.js hatada belirteci sıfırlıyor)" }, async () => {
+    const h = harness();
+    h.setNow("2026-11-04T08:00:00Z");
+    const key = "qa-retry-key-0000000001";
+    const same = { pickupAt: "2026-12-21T10:00", customer: { name: "Retry Guest", email: "retry@example.com", phone: "+49 151 7777777", locale: "de" } };
+    const first = await h.book({ ...same, humanToken: localHumanToken("www.partner.example", "retryNonce0001") }, key);
+    assert.equal(first.status, 201);
+    // The browser never saw the response (network drop); form.js resets Turnstile and resubmits with the SAME key.
+    const retry = await h.book({ ...same, humanToken: localHumanToken("www.partner.example", "retryNonce0002") }, key);
+    assert.deepEqual([retry.status, retry.body.ref], [first.status, first.body.ref], `retry returned ${retry.status} ${retry.body.error ?? ""}`);
+  });
+});
+
