@@ -22,9 +22,16 @@
    - Üç yönlü birleştirme bu girdiler gelmeden tamamlanamaz. Mac için salt okunur bir envanter aracı hazırladım.
 5. **PR #9'u ben yazdım; bağımsız değerlendiremem.**
    - Testleri temiz bir checkout'ta yeniden koştum: 78/78, probların 16'sı da reddedildi, rapor byte düzeyinde aynı.
-   - Ayrı bir AI ajanına saldırgan okuma yaptırdım.
-   - Kabul ancak insan inceleyiciden gelir.
-6. **Kendi bulgum:** PR #9'da haftalık kapanış, iade, tahsilat ve dekont girişi 2FA istemiyor (yalnız yerelde). Ayrıca tenant kapsamlı yetki hiç yok. Bunlar çok kiracılı üründen önce kapanmalı.
+   - Bu sonuçlar ana yolları kanıtlıyor, kenar durumları kanıtlamıyor.
+6. **Ayrı AI ajanının saldırgan okuması 4 yüksek ve 10 orta bulgu çıkardı** (E §3; testler `qa-independent/` altında).
+   - Atanmış sefere sonradan katılan rezervasyon hiç hesaplanmıyor; site ve AGOS payı kayboluyor.
+   - Aynı mahsup iki kez kaydedilebiliyor.
+   - Kiracı (site) bazında yetki yok.
+   - Veritabanı şeması defter tablolarında 34 kural ihlalinin hepsini kabul ediyor.
+   - Ayrıca: iade edilen tutar müşteri borcu görünüyor; ilk kapanış önceki haftayı atlayabiliyor; tarifeye 5. eleman eklenince 80 € geri geliyor; `NODE_ENV=prod` canlı kapıyı atlatıyor.
+   - Bunların hepsini kendi yeniden koşumumla veya kodla doğruladım.
+   - Benim öz değerlendirmem 10 alanda fazla iyimserdi. Yazanın kendi işini kabul edememesi kuralının neden gerekli olduğunu bu sonuç gösteriyor.
+   - Faz 1'de düzeltme yapılmadı; düzeltme turu Codex'e önerildi (F2).
 
 ## Öncelik sırasıyla plan
 
@@ -38,7 +45,11 @@
    - Sağlayıcıdan bağımsız 2FA kuralı.
    - Tenant izolasyonu bölümü.
    - Otomatik mahsup cümlesinin kaldırılması.
-6. **PR #9 bağımsız QA** (insan) ve kanonik kod kararı (H-4). Bu madde 3–5 ile paralel yürür.
+6. **PR #9 düzeltme turu ve insan QA:**
+   - F1–F14 Codex'te düzeltilir; Claude inceler.
+   - `[RULE]` testleri yeşile dönünce insan inceleyici kabul kararını verir.
+   - Kanonik kod kararı (H-4) da bu adımda.
+   - Bu madde 3–5 ile paralel yürür.
 7. **CRS staging, 2FA ve tenant modeli:** F3 → F4 → F5.
 8. **Partner paneli ve pilot uydu site:** F6, F7.
 9. **Reklam:** önce salt okunur ve sandbox; harcama yok (F8).
@@ -60,7 +71,7 @@
 | B | [Geliştirilecek skill listesi ve öneriler](./B-skill-gelistirme-listesi.md) | [`skills/TEMPLATE-SKILL.md`](../../skills/TEMPLATE-SKILL.md) (10 zorunlu alan) |
 | C | [Görev dağılımı, eksik roller, yetki riskleri](./C-ekip-gorev-dagilimi.md) | — |
 | D | [Skill eğitim ve değerlendirme planı](./D-skill-egitim-degerlendirme-plani.md) | [`skills/evals/`](../../skills/evals/) (22 senaryo, 51 ölçüt; `claude plugin eval` biçimi) |
-| E | [PR #9 bağımsız QA planı ve yeniden değerlendirme](./E-pr9-bagimsiz-qa-plani.md) | — |
+| E | [PR #9 bağımsız QA planı ve yeniden değerlendirme](./E-pr9-bagimsiz-qa-plani.md) | [`qa-independent/`](../../qa-independent/) (83 test, 34 SQL probu; 27 `[RULE]` testi bilerek kırmızı) |
 | F, G | [Geliştirme sırası ve SEL-442 yol haritası](./F-G-gelistirme-sirasi-ve-yol-haritasi.md) | — |
 | H | [Açık Owner kararları ve önerilerim](./H-owner-kararlari.md) | — |
 

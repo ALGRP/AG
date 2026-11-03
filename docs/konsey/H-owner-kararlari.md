@@ -22,6 +22,10 @@ Sıra önceliğe göre. İlk yedisi Faz 2'ye geçmeden gerekiyor. "Önerim" süt
 | **H-16** | Mali müşavir ve hukuk soru listesi | Canlıya geçiş koşulu 2. | (1) Kim kime fatura keser (site komisyonu, AGOS payı, tedarikçi bedeli)? (2) KDV ve stopaj nasıl? (3) Tahsilatın hukuki sorumlusu kim? (4) Partner sitelerin transfer satış yetkisi nasıl kurulur (TÜRSAB / acentelik)? (5) Reklam ölçümünde KVKK rolleri ne? |
 | **H-17** | Konsorsiyum işi Hermes'ten dağıtılsın mı? | SEL-324/326 G0 HOLD sürüyor. | Hayır; kabul gelene kadar elle devir. |
 | **H-18** | İlk pilotun kapsamı | Reklam otomasyonu kritik yolu uzatıyor. | İlk pilot: uydu site + rezervasyon + haftalık kapanış. Reklamı partner kendi hesabında yürütür, biz yalnız ölçeriz. |
+| **H-19** | Aynı hafta içinde bir iade düzeltmesiyle yeni bir komisyonun tek kalemde netleşmesi "mahsup" sayılır mı? | Bağımsız okuma F6. T1: mahsup yalnız yazılı onayla. | Ekstrede brüt kalemler ayrı gösterilsin. Ödemede netleştirme yalnız yazılı onaylı mahsupla yapılsın. |
+| **H-20** | "7 takvim günü" nasıl sayılır: tam 168 saat mi, 7. günün sonuna kadar mı? | Bugünkü kod 168 saat sayıyor. 7. gün akşam açılan itiraz "süre dışı" etiketi alıyor (otomatik ret yok). | İletimden sonraki 7. günün sonu, 23:59 İstanbul. |
+| **H-21** | Müşteri itirazı "haklı" bulunursa mali etkisi ne olur? | Bugün "haklı" ve "haksız" sonuç aynı hesaplanıyor (F10). | Haklı itiraz iade veya düzeltme kaydıyla işlensin; komisyon net tahsilattan (T2) yeniden hesaplansın. Karar tek başına komisyonu serbest bırakmasın. |
+| **H-22** | 5+ kişi manuel fiyatın alt sınırı 4 kişilik 70 €'nun altına inebilir mi? | Bugün 0,01 € gibi bir alt sınır onaylanabiliyor (A12.6). | Hayır. 5+ alt sınırı ≥ 70 € olsun; sınır tablosu buna göre doğrulansın. |
 
 ## Bu aşamada değişmeyenler
 

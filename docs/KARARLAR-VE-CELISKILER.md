@@ -169,6 +169,8 @@ Owner talimatı: "Mevcut PR ve karar kayıtları bu modele göre incelensin, çe
 
 K15 için bağımsız QA yapıldı (kodu yazmayan ayrı bir yapay zekâ ajanı). 10 bulgunun hepsi düzeltildi ve teste bağlandı: [K15-QA-VE-KARAR-RAPORU.md](./K15-QA-VE-KARAR-RAPORU.md). Bu inceleme insan bağımsız kabulünün yerine geçmez.
 
+03.11 eki (c0b3175) için ikinci bir AI saldırgan okuması yapıldı: **4 yüksek, 10 orta bulgu açık** (F1–F14). Bunlar arasında atanmış sefere sonradan katılan rezervasyonun hesaplanmaması, mükerrer mahsup, kiracı yetkisinin olmaması ve DB defter tablolarında kural eksikliği var. Ayrıntı: [konsey/E-pr9-bagimsiz-qa-plani.md §3](./konsey/E-pr9-bagimsiz-qa-plani.md). Faz 1'de düzeltme yapılmadı.
+
 ## Durum etiketi
 
 Canlıya geçiş Owner kararıyla ayrıca onaya tabidir (03.11.2026).

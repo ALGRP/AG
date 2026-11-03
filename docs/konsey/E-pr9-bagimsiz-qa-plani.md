@@ -16,9 +16,11 @@
 | `npm run report:sample` | çıkış 0 · W45: 9 fark kaydı, 3 istisna, 1 açık müşteri borcu, 5 borç/ihtilaf · W46: −5000 iade düzeltmesi, +2000 tahsilat |
 | Rapor tekrarlanabilirliği | Yeniden üretilen `docs/ornek-hafta-2026-W45.html/.json` commit'teki dosyayla **byte düzeyinde aynı** |
 | Migration | `0001_network_core.sql` SHA-256 `bd14b6c6…25e1` · temiz kümede çıkış 0 |
-| Negatif problar | `0001_probes.sql` SHA-256 `85a9dbad…031f` · **16/16 reddedildi**, olumlu durumlar geçti |
+| Negatif problar | `0001_probes.sql` SHA-256 `85a9dbad…031f` · **16/16 reddedildi**, olumlu durumlar geçti. **Sınır:** problar ağırlıkla `booking` özet tablosunu kapsıyor; 03.11'de eklenen defter tablolarının kuralları denenmemişti (bkz. §3 F4). |
 
 ## 2. Owner'ın 12 alanı: yazar öz değerlendirmesi
+
+> Bu tablo bağımsız okumadan **önce** yazıldı ve kayıt olarak değiştirilmeden bırakıldı. §3 onu 10 alanda düzeltiyor. Ana yollar doğruydu; kenar durumları yazar göremedi.
 
 Etiketler:
 - **PASS:** test veya probla gösterildi.
@@ -48,7 +50,106 @@ Etiketler:
 
 ## 3. AI bağımsız saldırgan okuma (ayrı ajan, yazarın sonuçlarını görmeden)
 
-*Sonuç bekleniyor; ajan raporunu tamamlayınca bu bölüm doldurulacak.*
+**Ajanın yaptıkları:**
+- Sabitlenmiş commit `c0b3175` üzerinde ayrı bir worktree'de çalıştı.
+- Mevcut testleri koştu: 78/78.
+- Kendi 83 testini yazdı: **56 geçti, 27 `[RULE]` testi kaldı**.
+- 34 SQL negatif probu yazdı: **hiçbiri reddedilmedi**. 5 kontrol probu reddedildi; bu, düzeneğin reddi doğru ayırt ettiğini gösterir.
+- Testler ve problar repo'da: [`qa-independent/`](../../qa-independent/).
+
+**Ana oturumun doğrulaması:**
+- Testleri ana checkout'ta yeniden koştum: aynı sonuç, 83 / 56 / 27.
+- F4'ü kendi temiz veritabanımda tekrarladım: 34 prob kabul edildi, yalnız 5 kontrol reddedildi.
+- F1, F2, F5, F7, F12 ve F13'ü test çıktısından veya koddan ayrıca teyit ettim.
+- F5 committed örnek raporda da görülüyor: tamamen iade edilmiş `AG-Q3ES5G` W46'da "müşteri 50 € borçlu" listesinde.
+
+### 3.1 Alan bazında sonuç
+
+| # | Alan | Yazar (§2) | Ayrı AI ajanı | Bulgular |
+| -- | -- | -- | -- | -- |
+| 1 | Çift sayım | PASS | **FAIL** | F7, F2; DB'de fark kaydı zinciri yok (F4) |
+| 2 | Kısmi tahsilat | PASS | **FAIL** | F1, F14 |
+| 3 | İade ve mahsup | PASS | **FAIL** | F2, F5, F6 |
+| 4 | Haftalık kapanış | PASS | **FAIL** | F7. Geçenler: 6 eşzamanlı istekte tek kapanış, hafta sınırları, 53. hafta, dondurulmuş görüntü, süre dışı itirazın otomatik reddedilmemesi |
+| 5 | Mükerrer kayıt | PASS | **FAIL** | F8, F9. Geçenler: idempotency, 8 eşzamanlı istekte tek rezervasyon |
+| 6 | Siteler arası erişim | NOT TESTED | **FAIL** | F3 |
+| 7 | Yetkisiz fiyat değişikliği | PASS | **FAIL (yalnız DB)** | Kod ve API geçti; DB'de hesaplanmış işin fiyatı değiştirilebiliyor (F4) |
+| 8 | 2FA'sız finansal onay | FAIL | **FAIL** | F10 |
+| 9 | Reklam hesabı izolasyonu | NOT TESTED | NOT TESTED | Modül yok |
+| 10 | Yanlış siteye kredi | NOT TESTED | **FAIL** | F11 ve düşük bulgular |
+| 11 | Private/VIP kısmi tahsilat | PASS | **FAIL (yalnız DB)** | Kod ve API geçti; DB'de private satıra AGOS payı ve satıştan büyük hak ediş yazılabiliyor (F4) |
+| 12 | 5+ fiyat sınırları | PASS | **FAIL** | F12; alt sınır 0,01 € onaylanmışsa 0,01 € fiyat geçiyor |
+| Ek | Canlı kapı ve ödeme | — | **FAIL (kısmen)** | F13. Geçenler: onaylı her bayrakla bile üretim reddi; ödeme, banka veya payout istemcisi yok |
+
+### 3.2 Bulgular
+
+**Yüksek:**
+- **F1 · Atanmış sefere sonradan katılan rezervasyon hiç hesaplanmıyor.**
+  - Havuz yeni rezervasyonu atanmış sefere de koyuyor (`pool.ts`), ama tedarikçi yalnız atama anındaki rezervasyonlara yazılıyor (`assignRun`).
+  - Tahsilat `supplier_not_assigned` ile reddediliyor; iş yine de teslim edilmiş sayılıyor.
+  - Hiçbir raporda görünmüyor; site %20 ve AGOS %10 sessizce kayboluyor.
+- **F2 · Aynı mahsup iki kez kaydediliyor.** Aynı `adjustment_reference` ile iki istek de 201 dönüyor; borç iki katına çıkıyor.
+- **F3 · Kiracı (site) bazında yetki yok.**
+  - Global statik anahtar her sitenin rezervasyonunu ve ekstresini görüyor, başka sitenin rezervasyonunu iptal edebiliyor.
+  - DB'de RLS yalnız `booking` SELECT için var ve zorunlu değil (FORCE yok); defter tablolarında RLS yok.
+- **F4 · DB şema adayı defter tablolarında iş kurallarını uygulamıyor.** 34 ihlalin hepsi kabul edildi, örneğin:
+  - aynı tabana ikinci fark kaydı
+  - kapanmış haftaya kayıt
+  - bitmemiş ya da sıra dışı hafta kapanışı
+  - shuttle'da sitenin tahsilatı
+  - tahsilatsız iade
+  - boş yazılı onaylı mahsup
+  - 0,01 € manuel fiyat
+  - tarifede 5 kişi 80 €
+  - AYT-GZP ve pasif hatta rezervasyon
+  - fiyatın kapanıştan sonra değişmesi
+  - private'ta AGOS payı
+
+  Tetikleyiciler yalnız `booking` özet satırını ve "yalnız ekleme" kuralını koruyor. K15 raporundaki bazı "kod + DB" ifadeleri bu yüzden fazla iddialıydı; raporda düzeltme notu var.
+
+**Orta:**
+- **F5:** müşteriye iade edilen tutar "müşteri borcu" olarak listeleniyor.
+- **F6:** aynı haftada iade düzeltmesi ile yeni komisyon tek kalemde netleşiyor. Bunun yazılı onaysız mahsup sayılıp sayılmayacağı Owner kararı (H-19).
+- **F7:** hiç hafta kapanmamışken ilk kapanış önceki haftayı atlayabiliyor; aynı tutar iki raporda görünüyor.
+- **F8:** dekont mükerrer kontrolü büyük/küçük harfe duyarlı.
+- **F9:** aynı tedarikçinin aynı makbuzu iki rezervasyona yazılabiliyor.
+- **F10:** rezervasyon itirazını çözmek ve mükerrer işaretini kaldırmak 2FA, gerekçe ve aktör kaydı istemiyor. Ayrıca "haklı" ve "haksız" itiraz sonucu aynı hesaplanıyor (H-21).
+- **F11:** satış atfı taklit edilebilir `Origin` başlığına dayanıyor; Turnstile yanıtında alan adı karşılaştırılmıyor.
+- **F12:** tarifeye 5. eleman eklenirse 5 kişi otomatik 80 € fiyatlanıyor; parser bunu reddetmiyor.
+- **F13:** canlı kapı yalnız `NODE_ENV` tam olarak "production" ise devreye giriyor. `prod` veya `Production` ile korumasız sunucu açılıyor.
+- **F14:** tahsil edilmiş ama tamamlanmamış iş hiçbir ekstrede görünmüyor.
+
+**Düşük:**
+- açık iki haftanın önizlemesinde aynı fark tekrar görünüyor
+- ilk kapanışta 2020-W01 kabul ediliyor
+- yazılı onay referansı olarak "---" kabul ediliyor
+- 7 günün tam 168 saat sayılması (H-20)
+- lookup jetonu idempotency kaydında düz metin
+- gelecek tarihli kendi aracı doğrulaması bugün geçerli sayılıyor
+- yerel geliştirme origin'i her site adına rezervasyon açabiliyor
+- K15 raporundaki bazı istisna adları kodda üretilmiyor
+
+### 3.3 W45 satır satır mutabakat (ajan, bağımsız aritmetik)
+
+- Dokuz satırın hepsi kurala uygun.
+- Toplam: 490 € = tedarikçi 344,50 + site 104,50 + AGOS 41.
+- Oranlar %70,3 / %21,3 / %8,4; global 70/20/10'a uymaması doğru:
+  - bir satır kendi aracıdır (0/10/90),
+  - bir satır private'tır (AGOS 0).
+- Hesaba girmeyenler doğru: itirazlı iş bloklu, iptal tahsilatsız.
+- **Hata:** W46'da iade edilmiş iş müşteri borcu görünüyor (F5).
+- **Not:** 6 kişilik 90 € satırı örnek betikte servise doğrudan verilen 2FA'lı sahte aktörle onaylanıyor. HTTP API bugün bu satırı üretemez.
+
+### 3.4 Sonuç ve sonraki adım
+
+- Yazarın öz değerlendirmesi ana yolları doğru gösterdi, ama 10 alanda kenar durumları kaçırdı. Yazar ile inceleyiciyi ayırmanın değeri tam olarak bu.
+- **Faz 1'de kod değişikliği yapılmadı.**
+- Önerilen sıra:
+  1. Owner mutabakatı.
+  2. Düzeltme turu Codex'te (H-5). Claude şartname ve akran incelemesi yapar.
+  3. Kabul ölçütü: `qa-independent` testlerindeki tüm `[RULE]` testlerinin yeşile dönmesi + yeni DB kısıtları + PostgreSQL'de eşzamanlılık testleri.
+  4. Son olarak insan bağımsız inceleyici.
+- Owner kararı isteyen dört nokta H-19…H-22'de.
 
 ## 4. İnsan bağımsız inceleyici için QA planı
 

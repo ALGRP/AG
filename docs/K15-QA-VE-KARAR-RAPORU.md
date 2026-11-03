@@ -2,6 +2,8 @@
 
 **Tarih:** 03.11.2026 · **Durum:** LOCAL_ONLY. Canlı ödeme, banka transferi, otomatik borç tahsilatı ve gerçek müşteri verisi yok. Canlıya geçiş Owner GO ister.
 
+> **Düzeltme notu (03.11.2026, ikinci AI okuması sonrası):** Bu rapordaki "kod + DB" ifadeleri yalnız `booking` özet satırı için doğrudur. 03.11 ekinde gelen defter tabloları (`settlement_entry`, `booking_money_event`, `settlement_adjustment`, `settlement_week`, `bank_receipt`) bu kuralları veritabanı düzeyinde uygulamıyor: 34 ihlal probunun hepsi kabul edildi. Ayrıca 4 yüksek ve 10 orta bulgu açık. Ayrıntı: [`docs/konsey/E-pr9-bagimsiz-qa-plani.md` §3](./konsey/E-pr9-bagimsiz-qa-plani.md), testler [`qa-independent/`](../qa-independent/). Aşağıdaki "GEÇTİ" sonuçları bu notla birlikte okunmalı.
+
 **İnceleme türü:** Kodu yazan oturumdan bağımsız bir yapay zekâ ajanı inceledi. Ajan kod yazmadı, yalnız okudu ve kırmaya çalıştı.
 - Bu inceleme **insan bağımsız kabulünün yerine geçmez.** Linear kuralı "yazan kendi işini kabul edemez" geçerlidir.
 - Fatura, vergi, yasal taşıma/acentacılık yetkisi ve tahsilatın hukuki sorumlusu mali müşavir ve hukuk incelemesine tabidir.

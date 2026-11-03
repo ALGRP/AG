@@ -1,0 +1,83 @@
+{
+  "id": "qa-approved-tariff",
+  "approval": "approved",
+  "publishedAt": "2026-11-03",
+  "currency": "EUR",
+  "routes": [
+    "AYT-ALN",
+    "ALN-AYT",
+    "AYT-SID",
+    "SID-AYT",
+    "AYT-BLK",
+    "BLK-AYT",
+    "AYT-KMR",
+    "KMR-AYT",
+    "AYT-KNY",
+    "KNY-AYT",
+    "GZP-ALN",
+    "ALN-GZP"
+  ],
+  "pilotRoutes": [
+    "GZP-ALN",
+    "ALN-GZP"
+  ],
+  "validFrom": "2026-11-03",
+  "maxPassengers": 10,
+  "totalsMinor": [
+    3000,
+    5000,
+    6000,
+    7000
+  ],
+  "routeInfo": {
+    "AYT-ALN": {
+      "active": true,
+      "coverage": "Antalya Havalimanı (AYT) → Alanya merkez ve otel bölgeleri"
+    },
+    "ALN-AYT": {
+      "active": true,
+      "coverage": "Alanya merkez ve otel bölgeleri → Antalya Havalimanı (AYT)"
+    },
+    "AYT-SID": {
+      "active": true,
+      "coverage": "Antalya Havalimanı (AYT) → Side / Manavgat"
+    },
+    "SID-AYT": {
+      "active": true,
+      "coverage": "Side / Manavgat → Antalya Havalimanı (AYT)"
+    },
+    "AYT-BLK": {
+      "active": true,
+      "coverage": "Antalya Havalimanı (AYT) → Belek"
+    },
+    "BLK-AYT": {
+      "active": true,
+      "coverage": "Belek → Antalya Havalimanı (AYT)"
+    },
+    "AYT-KMR": {
+      "active": true,
+      "coverage": "Antalya Havalimanı (AYT) → Kemer"
+    },
+    "KMR-AYT": {
+      "active": true,
+      "coverage": "Kemer → Antalya Havalimanı (AYT)"
+    },
+    "AYT-KNY": {
+      "active": true,
+      "coverage": "Antalya Havalimanı (AYT) → Konyaaltı"
+    },
+    "KNY-AYT": {
+      "active": true,
+      "coverage": "Konyaaltı → Antalya Havalimanı (AYT)"
+    },
+    "GZP-ALN": {
+      "active": true,
+      "coverage": "Gazipaşa Havalimanı (GZP) → Alanya Merkez (pilot)"
+    },
+    "ALN-GZP": {
+      "active": true,
+      "coverage": "Alanya Merkez → Gazipaşa Havalimanı (GZP) (pilot)"
+    }
+  },
+  "manualPriceBounds": {}
+}
