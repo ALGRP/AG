@@ -43,6 +43,7 @@ const REASON_TR: Record<string, string> = {
   partially_refunded: "Kısmi iade — karar bekliyor",
   overcollected: "Fazla tahsilat — müşteriye iade",
   suspected_duplicate: "Mükerrer şüphesi — inceleme bekliyor",
+  collected_not_completed: "Tahsil edildi, transfer tamamlanmadı — müşteri parası tedarikçide",
   share_mismatch: "Kayıtlı pay ve beklenen pay farklı — insan incelemesi gerekli",
 };
 const DEBT_TR: Record<string, string> = {

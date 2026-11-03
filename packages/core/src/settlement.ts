@@ -305,6 +305,7 @@ export type ExceptionReason =
   | "overcollected"
   | "disputed"
   | "suspected_duplicate"
+  | "collected_not_completed"
   | "share_mismatch";
 
 export interface ExceptionItem {
@@ -462,7 +463,7 @@ export interface WeeklyReport {
 }
 
 /** Çözülene kadar her hafta listede kalan istisnalar. */
-export const OPEN_EXCEPTION_REASONS: readonly ExceptionReason[] = ["cancelled_after_collection", "overcollected", "disputed", "suspected_duplicate"];
+export const OPEN_EXCEPTION_REASONS: readonly ExceptionReason[] = ["cancelled_after_collection", "overcollected", "disputed", "suspected_duplicate", "collected_not_completed"];
 
 /** Satırın bu hafta için istisna nedenleri (birden çok olabilir). */
 export function exceptionReasons(l: SettlementLine, until: string): ExceptionReason[] {
@@ -472,6 +473,11 @@ export function exceptionReasons(l: SettlementLine, until: string): ExceptionRea
   if (l.disputed && (l.disputed_at === null || ts(l.disputed_at) < ts(until))) out.push("disputed");
   if (l.suspected_duplicate && (l.completed_at !== null || net !== 0)) out.push("suspected_duplicate");
   if (!l.cancelled && net > l.final_booking_price) out.push("overcollected");
+  // QA-F14: money held by a supplier must be visible without creating any commission.
+  // Show until the transfer is actually completed, including when completed in a future week.
+  if (!l.cancelled && net > 0 && (l.completed_at === null || ts(l.completed_at) >= ts(until))) {
+    out.push("collected_not_completed");
+  }
   return out;
 }
 
@@ -563,7 +569,13 @@ export function weeklyReport(input: {
       const sum = collectionSummary(l.money_events, l.final_booking_price, week.end_utc);
       const reasons = exceptionReasons(l, week.end_utc);
       for (const reason of reasons) {
-        const eventAt = reason === "disputed" ? l.disputed_at : reason.startsWith("cancelled") ? l.cancelled_at : (l.completed_at ?? sum.firstAt);
+        const eventAt = reason === "disputed"
+          ? l.disputed_at
+          : reason.startsWith("cancelled")
+            ? l.cancelled_at
+            : reason === "collected_not_completed"
+              ? sum.firstAt
+              : (l.completed_at ?? sum.firstAt);
         const carried = OPEN_EXCEPTION_REASONS.includes(reason);
         if (inWeek(eventAt, week) || (carried && eventAt !== null && ts(eventAt) < ts(week.end_utc))) {
           exceptions.push({

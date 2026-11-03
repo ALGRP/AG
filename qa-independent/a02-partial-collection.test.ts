@@ -127,7 +127,7 @@ describe("A2 partial collection", () => {
     );
   });
 
-  it("A2.7 [RULE] money collected for a transfer that is never marked completed must be visible on the statement", { todo: "QA-F14 · Paket-02" }, async () => {
+  it("A2.7 [RULE] money collected for a transfer that is never marked completed must be visible on the statement", async () => {
     const h = harness();
     h.setNow("2026-11-04T08:00:00Z");
     const b = await h.book();
@@ -157,7 +157,7 @@ describe("A2 QA-F14 collected but not completed (Paket-02)", () => {
   };
   const reasonsFor = (rep: any, ref: string) => (rep.exceptions as any[]).filter((e) => e.booking_ref === ref).map((e) => e.reason).sort();
 
-  it("A2.8 [RULE] lifecycle: visible each week while uncompleted, no shares before completion, shares once completed, closed weeks frozen", { todo: "QA-F14 · Codex Paket-02" }, async () => {
+  it("A2.8 [RULE] lifecycle: visible each week while uncompleted, no shares before completion, shares once completed, closed weeks frozen", async () => {
     const h = harness();
     h.setNow("2026-11-04T08:00:00Z");
     const { ref, run } = await collectedOpen(h, "partner-site", 3000);
@@ -198,7 +198,7 @@ describe("A2 QA-F14 collected but not completed (Paket-02)", () => {
     assert.deepEqual(reasonsFor(w45, ref), ["cancelled_after_collection"]);
   });
 
-  it("A2.10 [RULE] a site credential sees its own collected-not-completed exception, never another site's", { todo: "QA-F14 · Codex Paket-02 (QA-F3 filtresiyle)" }, async () => {
+  it("A2.10 [RULE] a site credential sees its own collected-not-completed exception, never another site's", async () => {
     const h = harness();
     await h.start();
     try {
