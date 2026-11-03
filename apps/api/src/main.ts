@@ -20,7 +20,8 @@ const shuttleTariff = parseShuttleTariff(readJson(env.AG_SHUTTLE_TARIFF_FILE ?? 
 // Canlıya geçiş koşulları (Owner karar taslağı 03.11.2026, madde 7). Üretim modunda HER BİRİ sağlanmadan
 // sunucu açılmaz. Bu sürümde kimlik sağlayıcı + 2FA ve gerçek CRS bağlantısı olmadığı için üretim açılışı
 // her zaman reddedilir — bilinçli olarak. SEL-324 / SEL-326 güvenlik kapıları ayrıca geçerlidir.
-if (env.NODE_ENV === "production") {
+// Fail closed unless a developer explicitly selected a local-only mode.
+if (env.NODE_ENV !== "development" && env.NODE_ENV !== "test") {
   const unmet: string[] = [];
   if (shuttleTariff.approval !== "approved") unmet.push(`tarife ${shuttleTariff.id} Owner onaylı değil (K8)`);
   // Kimlik sağlayıcı + 2FA entegrasyonu bu sürümde YAZILMADI; bir ortam değişkeni bunu karşılayamaz.

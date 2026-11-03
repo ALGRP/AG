@@ -66,7 +66,7 @@ describe("A13 go-live gate", () => {
     for (const s of ["Owner onaylı değil", "geçici statik yönetim anahtarı", "tenant", "Owner LIVE GO", "yedekleme"]) assert.ok(r.out.includes(s), s);
   });
 
-  it("A13.3 [RULE] a misspelt production mode (NODE_ENV=prod / Production) must not start an unguarded server", { todo: "QA-F13 · Codex Paket-01" }, async () => {
+  it("A13.3 [RULE] a misspelt production mode (NODE_ENV=prod / Production) must not start an unguarded server", async () => {
     const outcomes: Array<number | "listening"> = [];
     for (const mode of ["prod", "Production"]) outcomes.push((await boot({ NODE_ENV: mode, AG_ADMIN_TOKEN: "qa-temp-token" })).outcome);
     assert.ok(!outcomes.includes("listening"), `server started with NODE_ENV in [prod, Production]: ${JSON.stringify(outcomes)} (proposed tariff, static admin token, no human check, in-memory store)`);
