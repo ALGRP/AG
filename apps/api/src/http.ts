@@ -182,9 +182,9 @@ export function createApiServer(opts: HttpOptions): Server {
             case "dispute":
               return reply(res, await opts.service.dispute(ref, v));
             case "resolve-dispute":
-              return reply(res, await opts.service.resolveDispute(ref, v));
+              return reply(res, await opts.service.resolveDispute(actor, ref, v));
             case "clear-duplicate":
-              return reply(res, await opts.service.clearDuplicate(ref));
+              return reply(res, await opts.service.clearDuplicate(actor, ref, v));
             case "cancel":
               return reply(res, await opts.service.cancel(ref));
             case "invoice":

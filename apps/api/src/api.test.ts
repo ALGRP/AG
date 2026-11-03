@@ -457,7 +457,13 @@ describe("QA regressions (API level)", () => {
     await h.adminPost(`/v1/admin/shuttle-runs/${run}/complete`);
     const live = await h.get("/v1/admin/settlements/2026-W48");
     assert.ok((live.exceptions as any[]).some((e) => e.booking_ref === b.body.ref && e.reason === "suspected_duplicate"));
-    assert.equal((await h.adminPost(`/v1/admin/bookings/${b.body.ref}/clear-duplicate`)).status, 200);
+    // This previously expected 200 from the static admin token: that was the insecure behavior.
+    assert.equal((await h.adminPost(`/v1/admin/bookings/${b.body.ref}/clear-duplicate`, { reason: "Cift kayit dogrulandi" })).status, 403);
+    const managerReview = await h.service.clearDuplicate(MANAGER, b.body.ref, { reason: "Iki kayit ayri transferdir" });
+    assert.equal(managerReview.status, 200);
+    const managerAudit = (managerReview.body as { duplicateClearAudit: { actorId: string; actorRole: string; mfaVerified: boolean } }).duplicateClearAudit;
+    assert.deepEqual([managerAudit.actorId, managerAudit.actorRole, managerAudit.mfaVerified],
+      [MANAGER.id, MANAGER.role, true]);
     const after = await h.get("/v1/admin/settlements/2026-W48");
     assert.ok((after.entries as any[]).some((l) => l.booking_ref === b.body.ref));
   });
@@ -473,7 +479,13 @@ describe("QA regressions (API level)", () => {
     assert.ok(row);
     const stored = JSON.stringify(await h.get("/v1/admin/settlements/2026-W48"));
     assert.ok(!stored.includes("jane@example.com") && !stored.includes("2345678"));
-    assert.equal((await h.adminPost(`/v1/admin/bookings/${r.body.ref}/resolve-dispute`, { outcome: "rejected" })).status, 200);
+    // The static token must never resolve a booking dispute without verified MFA.
+    assert.equal((await h.adminPost(`/v1/admin/bookings/${r.body.ref}/resolve-dispute`, { outcome: "rejected", reason: "Itiraz incelendi" })).status, 403);
+    const reviewed = await h.service.resolveDispute(MANAGER, r.body.ref, { outcome: "rejected", reason: "Gerekceli incelemede itiraz reddedildi" });
+    assert.equal(reviewed.status, 200);
+    const disputeAudit = (reviewed.body as { disputeResolutionAudit: { actorId: string; actorRole: string; mfaVerified: boolean } }).disputeResolutionAudit;
+    assert.deepEqual([disputeAudit.actorId, disputeAudit.actorRole, disputeAudit.mfaVerified],
+      [MANAGER.id, MANAGER.role, true]);
   });
 });
 

@@ -69,7 +69,7 @@ describe("A4 weekly close", () => {
     h.setNow("2026-11-10T06:00:00Z");
     await h.service.refund(full, { amountMinor: 5000, refundReference: "RF-FRZ" });
     await h.collect(part, 2000);
-    await h.service.resolveDispute(disp, { outcome: "rejected" });
+    await h.service.resolveDispute(MANAGER, disp, { outcome: "rejected", reason: "Kontrol edilen itiraz reddedildi" });
     const later = await h.report(W45);
     for (const k of ["entries", "exceptions", "customer_balances"]) assert.deepEqual(later[k], closed[k], k);
     assert.deepEqual(

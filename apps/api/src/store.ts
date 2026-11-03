@@ -31,6 +31,15 @@ export interface PriceApprovalRecord {
   readonly reason: string;
 }
 
+/** Local QA audit record. A real signed IdP/2FA assertion is required before production use. */
+export interface SensitiveDecisionAudit {
+  readonly actorId: string;
+  readonly actorRole: "admin" | "finance_manager";
+  readonly mfaVerified: true;
+  readonly at: string;
+  readonly reason: string;
+}
+
 export interface StoredBooking {
   readonly id: string;
   readonly ref: string;
@@ -62,6 +71,11 @@ export interface StoredBooking {
   readonly disputeReason?: string;
   readonly disputeResolvedAt?: string;
   readonly disputeOutcome?: "upheld" | "rejected";
+  /** Required when an authorised manager releases a duplicate flag. */
+  readonly duplicateClearAudit?: SensitiveDecisionAudit;
+  /** Required when an authorised manager resolves a booking-level dispute. */
+  readonly disputeResolutionAudit?: SensitiveDecisionAudit;
+
   /** Bir kez yazılır (kapanışta). */
   readonly settlementWeekId?: string;
   readonly settlementStatus: SettlementStatus;

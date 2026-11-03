@@ -155,7 +155,7 @@ describe("A8 financial approval without 2FA", () => {
     assert.equal((await h.service.decideStatementDispute(MANAGER, disputeId, { decision: "rejected", reason: "abc" })).body.error, "reason_required");
   });
 
-  it("A8.3 [RULE] deciding a booking dispute (which releases the held commission) needs 2FA, a reason and a recorded decider", { todo: "QA-F10 · Paket-02 (2FA, SEL-332)" }, async () => {
+  it("A8.3 [RULE] deciding a booking dispute (which releases the held commission) needs 2FA, a reason and a recorded decider", async () => {
     h.setNow("2026-11-10T08:00:00Z");
     const ref = await h.shuttleJob({}, "sup-b", 5000);
     await h.adminPost(`/v1/admin/bookings/${ref}/dispute`, { reason: "musteri bekletildi" });
@@ -176,7 +176,7 @@ describe("A8 financial approval without 2FA", () => {
       x.setNow("2026-11-04T10:00:00Z");
       const ref = await x.shuttleJob({}, "sup-a", 5000);
       await x.service.dispute(ref, { reason: "arac gelmedi" });
-      await x.service.resolveDispute(ref, { outcome });
+      await x.service.resolveDispute(MANAGER, ref, { outcome, reason: "Musteri itirazi incelendi" });
       x.setNow("2026-11-09T06:00:00Z");
       const e = (await x.close(W45)).body.entries.find((y: any) => y.booking_ref === ref);
       return e ? [e.site_delta, e.agos_delta, e.supplier_delta] : null;
@@ -184,12 +184,53 @@ describe("A8 financial approval without 2FA", () => {
     assert.notDeepEqual(await mk("upheld"), await mk("rejected"), "outcome is stored but ignored by settlement");
   });
 
-  it("A8.5 [RULE] releasing a suspected duplicate into settlement needs 2FA and a reason", { todo: "QA-F10 · Paket-02 (2FA, SEL-332)" }, async () => {
+  it("A8.5 [RULE] releasing a suspected duplicate into settlement needs 2FA and a reason", async () => {
     h.setNow("2026-11-11T08:00:00Z");
     const same = { pickupAt: "2026-12-24T10:00", customer: { name: "Twin", email: "twin@example.com", phone: "+49 151 3333333", locale: "de" } };
     await h.book(same, "qa-twin-key-a-0000001");
     const b = await h.book(same, "qa-twin-key-b-0000001");
     const r = await h.adminPost(`/v1/admin/bookings/${b.body.ref}/clear-duplicate`, {});
     assert.equal(r.status, 403, "duplicate flag cleared with the static token, no 2FA, no reason, no actor recorded");
+  });
+});
+
+describe("A8.6 manager approval evidence for booking-level financial hold releases (LOCAL_ONLY)", () => {
+  it("rejects no MFA, operator and missing reasons; verified test manager decision is audited", async () => {
+    const x = harness({ idPrefix: "qa-f10-proof" });
+    x.setNow("2026-11-04T08:00:00Z");
+    const same = {
+      pickupAt: "2026-11-04T13:20",
+      customer: { name: "Same Guest", email: "same-qa-f10@example.com", phone: "+49 151 2222222", locale: "de" },
+    };
+    const first = await x.book(same);
+    const duplicate = await x.book(same);
+    const ref = duplicate.body.ref;
+    assert.equal((await x.row(ref)).isDuplicate, true);
+    const reason = "Iki ayri rezervasyon goruldu";
+    assert.equal((await x.service.clearDuplicate({ ...MANAGER, mfa: false }, ref, { reason })).body.error, "mfa_required");
+    assert.equal((await x.service.clearDuplicate({ id: "op", role: "operator", mfa: true }, ref, { reason })).body.error, "role_not_allowed");
+    assert.equal((await x.service.clearDuplicate(MANAGER, ref, { reason: "x" })).body.error, "reason_required");
+    assert.equal((await x.row(ref)).isDuplicate, true);
+    assert.equal((await x.service.clearDuplicate(MANAGER, ref, { reason })).status, 200);
+    const cleared = await x.row(ref);
+    assert.deepEqual([cleared.duplicateClearAudit.actorId, cleared.duplicateClearAudit.actorRole, cleared.duplicateClearAudit.mfaVerified, cleared.isDuplicate],
+      [MANAGER.id, "finance_manager", true, false]);
+    assert.equal((await x.service.clearDuplicate(MANAGER, ref, { reason })).body.error, "not_flagged_as_duplicate");
+
+    assert.equal((await x.service.dispute(ref, { reason: "Musteri transferine itiraz" })).status, 200);
+    assert.equal((await x.service.resolveDispute({ ...MANAGER, mfa: false }, ref, { outcome: "rejected", reason })).body.error, "mfa_required");
+    assert.equal((await x.service.resolveDispute({ id: "op", role: "operator", mfa: true }, ref, { outcome: "rejected", reason })).body.error, "role_not_allowed");
+    assert.equal((await x.service.resolveDispute(MANAGER, ref, { outcome: "rejected", reason: "" })).body.error, "reason_required");
+    const approved = await x.service.resolveDispute(MANAGER, ref, { outcome: "rejected", reason: "Musteri kayitlari incelenip itiraz reddedildi" });
+    assert.equal(approved.status, 200);
+    const decision = (await x.row(ref)).disputeResolutionAudit;
+    assert.deepEqual([decision.actorId, decision.actorRole, decision.mfaVerified],
+      [MANAGER.id, "finance_manager", true]);
+    assert.ok(decision.at);
+    assert.ok(decision.reason.length >= 5);
+    assert.equal((await x.service.resolveDispute(MANAGER, ref, { outcome: "rejected", reason })).body.error, "no_open_dispute");
+    const events = (await x.store.listOutbox()).map((e) => e.type);
+    assert.ok(events.includes("audit.duplicate_cleared") && events.includes("audit.booking_dispute_resolved"));
+    assert.ok(first.status === 201);
   });
 });

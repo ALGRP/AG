@@ -33,7 +33,7 @@ import {
   type StatementDispute,
 } from "@ag/core";
 import { normalizeAdjustmentReference, normalizeBankReference } from "./store.ts";
-import type { OutboxEvent, Store, StoredBooking } from "./store.ts";
+import type { OutboxEvent, SensitiveDecisionAudit, Store, StoredBooking } from "./store.ts";
 
 export interface ServiceDeps {
   readonly store: Store;
@@ -360,6 +360,8 @@ export class BookingService {
       priceStatus: b.price ? "set" : b.product === "shuttle" ? "requires_approval" : "quote_pending",
       priceApproval: b.priceApproval ?? null,
       isDuplicate: b.isDuplicate,
+      duplicateClearAudit: b.duplicateClearAudit ?? null,
+      disputeResolutionAudit: b.disputeResolutionAudit ?? null,
       isTest: b.isTest,
       moneyEvents: b.moneyEvents,
       settlement: line ? settlement : null,
@@ -393,6 +395,17 @@ export class BookingService {
     if (!actor.mfa) return fail(403, "mfa_required");
     if (!roles.includes(actor.role)) return fail(403, "role_not_allowed");
     return null;
+  }
+
+  /** Service caller must supply a server-verified actor; HTTP static-token actors have mfa=false. */
+  #sensitiveAudit(actor: Actor, reason: string): SensitiveDecisionAudit {
+    return {
+      actorId: actor.id,
+      actorRole: actor.role as "admin" | "finance_manager",
+      mfaVerified: true,
+      at: this.#now(),
+      reason: redactPii(reason.trim()).slice(0, 300),
+    };
   }
 
   /**
@@ -559,8 +572,17 @@ export class BookingService {
     });
   }
 
-  async clearDuplicate(ref: string): Promise<ServiceResult<unknown>> {
-    return this.#mutate(ref, async (b) => (b.isDuplicate ? { ...b, isDuplicate: false } : fail(409, "not_flagged_as_duplicate")));
+  /** QA-F10: clearing a duplicate releases a financial hold; only an MFA-verified authorised manager may do so. */
+  async clearDuplicate(actor: Actor, ref: string, input: Record<string, unknown>): Promise<ServiceResult<unknown>> {
+    const denied = this.#requireMfa(actor, ["admin", "finance_manager"]);
+    if (denied) return denied;
+    const reason = typeof input.reason === "string" ? input.reason.trim() : "";
+    if (reason.length < 5) return fail(422, "reason_required");
+    return this.#mutate(ref, async (b, tx) => {
+      if (!b.isDuplicate) return fail(409, "not_flagged_as_duplicate");
+      await tx.appendOutbox([this.#event(b, "audit.duplicate_cleared", { actor: actor.id, role: actor.role })]);
+      return { ...b, isDuplicate: false, duplicateClearAudit: this.#sensitiveAudit(actor, reason) };
+    });
   }
 
   async dispute(ref: string, input: Record<string, unknown>): Promise<ServiceResult<unknown>> {
@@ -574,13 +596,26 @@ export class BookingService {
     });
   }
 
-  async resolveDispute(ref: string, input: Record<string, unknown>): Promise<ServiceResult<unknown>> {
+  /** QA-F10: dispute resolution changes the held share status; it needs real manager authority and audit evidence. */
+  async resolveDispute(actor: Actor, ref: string, input: Record<string, unknown>): Promise<ServiceResult<unknown>> {
+    const denied = this.#requireMfa(actor, ["admin", "finance_manager"]);
+    if (denied) return denied;
     const { outcome } = input;
     if (outcome !== "upheld" && outcome !== "rejected") return fail(422, "outcome_invalid");
+    const reason = typeof input.reason === "string" ? input.reason.trim() : "";
+    if (reason.length < 5) return fail(422, "reason_required");
     return this.#mutate(ref, async (b, tx) => {
       if (!b.disputedAt || b.disputeResolvedAt) return fail(409, "no_open_dispute");
-      await tx.appendOutbox([this.#event(b, "finance.dispute_resolved", { outcome })]);
-      return { ...b, disputeResolvedAt: this.#now(), disputeOutcome: outcome };
+      await tx.appendOutbox([
+        this.#event(b, "finance.dispute_resolved", { outcome }),
+        this.#event(b, "audit.booking_dispute_resolved", { actor: actor.id, role: actor.role, outcome }),
+      ]);
+      return {
+        ...b,
+        disputeResolvedAt: this.#now(),
+        disputeOutcome: outcome,
+        disputeResolutionAudit: this.#sensitiveAudit(actor, reason),
+      };
     });
   }
 
