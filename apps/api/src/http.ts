@@ -1,7 +1,7 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { SiteRecord } from "@ag/core";
-import type { BookingService, ServiceResult } from "./service.ts";
+import type { Actor, BookingService, ServiceResult } from "./service.ts";
 
 export interface HttpOptions {
   readonly service: BookingService;
@@ -150,6 +150,9 @@ export function createApiServer(opts: HttpOptions): Server {
         if (!opts.adminToken || !auth.startsWith("Bearer ") || !safeEqual(auth.slice(7), opts.adminToken)) {
           return send(res, 401, { error: "unauthorized" });
         }
+        // Geçici yönetim anahtarı bir kişiyi kimliklendirmez ve 2FA taşımaz (SEL-332). 2FA zorunlu işlemler
+        // (manuel fiyat onayı, itiraz kararı, mahsup) bu yüzden HTTP üzerinden kapalıdır: "mfa_required".
+        const actor: Actor = { id: "static-admin-token", role: "admin", mfa: false };
         if (req.method === "GET" && path === "/v1/admin/bookings") return reply(res, await opts.service.listBookings());
         if (req.method === "GET" && path === "/v1/admin/outbox") return reply(res, await opts.service.outbox());
 
@@ -167,7 +170,7 @@ export function createApiServer(opts: HttpOptions): Server {
             case "confirm":
               return reply(res, await opts.service.confirm(ref));
             case "approve-price":
-              return reply(res, await opts.service.approveShuttlePrice(ref, v));
+              return reply(res, await opts.service.approveShuttlePrice(actor, ref, v));
             case "assign":
               return reply(res, await opts.service.assignPrivate(ref, v));
             case "complete":
@@ -189,6 +192,13 @@ export function createApiServer(opts: HttpOptions): Server {
           }
         }
         if (req.method === "POST" && path === "/v1/admin/receipts") return reply(res, await opts.service.addReceipt(v));
+        if (req.method === "POST" && path === "/v1/admin/settlements/offsets") return reply(res, await opts.service.createOffset(actor, v));
+        const dsp = /^\/v1\/admin\/settlements\/disputes\/([A-Za-z0-9-]+)\/decide$/.exec(path);
+        if (req.method === "POST" && dsp) return reply(res, await opts.service.decideStatementDispute(actor, dsp[1]!, v));
+        const wkx = /^\/v1\/admin\/settlements\/(\d{4}-W\d{2})\/(disputes|statement-sent)$/.exec(path);
+        if (req.method === "POST" && wkx) {
+          return reply(res, wkx[2] === "disputes" ? await opts.service.raiseStatementDispute(wkx[1]!, v) : await opts.service.recordStatementSent(wkx[1]!, v));
+        }
         const wk = /^\/v1\/admin\/settlements\/(\d{4}-W\d{2})(\/close)?$/.exec(path);
         if (wk && req.method === "GET" && !wk[2]) return reply(res, await opts.service.weekReport(wk[1]!));
         if (wk && req.method === "POST" && wk[2]) return reply(res, await opts.service.closeWeek(wk[1]!));

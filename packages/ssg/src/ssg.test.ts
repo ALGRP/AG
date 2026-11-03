@@ -14,6 +14,7 @@ const tariff = parseShuttleTariff({
   publishedAt: "2026-01-01",
   currency: "EUR",
   routes: ["AYT-ALN"],
+  routeInfo: { "AYT-ALN": { active: true, coverage: "AYT-ALN" } },
   validFrom: "2026-01-01",
   maxPassengers: 10,
   totalsMinor: [3000, 5000, 6000, 7000],

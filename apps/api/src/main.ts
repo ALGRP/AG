@@ -17,10 +17,31 @@ const env = process.env;
 const sitesRaw = readJson(env.AG_SITES_FILE ?? "config/sites.registry.example.json") as unknown[];
 const sites = new Map<string, SiteRecord>(sitesRaw.map((s) => parseSiteRecord(s)).map((s) => [s.id, s]));
 const shuttleTariff = parseShuttleTariff(readJson(env.AG_SHUTTLE_TARIFF_FILE ?? "config/shuttle-tariff.example.json"));
-// Onaylanmamış tarife (K8) ya da onay bekleyen kararlarla üretimde açılmaz.
-if (env.NODE_ENV === "production" && shuttleTariff.approval !== "approved") {
-  console.error(`refusing to start: shuttle tariff ${shuttleTariff.id} is "${shuttleTariff.approval}" (Owner approval required)`);
-  process.exit(1);
+// Canlıya geçiş koşulları (Owner karar taslağı 03.11.2026, madde 7). Üretim modunda HER BİRİ sağlanmadan
+// sunucu açılmaz. Bu sürümde kimlik sağlayıcı + 2FA ve gerçek CRS bağlantısı olmadığı için üretim açılışı
+// her zaman reddedilir — bilinçli olarak. SEL-324 / SEL-326 güvenlik kapıları ayrıca geçerlidir.
+if (env.NODE_ENV === "production") {
+  const unmet: string[] = [];
+  if (shuttleTariff.approval !== "approved") unmet.push(`tarife ${shuttleTariff.id} Owner onaylı değil (K8)`);
+  // Kimlik sağlayıcı + 2FA entegrasyonu bu sürümde YAZILMADI; bir ortam değişkeni bunu karşılayamaz.
+  unmet.push("iki adımlı doğrulamalı yönetici girişi (kimlik sağlayıcı entegrasyonu) bu sürümde yok — SEL-332");
+  if (env.AG_ADMIN_TOKEN) unmet.push("geçici statik yönetim anahtarı üretimde kullanılamaz");
+  // Kalıcı depo bu sürümde bellek içi; CRS adaptörü yazılmadı.
+  unmet.push("gerçek CRS bağlantısı (PostgreSQL adaptörü) bu sürümde yok; staging doğrulaması gerekli (G1, SEL-329/331)");
+  for (const [k, label] of [
+    ["AG_ACCEPT_INDEPENDENT_REVIEW", "insan tarafından bağımsız güvenlik ve iş kuralı kabulü"],
+    ["AG_ACCEPT_LEGAL_TAX", "mali müşavir ve hukuk incelemesi"],
+    ["AG_ACCEPT_TENANT_ISOLATION", "tenant ve kullanıcı yetki izolasyonu"],
+    ["AG_ACCEPT_FINANCE_TESTS", "iade, eksik tahsilat, haftalık kapanış ve fiyat testleri (staging)"],
+    ["AG_ACCEPT_BACKUP_ROLLBACK", "yedekleme ve geri dönüş planı"],
+    ["AG_OWNER_LIVE_GO", "ayrı ve açık Owner LIVE GO"],
+  ] as const) {
+    if (!env[k]) unmet.push(label);
+  }
+  if (unmet.length > 0) {
+    console.error(`refusing to start in production — unmet live conditions:\n - ${unmet.join("\n - ")}`);
+    process.exit(1);
+  }
 }
 const devOrigins = (env.AG_DEV_ORIGINS ?? "http://localhost:4321").split(",").filter(Boolean);
 

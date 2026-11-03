@@ -3,9 +3,9 @@ import type {
   BankReceipt,
   BookingStatus,
   CollectionMethod,
-  CollectionStatus,
-  Collector,
   IntakeRequest,
+  MoneyEvent,
+  StatementDispute,
   PriceSnapshot,
   Product,
   SettlementStatus,
@@ -16,12 +16,14 @@ import type {
 // Depo arayüzü. Üretimde karşılığı merkezi rezervasyon PostgreSQL'idir (CRS); şema adayı packages/db.
 // MemoryStore yalnız yerel geliştirme ve test içindir.
 
-/** Müşteriden yapılan tahsilat: rezervasyon başına EN FAZLA BİR kayıt (K15 kural 9). */
-export interface CollectionRecord {
-  readonly method: CollectionMethod;
-  readonly collector: Collector;
-  readonly amountMinor: number;
+/** K17: manuel fiyat onayının denetim kaydı (kim, hangi rol, ne zaman, eski/yeni fiyat, gerekçe). */
+export interface PriceApprovalRecord {
+  readonly actorId: string;
+  readonly actorRole: string;
   readonly at: string;
+  readonly oldPriceMinor: number | null;
+  readonly newPriceMinor: number;
+  readonly reason: string;
 }
 
 export interface StoredBooking {
@@ -46,11 +48,9 @@ export interface StoredBooking {
   readonly supplierId?: string;
   /** Yalnız private/VIP: siteyi getiren sitenin belirlediği tedarikçi hak edişi. */
   readonly supplierEntitlementMinor?: number;
-  readonly collection?: CollectionRecord;
-  readonly collectionStatus: CollectionStatus;
-  readonly refundedMinor: number;
-  /** İadeler; referans rezervasyon başına tekildir (aynı iade iki kez yazılamaz). */
-  readonly refunds: ReadonlyArray<{ readonly reference: string; readonly amountMinor: number; readonly at: string }>;
+  /** Tahsilat ve müşteriye iade hareketleri; referans rezervasyon başına tekil (aynı kayıt iki kez yazılmaz). */
+  readonly moneyEvents: readonly MoneyEvent[];
+  readonly priceApproval?: PriceApprovalRecord;
   readonly completedAt?: string;
   readonly cancelledAt?: string;
   readonly disputedAt?: string;
@@ -110,6 +110,11 @@ export interface Store {
   saveClosedWeek(r: WeeklyReport): Promise<void>;
   getClosedWeek(weekId: string): Promise<WeeklyReport | undefined>;
   listClosedWeekIds(): Promise<string[]>;
+  saveDispute(d: StatementDispute): Promise<void>;
+  listDisputes(): Promise<StatementDispute[]>;
+  /** Ekstre iletim zamanı: hafta + taraf → ilk iletim (sonradan değişmez). */
+  recordStatementSent(weekId: string, partyId: string, at: string): Promise<string>;
+  getStatementSent(weekId: string, partyId: string): Promise<string | undefined>;
 }
 
 interface Snapshot {
@@ -120,6 +125,8 @@ interface Snapshot {
   receipts: number;
   adjustments: number;
   closed: Map<string, WeeklyReport>;
+  disputes: Map<string, StatementDispute>;
+  sent: Map<string, string>;
 }
 
 export class MemoryStore implements Store {
@@ -132,6 +139,8 @@ export class MemoryStore implements Store {
   readonly #receipts: BankReceipt[] = [];
   readonly #adjustments: Adjustment[] = [];
   readonly #closed = new Map<string, WeeklyReport>();
+  readonly #disputes = new Map<string, StatementDispute>();
+  readonly #sent = new Map<string, string>();
 
   transaction<T>(fn: (tx: Store) => Promise<T>): Promise<T> {
     if (this.#inTx) return fn(this);
@@ -160,6 +169,8 @@ export class MemoryStore implements Store {
       receipts: this.#receipts.length,
       adjustments: this.#adjustments.length,
       closed: new Map(this.#closed),
+      disputes: new Map(this.#disputes),
+      sent: new Map(this.#sent),
     };
   }
 
@@ -172,6 +183,8 @@ export class MemoryStore implements Store {
     reset(this.#bookings, s.bookings);
     reset(this.#runs, s.runs);
     reset(this.#closed, s.closed);
+    reset(this.#disputes, s.disputes);
+    reset(this.#sent, s.sent);
     this.#outbox.length = s.outbox;
     this.#receipts.length = s.receipts;
     this.#adjustments.length = s.adjustments;
@@ -245,6 +258,20 @@ export class MemoryStore implements Store {
   async saveClosedWeek(r: WeeklyReport) {
     if (this.#closed.has(r.week.week_id)) throw new Error("week already closed");
     this.#closed.set(r.week.week_id, structuredClone(r));
+  }
+  async saveDispute(d: StatementDispute) {
+    this.#disputes.set(d.id, d);
+  }
+  async listDisputes() {
+    return [...this.#disputes.values()].sort((a, b) => a.id.localeCompare(b.id));
+  }
+  async recordStatementSent(weekId: string, partyId: string, at: string) {
+    const k = `${weekId}|${partyId}`;
+    if (!this.#sent.has(k)) this.#sent.set(k, at);
+    return this.#sent.get(k)!;
+  }
+  async getStatementSent(weekId: string, partyId: string) {
+    return this.#sent.get(`${weekId}|${partyId}`);
   }
   async listClosedWeekIds() {
     return [...this.#closed.keys()].sort();

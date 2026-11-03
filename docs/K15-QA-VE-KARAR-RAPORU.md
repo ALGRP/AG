@@ -11,7 +11,7 @@
 | Teslim (Owner listesi) | Nerede | Durum |
 | -- | -- | -- |
 | Yerel veritabanı modeli | `packages/db/migrations/0001_network_core.sql` | Postgres 16'da uygulandı; kurallar tek tek denendi (§4) |
-| Hesaplama testleri | `packages/core/src/settlement.test.ts`, `apps/api/src/api.test.ts` | 76/76 test geçiyor |
+| Hesaplama testleri | `packages/core/src/settlement.test.ts`, `apps/api/src/api.test.ts` | Toplam 78/78 test geçiyor (03.11 taslak sonrası) |
 | Örnek haftalık rapor | `docs/ornek-hafta-2026-W45.html` (+ `.json`) | Sentetik; `npm run report:sample` ile yeniden üretilir |
 | Haftalık tedarikçi hesap ekstresi | Rapor §1 | Var |
 | Site komisyon alacakları raporu | Rapor §2 | Var (shuttle %20 ve private/VIP satış farkı ayrı etiketli) |
@@ -33,7 +33,7 @@
 | 1 · Tek kaynak | GEÇTİ | Kod sabiti + SQL seed testi + DB tetikleyicisi. İade düzeltmesi de aynı politikayı kullanır |
 | 2 · Tahsilatı tedarikçi yapar | GEÇTİ | Kod + DB CHECK |
 | 3 · Site ve AGOS alacakları ayrı | GEÇTİ | Ayrı borç kalemleri; private/VIP satış farkı ayrı tür |
-| 4 · Tahsil edilmiş + tamamlanmış işler | GEÇTİ | Hesaba girme anı = max(tamamlanma, tahsilat). Geç gelen tahsilat sonraki kapanışa devreder |
+| 4 · Tahsil edilmiş + tamamlanmış işler | GEÇTİ (T2 ile güncellendi) | Tamamlanmış iş, fiilen tahsil edilen tutar üzerinden; fark modeliyle geç ve kısmi tahsilat sonraki haftalara |
 | 5 · İstisna listesi | GEÇTİ | İptal, iade, kısmi iade, eksik/yok tahsilat, kayıt yok, itiraz, mükerrer şüphesi. Açık olanlar çözülene kadar her hafta listede kalır. İtiraz sonucu ve mükerrer incelemesi için uçlar var |
 | 6 · Dekont eşleştirme | GEÇTİ | Hafta + ödeyen + alacaklı + para birimi. Aynı dekont iki kez girilemez. Eşleşmeyen dekont listelenir |
 | 7 · Eksik ve geciken ödeme | GEÇTİ | Ödenmemiş, kısmi, son tarihten sonra ödenmiş, fazla ödeme, iade sonrası geri ödenecek |
@@ -89,12 +89,10 @@ Aşağıdaki işlemlerin hepsi veritabanı tarafından reddedildi:
 
 | Konu | Neden açık |
 | -- | -- |
-| 5+ kişi fiyat onayı | Onaylanabilecek tutara alt/üst sınır yok (QA: 1 cent onaylanabiliyor). Onaylayanın kimliği kaydedilmiyor: yönetim girişi (IdP + 2FA, SEL-332) gelmeden kimlik yok |
+| 5+ kişi fiyat onayı | K17 taslağıyla sınır, rol, 2FA ve denetim kaydı eklendi. **Sayısal sınırlar Owner tablosunu bekliyor**; o gelene kadar hiçbir hatta 5+ fiyat onaylanamaz. Gerçek 2FA için IdP gerekir (SEL-332) |
 | Denetim izi | Fiyat onayı, dekont, kapanış ve iade işlemlerini kimin yaptığı kaydedilmiyor (aynı neden). Admin erişimi geçici tek anahtar |
-| Fazla ödeme ve iade geri ödemesi | İade mi edilecek, sonraki haftaya mahsup mu? (K20, K21) |
-| Eksik tahsilat | Komisyon tam satış üzerinden mi, tahsil edilen üzerinden mi? (K22) |
-| Kapanmış haftaya itiraz | Süreç ve süre sınırı (K23) |
-| Private/VIP iadesi (kapanmış iş) | Hak edişi site belirlediği için otomatik bölünmüyor; elle düzeltme olayı oluşuyor |
+| Fazla ödeme, eksik tahsilat, kapanmış haftaya itiraz | **03.11 taslağıyla (T1/T2/T3) yerel adayda uygulandı** (§7). Owner kabulü bekliyor |
+| Private/VIP kısmi tahsilat / iade | Aday kural: hak ediş ve site payı tahsilatla orantılı. Teyit gerekir |
 | Tedarikçi kaydı | Tedarikçi listesi ve belgeleri yok; kimlik serbest metin. Tedarikçi kaydı ayrı iş (SEL-192) |
 | Ödeme ve dekont ekranı | Yalnız rapor görünümü. Etkileşimli eşleştirme ekranı yönetim paneliyle gelecek |
 | Kalıcı depo | Çalışan sunucu bellek deposu kullanıyor; şema adayı CRS'e eşlenmeden (G1, SEL-331) gerçek veri yok |
@@ -110,3 +108,23 @@ Canlıya geçmeden önce gerekenler:
 4. CRS eşlemesi (G1)
 5. §5'teki açık kararlar
 6. Owner GO
+
+## 7. Ek — 03.11 Owner karar taslağı (T1 / T2 / T3 / K17 / K8 / canlı kapı)
+
+**Durum:** yerel aday. Bu ek için **henüz bağımsız QA yapılmadı.** Aşağıdakiler yazan oturumun kendi doğrulamasıdır; kabul sayılmaz.
+
+| Doğrulama | Sonuç |
+| -- | -- |
+| `npm run check` (tsc + 78 test: core 23, settlement 21, api 23, ssg 11) | Geçti |
+| Owner T2 örneği: 50 € / 30 € → 6/3/21; kalan 20 € → 4/2/14 | Birebir (birim + API testi + örnek rapor W46) |
+| Örnek rapor denkliği W45: tahsilat 490 € = hak ediş 344,50 + site 104,50 + AGOS 41 | Geçti |
+| Şema Postgres 16'da sıfırdan uygulandı | Geçti |
+| DB negatif probları (`packages/db/probes/0001_probes.sql`) | 16/16 reddedildi; 3 olumlu durum geçti |
+| Üretim açılışı tüm onay bayrakları set edilmişken | Reddedildi (IdP ve CRS bağdaştırıcısı yok) |
+
+**Kendi doğrulamada bulunan ve düzeltilen hata:** `statement_dispute` tablosunda gerekçesiz karar kabul ediliyordu. Sebep: `length(trim(NULL)) >= 5` NULL döner ve CHECK NULL'u geçirir. Gerekçe ve 2FA alanı artık açıkça NOT NULL / coalesce ile denetleniyor; prob tekrar çalıştırıldı.
+
+**Yeni DB kuralları (probla denendi):** para hareketi referansı tekil ve değiştirilemez; fark kaydında üç payın toplamı tahsilat farkına eşit, rezervasyon başına haftada bir kayıt, tür ile işaret uyumlu; manuel fiyat onayında 2FA ve rol zorunlu; itiraz bir kez ve gerekçeli karar; yazılı onaysız mahsup yok; AYT-GZP hattı ve min > max sınır yok; son hesap haftası geri gitmez; iade azaltılamaz ve tahsilatı aşamaz; tahsil eden değişmez.
+
+**Önerilen sonraki adım:** bu ek için ayrı bir bağımsız QA turu (farklı inceleyici), ardından Owner'ın taslağı kabulü.
+

@@ -4,6 +4,7 @@
 > Linear kapıları aynen geçerli: G0 HOLD (SEL-324/326) → G1 (SEL-327/329) → G2.
 > Bağlı kayıtlar: SEL-222 (Partner Economy / SaaS), SEL-88 (komisyon), SEL-197 (tedarikçi), SEL-281 (merkezi intake ve atıf), SEL-331 (CRS eşleme), SEL-332 (kimlik ve 2FA).
 > Linear kararlarıyla çelişen ya da onay bekleyen maddeler: [KARARLAR-VE-CELISKILER.md](./KARARLAR-VE-CELISKILER.md).
+> **K1 taslağı (03.11.2026):** hedef web teknolojisi **Next.js + TypeScript** (SSG + gerektiğinde SSR, ortak şablon, çok dil/bölge; her sitenin kendi markası, domaini ve reklam hesapları; merkezi AGOS booking API; tek kaynak mevcut CRS PostgreSQL; WordPress içerik ve SEO kontrollü göç; Google Ads, GA4/GTM, Meta Pixel/CAPI). Aşağıdaki bağımlılıksız SSG bu hedefe giden yolda **ara adaydır**; SEO kuralları (CSP, hreflang, sitemap, önizlemede noindex, elle fiyat yasağı) Next.js şablonuna taşınacak sözleşmedir. Bu karar canlı siteleri hemen değiştirmez.
 
 ## 0. Özet
 
@@ -131,7 +132,7 @@ form ─▶ POST /v1/public/bookings (product=shuttle, routeCode)
         ├─ hat kodu tarifeden (K8): AYT-ALN, ALN-AYT, AYT-SID … GZP-ALN (pilot); AYT↔GZP yok
         ├─ havuz: aynı hat + saat dilimindeki EN DOLU açık sefere eklenir; dolunca yeni araç — aşırı doluluk yok
         └─ outbox: merkeze yeni iş · site sahibine bilgi · müşteriye "talebiniz alındı"
-panel ─▶ confirm ─▶ sefere TEDARİKÇİ ata ─▶ tedarikçi müşteriden TAHSİL EDER (bir kez) ─▶ sefer tamamlandı
+panel ─▶ confirm ─▶ sefere TEDARİKÇİ ata ─▶ tedarikçi müşteriden TAHSİL EDER (kısmi olabilir, fiş/dekont no ile) ─▶ sefer tamamlandı
         └─ rezervasyon satırı (Owner alan listesi): satış 50 € → site 10 € · AGOS 5 € · tedarikçi hak edişi 35 €
            tedarikçi → siteye 10 €, tedarikçi → AGOS'a 5 € (ayrı alacaklar)
            site kendi aracıyla (yetkisi doğrulanmışsa): site payı 0, AGOS 5 €, hak ediş 45 €
@@ -142,7 +143,11 @@ Kurallar (`packages/core/src/settlement.ts`, `commission.ts`):
 - **Tek kaynak:** `SHUTTLE_SPLIT_V1` = 2000 / 1000 / 7000 baz puan. Kod, rapor ve veritabanı aynı değeri kullanır; bir test, SQL seed'inin koddaki değerle aynı olduğunu doğrular.
 - **alanyagroup.com** da bir satış kanalıdır: %20 payı `alanya-group` tarafına yazılır.
 - Tutarlar tam sayı cent; site ve tedarikçi payı aşağı yuvarlanır, kuruş farkı AGOS'a kalır. Üç pay her zaman satış tutarına eşittir (veritabanı CHECK).
-- Tahsilat rezervasyon başına **bir kez** yazılır (kod + DB trigger). Shuttle'da tahsil eden yalnız tedarikçidir (kod + DB CHECK). Yöntem sitenin izin verdiği listede olmalıdır: nakit, POS, havale/EFT.
+- **T2 (taslak): komisyon yalnız fiilen tahsil edilen tutar üzerinden**, fiyatla sınırlı. 50 € işte 30 € tahsil → 6/3/21; kalan 20 € tahsil edilince +4/+2/+14. Kalan tutar "müşteri borcu" listesinde, ödemeye girmez.
+- Her tahsilat ayrı hareket (`booking_money_event`), rezervasyon başına **tekil referans**. Tahsil eden ve ilk yöntem değişmez (kod + DB trigger). Shuttle'da tahsil eden yalnız tedarikçidir (kod + DB CHECK). Yöntem sitenin izin verdiği listede olmalıdır: nakit, POS, havale/EFT.
+- **T1 (taslak):** fazla tahsilat kaydedilir; pay fiyatı aşmaz, fazlası müşteriye iade listesine düşer.
+- **K17 (taslak):** 5+ kişi fiyatı yalnız hattın Owner onaylı min/max sınırı içinde, admin/finance_manager + **2FA** ile, gerekçe ve denetim kaydıyla onaylanır. HTTP statik token 2FA'sız olduğu için bu onay HTTP üzerinden kapalıdır.
+- **K8 (taslak):** her hat için kapsam ve aktif/pasif zorunlu; pasif hatta fiyat yok.
 
 ### 3.3 Akış: Özel / VIP (K15)
 
@@ -164,12 +169,13 @@ AGOS ek private/VIP işlem komisyonu: 0 €
 | Kural | Uygulama |
 | -- | -- |
 | Hesap dönemi | ISO hafta (`2026-W45`), Pazartesi 00:00 – Pazar 23:59 Europe/Istanbul; önerilen son tarih Salı 18:00 |
-| Neler hesaplanır | Hafta sonundan önce **tamamlanmış ve tam tahsil edilmiş**, istisnası olmayan, daha önce hesaplanmamış işler. Hesaba girme anı = max(tamamlanma, tahsilat); geç gelen tahsilat sonraki kapanışa devreder. Test rezervasyonu hiç girmez |
-| İstisna listesi | İptal, tahsilat sonrası iptal, iade, kısmi iade, eksik tahsilat, tahsil edilemedi, tahsilat kaydı yok, itiraz, mükerrer şüphesi. Otomatik hesaplanmaz; açık olanlar çözülene kadar her hafta listede kalır. Çözüm uçları: `resolve-dispute`, `clear-duplicate` |
-| Kapanış | Hafta bitmeden yapılamaz, **bir kez** ve **sırayla** yapılır. İş tek haftaya girer, sonra tutarları dondurulur (DB trigger) |
-| Dekont eşleştirme | Dekont = hafta + ödeyen + alacaklı + tutar + banka referansı. Aynı dekont iki kez girilemez. Durumlar: ödendi / kısmi / ödenmedi / fazla ödeme; eşleşmeyen dekontlar ayrı listelenir |
+| Neler hesaplanır | **Fark modeli (T1/T2 taslak):** her tamamlanmış ve durdurucu istisnası olmayan iş için `pay(hafta sonuna kadarki net tahsilat, fiyatla sınırlı) − pay(önceki kapanışlardaki taban)` → `settlement_entry`. Kısmi tahsilat, geç tahsilat ve iade aynı formülle, çift sayım olmadan. Test rezervasyonu hiç girmez |
+| İstisna listesi | Durduran: iptal, tahsilat sonrası iptal, itiraz, mükerrer şüphesi (çözülene kadar her hafta listede). Durdurmayan: fazla tahsilat (müşteriye iade tutarıyla). Kalan müşteri borçları ayrı liste. Çözüm uçları: `resolve-dispute`, `clear-duplicate` |
+| Kapanış | Hafta bitmeden yapılamaz, **bir kez** ve **sırayla** yapılır. Kapanmış hafta dondurulmuş görüntüdür; rezervasyonun son hesap haftası yalnız ileri gider (DB trigger) |
+| Dekont eşleştirme | Dekont = hafta + ödeyen + alacaklı + tutar + banka referansı + amaç (`settlement` / `subscription` / `overpayment_refund`). Aynı dekont iki kez girilemez. Durumlar: ödendi / kısmi / ödenmedi / fazla ödeme / alacak (iade edilecek) / borç yok; eşleşmeyen dekontlar ayrı listelenir |
 | Gecikme | Salı 18:00 geçince kalan borç "gecikmiş" olur; son tarihten sonra yapılan ödeme "geç ödendi" olarak listelenir; iade sonrası alacaklının geri ödeyeceği tutar "geri ödenecek" olarak görünür |
-| Düzeltme | Eski hafta silinmez ve değişmez. Kapanmış shuttle işinin iadesi aynı 20/10/70 ile **kümülatif** bölünüp (yuvarlama birikmez) **içinde bulunulan haftaya** ters hareket olarak yazılır. İade referansı tekildir (tekrar gönderim ikinci iade yazmaz). Private/VIP iadesi elle düzeltme ister |
+| Düzeltme | Eski hafta silinmez ve değişmez. İade sonrası yeniden hesap otomatik: sonraki haftada negatif `refund_correction` fark kaydı (kümülatif; yuvarlama birikmez). İade referansı tekildir. Elle düzeltmeler: itiraz kararı (`dispute_decision`) ve mahsup (`offset`, **yazılı onay referansı** + 2FA zorunlu, T1 taslak); ikisi de sonraki açık haftaya yazılır |
+| İtiraz (T3 taslak) | Ekstre iletimi kaydedilir (ilk iletim geçerli). İtiraz `ITZ-<hafta>-NNNN`; süre iletimden 7 gün; süre dışı itiraz otomatik reddedilmez. Karar: 2FA'lı yetkili, gerekçeli, bir kez; kabul edilen fark sonraki açık döneme |
 | SaaS | 200 €/ay abonelik ayrı tablolarda ve raporda ayrı bölümde; abonelik dekontları (`purpose: subscription`) komisyon borçlarıyla eşleştirilmez |
 | Para hareketi | **Yok.** Sistem yalnız hesaplar ve rapor üretir. Canlı ödeme, banka transferi ve otomatik borç tahsilatı Owner GO ister (`payout_execution` sabit) |
 
@@ -202,19 +208,23 @@ AGOS ek private/VIP işlem komisyonu: 0 €
 | `GET /v1/public/shuttle-quote?route&date&passengers` | Fiyat önizleme (5 dk önbellek); 5+ kişide `requiresApproval` |
 | `GET /v1/admin/bookings` | Rezervasyonlar ve her birinin K15 alanları (`settlement`) |
 | `POST /v1/admin/bookings/:ref/confirm` | `request → confirmed` (fiyatsız shuttle onaylanamaz) |
-| `POST /v1/admin/bookings/:ref/approve-price` | 5+ kişilik shuttle fiyatı (bir kez) |
+| `POST /v1/admin/bookings/:ref/approve-price` | 5+ kişilik shuttle fiyatı: hat sınırı + 2FA + rol + gerekçe (HTTP'de statik token 2FA'sız → `mfa_required`) |
 | `POST /v1/admin/shuttle-runs/:id/assign` | Sefere tedarikçi ata (`supplierId`); kendi aracı yalnız doğrulanmış site |
 | `POST /v1/admin/shuttle-runs/:id/complete` | Seferi tamamla (`completed_at`) |
 | `POST /v1/admin/bookings/:ref/assign` | Private/VIP: `self` / `pass` + `supplierEntitlementMinor` (`pool` → 501) |
 | `POST /v1/admin/bookings/:ref/complete` | Private/VIP işi tamamla |
-| `POST /v1/admin/bookings/:ref/collection` | Müşteri tahsilatı (bir kez): yöntem, tahsil eden, tutar |
-| `POST /v1/admin/bookings/:ref/refund` | İade (`refundReference` zorunlu, tekil): kapanmamışsa istisna, kapanmışsa düzeltme hareketi |
+| `POST /v1/admin/bookings/:ref/collection` | Müşteri tahsilatı (kısmi olabilir): yöntem, tahsil eden, tutar, tekil `reference` |
+| `POST /v1/admin/bookings/:ref/refund` | Müşteriye iade (`refundReference` zorunlu, tekil; net tahsilatı aşamaz). Yeniden hesap sonraki kapanışta |
 | `POST /v1/admin/bookings/:ref/resolve-dispute` | İtiraz sonucu (`upheld` / `rejected`) |
 | `POST /v1/admin/bookings/:ref/clear-duplicate` | Mükerrer şüphesini incelemeden sonra kaldır |
 | `POST /v1/admin/bookings/:ref/dispute` | İtiraz kaydı |
 | `POST /v1/admin/bookings/:ref/cancel` | İptal; tahsil edilmiş tutar varsa `finance.refund_due` |
 | `POST /v1/admin/bookings/:ref/invoice` | Fatura referansı (bir kez) |
-| `POST /v1/admin/receipts` | Banka dekontu (`purpose`: settlement / subscription; yalnız eklenir, tekrar engelli) |
+| `POST /v1/admin/receipts` | Banka dekontu (`purpose`: settlement / subscription / overpayment_refund; yalnız eklenir, tekrar engelli) |
+| `POST /v1/admin/settlements/:week/statement-sent` | Ekstrenin tarafa iletildiği an (`partyId`; ilk kayıt geçerli) |
+| `POST /v1/admin/settlements/:week/disputes` | Kapanmış haftaya itiraz (`raisedBy`, `reason`, `category`) |
+| `POST /v1/admin/settlements/disputes/:id/decide` | İtiraz kararı (2FA'lı yetkili; HTTP'de kapalı) |
+| `POST /v1/admin/settlements/offsets` | Mahsup (yazılı onay referansı + 2FA; HTTP'de kapalı) |
 | `GET /v1/admin/settlements/:week` | Hafta raporu (canlı ya da kapanmış haftanın anlık görüntüsü + güncel dekontlar) |
 | `POST /v1/admin/settlements/:week/close` | Haftayı kapat (hafta bitince, bir kez, sırayla) |
 | `GET /v1/admin/outbox` | Bekleyen bildirim olayları |
@@ -225,15 +235,15 @@ Admin uçları şimdilik `AG_ADMIN_TOKEN` ile korunur; değişken tanımlı değ
 
 | # | Adım | Durum | Çıkış ölçütü |
 | -- | -- | -- | -- |
-| 0 | Kesinleşenler: shuttle 30/50/60/70, 20/10/70 (alanyagroup.com dahil), K15 supplier collection + haftalık kapanış, private/VIP hak edişini site belirler, 200 €/ay. Açık: K8 hat listesi onayı, K1, K17 kalıcı 5+, K20–K23 | KISMEN AÇIK | Linear'da KARAR olarak işaretli |
-| 1 | **Domain çekirdeği** (`@ag/core`): tarife, 20/10/70, K15 hesap satırı ve haftalık rapor, durum modeli, havuz, sunum ekonomisi | **LOCAL_ONLY · bu PR** | 45 birim testi geçer (core 23 + settlement 22) |
-| 2 | **Merkez API'si**: intake, havuz, tahsilat, dekont, kapanış, düzeltme uçları | **LOCAL_ONLY · bu PR** | 20 API testi ve tarayıcıda uçtan uca form testi geçer |
+| 0 | Kesinleşenler: shuttle 30/50/60/70, 20/10/70 (alanyagroup.com dahil), K15 supplier collection + haftalık kapanış, private/VIP hak edişini site belirler, 200 €/ay. **03.11 taslağı (T1/T2/T3/K17/K8/K1) Owner kabulü bekliyor.** Açık: K17 sayısal sınırlar, K8 kapsam onayı, private/VIP kısmi tahsilat orantısı | KISMEN AÇIK | Linear'da KARAR olarak işaretli |
+| 1 | **Domain çekirdeği** (`@ag/core`): tarife, 20/10/70, K15 hesap satırı ve haftalık rapor, durum modeli, havuz, sunum ekonomisi | **LOCAL_ONLY · bu PR** | 44 birim testi geçer (core 23 + settlement 21) |
+| 2 | **Merkez API'si**: intake, havuz, tahsilat, dekont, kapanış, düzeltme uçları | **LOCAL_ONLY · bu PR** | 23 API testi ve tarayıcıda uçtan uca form testi geçer |
 | 3 | **SSG** ve örnek partner sitesi (EN/TR, noindex) | **LOCAL_ONLY · bu PR** | 11 SSG testi geçer, mobil 390 px'de yatay kaydırma yok |
 | 4 | CRS eşlemesi: G1 erişimiyle şema dökümü, `0001` adayının CRS tablolarına eşlenmesi, `PgStore` adaptörü | G1 bekliyor (SEL-329/331) | 13 backend sözleşmesi (white-label SaaS v1) gerçek DB'de geçer |
 | 5 | Outbox işçisi → n8n: site sahibi e-postası, merkez, müşteri onayı; domain başına SPF/DKIM | G2 | Test alıcısına tekil gönderim, teslim kanıtı |
 | 6 | Yönetim paneli MVP: rezervasyonlar, sefer atama, defter, site/partner kaydı; IdP + 2FA | SEL-332 kararı | Admin yalnız 2FA'lı oturumda |
 | 7 | İlk partner pilotu: 1 site, alt alan adı, noindex önizleme → OWNER GO → özel alan adı (TXT) → GSC → sitemap | Kapılar | TÜRSAB kanal bildirimi ve sözleşme hazır |
-| 8 | K15 haftalık kapanış, raporlar, dekont eşleştirme | **LOCAL_ONLY · bu PR** (yalnız hesap ve rapor) | Testler + örnek rapor + bağımsız QA ([rapor](./K15-QA-VE-KARAR-RAPORU.md)) |
+| 8 | K15 haftalık kapanış, raporlar, dekont eşleştirme | **LOCAL_ONLY · bu PR** (yalnız hesap ve rapor) | Testler + örnek rapor + DB probları (`packages/db/probes`) + bağımsız QA ([rapor](./K15-QA-VE-KARAR-RAPORU.md)) |
 | 8b | Banka/dekont içe aktarma, abonelik faturası, gerçek ödeme ve borç takibi | **Owner GO** + hukuk/mali müşavir | Tahsilatın hukuki sorumlusu, fatura ve vergi netleşmiş |
 | 9 | 10–20 siteye ölçekleme: CI derleme matrisi, Lighthouse CI, Jaccard kontrolü, IndexNow | — | Her site için ayrı yayın ve geri alma |
 

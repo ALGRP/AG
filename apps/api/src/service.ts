@@ -3,13 +3,14 @@ import {
   COLLECTION_METHODS,
   assertTransition,
   bookingRef,
+  checkManualPrice,
+  collectionSummary,
   duplicateFingerprintInput,
   money,
   nextWeekId,
   placeInPool,
   priceShuttle,
   privateSplit,
-  refundAdjustments,
   resolveSite,
   settlementWeekId,
   shuttleSplit,
@@ -18,15 +19,18 @@ import {
   validateIntake,
   weekBounds,
   weeklyReport,
+  type Adjustment,
   type BankReceipt,
   type CollectionMethod,
-  type CollectionStatus,
   type Collector,
   type FieldError,
+  type MoneyEvent,
+  type SettlementEntry,
   type SettlementLine,
   type ShuttleTariffVersion,
   type SiteRecord,
   type SplitPolicy,
+  type StatementDispute,
 } from "@ag/core";
 import type { OutboxEvent, Store, StoredBooking } from "./store.ts";
 
@@ -47,6 +51,16 @@ export interface ServiceDeps {
   };
   /** Turnstile/hCaptcha doğrulaması. Yapılandırılmamışsa çağıran "true" döndüren sahte verir (yalnız yerel). */
   readonly verifyHuman: (token: string | undefined, ip: string) => Promise<boolean>;
+}
+
+/**
+ * İşlemi yapan kimlik. Gerçek kimlik sağlayıcı + 2FA (SEL-332) gelene kadar HTTP katmanındaki geçici admin
+ * anahtarı `mfa: false` taşır; 2FA zorunlu işlemler (K17 fiyat onayı, itiraz kararı, mahsup) bu yüzden kapalıdır.
+ */
+export interface Actor {
+  readonly id: string;
+  readonly role: "admin" | "finance_manager" | "operator";
+  readonly mfa: boolean;
 }
 
 export type ServiceResult<T> = { ok: true; status: number; body: T } | { ok: false; status: number; body: ApiError };
@@ -179,9 +193,7 @@ export class BookingService {
       isTest: site.status === "preview",
       allowedCollectionMethods: site.collectionMethods,
       ...(req.paymentMethod !== undefined ? { preferredCollectionMethod: req.paymentMethod } : {}),
-      collectionStatus: "pending",
-      refundedMinor: 0,
-      refunds: [],
+      moneyEvents: [],
       settlementStatus: "open",
       createdAt: now,
       version: 1,
@@ -264,10 +276,9 @@ export class BookingService {
 
   // ================================================================ Settlement satırı
 
-  /** Rezervasyonun K15 alanları (Owner listesi). Fiyat ve tedarikçi belli değilse null. */
+  /** Rezervasyonun K15 alanları + para hareketleri. Fiyat ve tedarikçi belli değilse null. */
   toLine(b: StoredBooking): SettlementLine | null {
     if (!b.price) return null;
-    // Tedarikçisi atanmadan iptal edilen iş de istisna listesinde görünmeli.
     const supplierId = b.supplierId ?? (b.status === "cancelled" ? "unassigned" : undefined);
     if (!supplierId) return null;
     const final = b.price.total.amountMinor;
@@ -276,7 +287,9 @@ export class BookingService {
       b.product === "shuttle"
         ? shuttleSplit(final, currency, b.sellingPartyId, supplierId, this.#d.shuttlePolicy)
         : privateSplit(final, b.supplierEntitlementMinor ?? final, b.sellingPartyId, supplierId);
-    const collector: Collector = b.collection?.collector ?? "supplier";
+    const first = b.moneyEvents.find((e) => e.kind === "collection");
+    const collector: Collector = first?.collector ?? "supplier";
+    const sum = collectionSummary(b.moneyEvents, final);
     return {
       booking_id: b.id,
       booking_ref: b.ref,
@@ -286,19 +299,19 @@ export class BookingService {
       service_type: b.product,
       final_booking_price: final,
       currency,
-      collection_method: b.collection?.method ?? null,
+      collection_method: first?.method ?? null,
       collector,
-      collection_status: b.collectionStatus,
-      collected_amount: (b.collection?.amountMinor ?? 0) - b.refundedMinor,
-      refunded_amount: b.refundedMinor,
-      collected_at: b.collection?.at ?? null,
+      collection_status: sum.status,
+      collected_amount: sum.net,
+      refunded_amount: sum.refunded,
+      collected_at: sum.firstAt,
       completed_at: b.completedAt ?? null,
       cancelled: b.status === "cancelled",
       cancelled_at: b.cancelledAt ?? null,
       disputed: b.disputedAt !== undefined && b.disputeResolvedAt === undefined,
       disputed_at: b.disputeResolvedAt === undefined ? (b.disputedAt ?? null) : null,
-      suspected_duplicate: b.isDuplicate,
       dispute_reason: b.disputeReason ?? null,
+      suspected_duplicate: b.isDuplicate,
       self_supplied: split.self_supplied,
       site_commission_amount: split.site_commission_amount,
       agos_fee_amount: split.agos_fee_amount,
@@ -310,10 +323,13 @@ export class BookingService {
       payment_reference: null,
       invoice_reference: b.invoiceReference ?? null,
       adjustment_reference: b.adjustmentReference ?? null,
+      money_events: b.moneyEvents,
     };
   }
 
   #adminView(b: StoredBooking) {
+    const line = this.toLine(b);
+    const { money_events: _m, ...settlement } = line ?? ({ money_events: [] } as unknown as SettlementLine);
     return {
       ref: b.ref,
       siteId: b.siteId,
@@ -324,9 +340,11 @@ export class BookingService {
       shuttleRunId: b.shuttleRunId ?? null,
       price: b.price ? { amountMinor: b.price.total.amountMinor, currency: b.price.total.currency, mode: b.price.mode } : null,
       priceStatus: b.price ? "set" : b.product === "shuttle" ? "requires_approval" : "quote_pending",
+      priceApproval: b.priceApproval ?? null,
       isDuplicate: b.isDuplicate,
       isTest: b.isTest,
-      settlement: this.toLine(b),
+      moneyEvents: b.moneyEvents,
+      settlement: line ? settlement : null,
     };
   }
 
@@ -353,32 +371,42 @@ export class BookingService {
     });
   }
 
-  /** K17: 5+ kişilik shuttle fiyatı elle bir kez onaylanır; 20/10/70 bu tutardan hesaplanır. */
-  async approveShuttlePrice(ref: string, input: Record<string, unknown>): Promise<ServiceResult<unknown>> {
-    const { amountMinor, currency } = input;
-    if (!Number.isSafeInteger(amountMinor) || (amountMinor as number) <= 0) return fail(422, "amountMinor_invalid");
+  #requireMfa(actor: Actor, roles: readonly Actor["role"][]): ServiceResult<never> | null {
+    if (!actor.mfa) return fail(403, "mfa_required");
+    if (!roles.includes(actor.role)) return fail(403, "role_not_allowed");
+    return null;
+  }
+
+  /**
+   * K17 (taslak): 5+ kişilik shuttle için manuel fiyat. Yalnız 2FA'lı yetkili yönetici; yalnız hattın Owner onaylı
+   * alt/üst sınırı içinde; gerekçe zorunlu; kim/rol/zaman/eski-yeni fiyat/gerekçe denetim kaydına yazılır.
+   * Onaylanmamış fiyat müşteriye kesin teklif olarak gösterilmez (fiyat alanı boş kalır).
+   */
+  async approveShuttlePrice(actor: Actor, ref: string, input: Record<string, unknown>): Promise<ServiceResult<unknown>> {
+    const denied = this.#requireMfa(actor, ["admin", "finance_manager"]);
+    if (denied) return denied;
+    const { amountMinor, currency, reason } = input;
+    if (typeof reason !== "string" || reason.trim().length < 5) return fail(422, "reason_required");
     if (currency !== this.#d.shuttleTariff.currency) return fail(422, "currency_must_match_tariff");
-    return this.#mutate(ref, async (b) => {
+    return this.#mutate(ref, async (b, tx) => {
       if (b.product !== "shuttle") return fail(409, "not_a_shuttle_booking");
       if (b.price) return fail(409, "price_already_set");
       if (b.status !== "request") return fail(409, "invalid_transition");
+      const check = checkManualPrice(this.#d.shuttleTariff, b.request.routeCode!, amountMinor as number);
+      if (!check.ok) return fail(422, check.reason);
+      const now = this.#now();
+      await tx.appendOutbox([this.#event(b, "audit.manual_price_approved", { actor: actor.id, role: actor.role })]);
       return {
         ...b,
-        price: {
-          mode: "SHUTTLE_MANUAL_APPROVED",
-          total: money(amountMinor as number, this.#d.shuttleTariff.currency),
-          sourceVersionId: `manual-approval:${this.#d.shuttleTariff.id}`,
-          frozenAt: this.#now(),
-        },
+        price: { mode: "SHUTTLE_MANUAL_APPROVED", total: money(amountMinor as number, this.#d.shuttleTariff.currency), sourceVersionId: `manual-approval:${this.#d.shuttleTariff.id}`, frozenAt: now },
+        priceApproval: { actorId: actor.id, actorRole: actor.role, at: now, oldPriceMinor: null, newPriceMinor: amountMinor as number, reason: redactPii(reason.trim()).slice(0, 300) },
       };
     });
   }
 
   #checkSupplier(site: SiteRecord | undefined, supplierId: unknown): ServiceResult<never> | null {
     if (typeof supplierId !== "string" || !ID.test(supplierId)) return fail(422, "supplierId_invalid");
-    if (site && supplierId === site.ownerPartyId && !site.selfOperationVerifiedAt) {
-      return fail(409, "self_operation_not_verified");
-    }
+    if (site && supplierId === site.ownerPartyId && !site.selfOperationVerifiedAt) return fail(409, "self_operation_not_verified");
     return null;
   }
 
@@ -391,7 +419,6 @@ export class BookingService {
       const bookings = (await Promise.all(run.bookings.map((x) => tx.getBookingById(x.bookingId)))).filter(
         (b): b is StoredBooking => b !== undefined && b.status !== "cancelled",
       );
-      // Kendi aracıyla yapan site: yasal yetkisi doğrulanmış olmalı.
       for (const b of bookings) {
         const bad = this.#checkSupplier(this.#d.sites.get(b.siteId), supplierId);
         if (bad) return bad;
@@ -404,7 +431,7 @@ export class BookingService {
     });
   }
 
-  /** Sefer tamamlandı: onaylı ve fiyatlı rezervasyonlar "delivered", completed_at yazılır. */
+  /** Sefer tamamlandı: onaylı ve fiyatlı rezervasyonlar "delivered"; bekleyen varsa sefer açık kalır. */
   async completeRun(runId: string): Promise<ServiceResult<unknown>> {
     return this.#d.store.transaction(async (tx) => {
       const run = await tx.getRun(runId);
@@ -424,17 +451,12 @@ export class BookingService {
         if (!(await tx.updateBooking({ ...b, status: "delivered", completedAt: now }, b.version))) throw new Error("version_conflict");
         outcome.push({ ref: b.ref, result: "completed" });
       }
-      // Bekleyen rezervasyon varsa sefer "assigned" kalır; onlar hazır olunca aynı uçla tamamlanır.
       const status = pending > 0 ? "assigned" : "completed";
       await tx.saveRun({ ...run, status });
       return ok({ runId, status, bookings: outcome });
     });
   }
 
-  /**
-   * Private/VIP ataması (site kararı): kendi aracıyla ("self") ya da tedarikçiye ("pass"). Havuz ("pool") bu
-   * sürümde yok (şoför teklif akışı ayrı iş). Tedarikçi hak edişini site belirler; AGOS ek komisyon almaz.
-   */
   async assignPrivate(ref: string, input: Record<string, unknown>): Promise<ServiceResult<unknown>> {
     const { mode, supplierId, supplierEntitlementMinor } = input;
     if (mode === "pool") return fail(501, "pool_not_available_in_this_version");
@@ -443,7 +465,7 @@ export class BookingService {
       if (b.product === "shuttle") return fail(409, "use_shuttle_run_assignment");
       if (!b.price) return fail(409, "price_not_set");
       if (b.status !== "request" && b.status !== "confirmed") return fail(409, "invalid_transition");
-      if (b.collection) return fail(409, "collection_already_recorded");
+      if (b.moneyEvents.length > 0) return fail(409, "collection_already_recorded");
       const site = this.#d.sites.get(b.siteId);
       const supplier = mode === "self" ? b.sellingPartyId : supplierId;
       const bad = this.#checkSupplier(site, supplier);
@@ -451,9 +473,7 @@ export class BookingService {
       if (mode === "pass") {
         if (supplier === b.sellingPartyId) return fail(422, "use_self_mode");
         const e = supplierEntitlementMinor;
-        if (!Number.isSafeInteger(e) || (e as number) < 0 || (e as number) > b.price.total.amountMinor) {
-          return fail(422, "supplierEntitlementMinor_invalid");
-        }
+        if (!Number.isSafeInteger(e) || (e as number) < 0 || (e as number) > b.price.total.amountMinor) return fail(422, "supplierEntitlementMinor_invalid");
         return { ...b, supplierId: supplier as string, supplierEntitlementMinor: e as number };
       }
       const { supplierEntitlementMinor: _drop, ...rest } = b;
@@ -471,92 +491,53 @@ export class BookingService {
   }
 
   /**
-   * Müşteri tahsilatı — rezervasyon başına BİR kayıt (kural 9). Shuttle'da tahsilatı tedarikçi yapar (kural 2);
-   * private/VIP'de tedarikçi ya da site. Tutar < fiyat → eksik tahsilat (istisna); 0 → tahsil edilemedi.
+   * Müşteri tahsilatı (T2: kısmi tahsilat ve sonradan kalan tahsilat ayrı kayıtlar). Her kayıt bir kanıt
+   * referansı taşır (dekont/POS slip/makbuz) ve rezervasyon içinde tekildir — aynı tahsilat iki kez yazılmaz.
+   * Shuttle'da tahsil eden tedarikçidir. Satış fiyatını aşan tutar kaydedilir ama pay satış fiyatına kadar
+   * hesaplanır; fazlası müşteriye iade edilmek üzere istisna listesine düşer (T1).
    */
   async recordCollection(ref: string, input: Record<string, unknown>): Promise<ServiceResult<unknown>> {
-    const { method, amountMinor, collector } = input;
+    const { method, amountMinor, collector, reference } = input;
     if (!(COLLECTION_METHODS as readonly unknown[]).includes(method)) return fail(422, "method_invalid");
     if (collector !== "supplier" && collector !== "site") return fail(422, "collector_invalid");
-    if (!Number.isSafeInteger(amountMinor) || (amountMinor as number) < 0) return fail(422, "amountMinor_invalid");
+    if (!Number.isSafeInteger(amountMinor) || (amountMinor as number) <= 0) return fail(422, "amountMinor_invalid");
+    if (typeof reference !== "string" || !/^[A-Za-z0-9./_-]{3,64}$/.test(reference)) return fail(422, "reference_required");
     return this.#mutate(ref, async (b) => {
-      if (b.collection) return fail(409, "collection_already_recorded");
+      if (b.moneyEvents.some((e) => e.reference === reference)) return fail(409, "reference_already_recorded");
       if (!b.price) return fail(409, "price_not_set");
       if (!b.supplierId) return fail(409, "supplier_not_assigned");
       if (b.status === "cancelled") return fail(409, "booking_cancelled");
       if (b.product === "shuttle" && collector !== "supplier") return fail(422, "shuttle_collection_is_by_supplier");
+      const first = b.moneyEvents.find((e) => e.kind === "collection");
+      if (first && first.collector !== collector) return fail(422, "collector_must_not_change");
       if (!b.allowedCollectionMethods.includes(method as CollectionMethod)) return fail(422, "method_not_allowed_for_booking");
-      const amount = amountMinor as number;
-      if (amount > b.price.total.amountMinor) return fail(422, "exceeds_booking_price");
-      const status: CollectionStatus = amount === 0 ? "not_collected" : amount < b.price.total.amountMinor ? "short_collected" : "collected";
-      return {
-        ...b,
-        collection: { method: method as CollectionMethod, collector: collector as Collector, amountMinor: amount, at: this.#now() },
-        collectionStatus: status,
-      };
+      const ev: MoneyEvent = { id: this.#d.random.id(), kind: "collection", amount: amountMinor as number, at: this.#now(), method: method as CollectionMethod, collector: collector as Collector, reference };
+      return { ...b, moneyEvents: [...b.moneyEvents, ev] };
     });
   }
 
   /**
-   * İade. `refundReference` zorunlu ve rezervasyon başına tekildir (tekrar gönderim ikinci iade yazmaz).
-   * Henüz hesaplanmamış iş → istisna (tam iade: "refunded", kısmi: "partially_refunded", çözülene kadar açık).
-   * Eski haftada hesaplanmış shuttle → eski hafta değişmez; içinde bulunulan haftaya kümülatif ters düzeltme (kural 8).
-   * Hesaplanmış private/VIP → elle düzeltme.
+   * Müşteriye iade (T1): ayrı kayıt + kanıt referansı (tekil). Payların yeniden hesabı otomatiktir: iade net
+   * tahsilatı düşürür, haftalık kapanış farkı negatif yazar (eski hafta değişmez).
    */
   async refund(ref: string, input: Record<string, unknown>): Promise<ServiceResult<unknown>> {
     const { amountMinor, refundReference } = input;
     if (!Number.isSafeInteger(amountMinor) || (amountMinor as number) <= 0) return fail(422, "amountMinor_invalid");
     if (typeof refundReference !== "string" || !/^[A-Za-z0-9./_-]{3,64}$/.test(refundReference)) return fail(422, "refundReference_invalid");
     return this.#mutate(ref, async (b, tx) => {
-      if (b.refunds.some((r) => r.reference === refundReference)) return fail(409, "refund_reference_already_used");
-      const original = b.collection?.amountMinor ?? 0;
-      const amount = amountMinor as number;
-      if (b.refundedMinor + amount > original) return fail(422, "refund_exceeds_collected");
-      const now = this.#now();
-      const refunded = b.refundedMinor + amount;
-      const next: StoredBooking = {
-        ...b,
-        refundedMinor: refunded,
-        refunds: [...b.refunds, { reference: refundReference, amountMinor: amount, at: now }],
-        collectionStatus: refunded === original ? "refunded" : b.collectionStatus,
-      };
-      if (!b.settlementWeekId) return next;
-      const line = this.toLine(b)!;
-      if (b.product !== "shuttle") {
-        await tx.appendOutbox([this.#event(b, "finance.manual_adjustment_required", { reason: "private_refund_after_settlement" })]);
-        return { ...next, settlementStatus: "adjusted", adjustmentReference: "MANUAL" };
-      }
-      const adj = refundAdjustments(
-        line,
-        {
-          originalCollectedMinor: original,
-          priorRefundedMinor: b.refundedMinor,
-          refundMinor: amount,
-          currentWeekId: settlementWeekId(now),
-          sequence: b.refunds.length + 1,
-          policy: this.#d.shuttlePolicy,
-        },
-        this.#d.random.id,
-      );
-      await tx.appendAdjustments(adj);
-      return { ...next, settlementStatus: "adjusted", adjustmentReference: adj[0]?.adjustment_reference ?? b.adjustmentReference ?? "NONE" };
+      if (b.moneyEvents.some((e) => e.reference === refundReference)) return fail(409, "refund_reference_already_used");
+      const first = b.moneyEvents.find((e) => e.kind === "collection");
+      if (!first || !b.price) return fail(409, "nothing_collected");
+      const net = collectionSummary(b.moneyEvents, b.price.total.amountMinor).net;
+      if ((amountMinor as number) > net) return fail(422, "refund_exceeds_collected");
+      const ev: MoneyEvent = { id: this.#d.random.id(), kind: "refund", amount: amountMinor as number, at: this.#now(), method: first.method, collector: first.collector, reference: refundReference };
+      if (b.settlementWeekId) await tx.appendOutbox([this.#event(b, "finance.refund_after_settlement", { reference: refundReference })]);
+      return { ...b, moneyEvents: [...b.moneyEvents, ev], ...(b.settlementWeekId ? { settlementStatus: "adjusted" as const } : {}) };
     });
   }
 
-  /** Mükerrer şüphesi incelendi, gerçek bir iş: istisna kalkar, sonraki kapanışa girer. */
   async clearDuplicate(ref: string): Promise<ServiceResult<unknown>> {
     return this.#mutate(ref, async (b) => (b.isDuplicate ? { ...b, isDuplicate: false } : fail(409, "not_flagged_as_duplicate")));
-  }
-
-  /** İtiraz sonucu. upheld: itiraz haklı (çoğunlukla iade ile sonuçlanır); rejected: iş normal hesaplanır. */
-  async resolveDispute(ref: string, input: Record<string, unknown>): Promise<ServiceResult<unknown>> {
-    const { outcome } = input;
-    if (outcome !== "upheld" && outcome !== "rejected") return fail(422, "outcome_invalid");
-    return this.#mutate(ref, async (b, tx) => {
-      if (!b.disputedAt || b.disputeResolvedAt) return fail(409, "no_open_dispute");
-      await tx.appendOutbox([this.#event(b, "finance.dispute_resolved", { outcome })]);
-      return { ...b, disputeResolvedAt: this.#now(), disputeOutcome: outcome };
-    });
   }
 
   async dispute(ref: string, input: Record<string, unknown>): Promise<ServiceResult<unknown>> {
@@ -570,6 +551,16 @@ export class BookingService {
     });
   }
 
+  async resolveDispute(ref: string, input: Record<string, unknown>): Promise<ServiceResult<unknown>> {
+    const { outcome } = input;
+    if (outcome !== "upheld" && outcome !== "rejected") return fail(422, "outcome_invalid");
+    return this.#mutate(ref, async (b, tx) => {
+      if (!b.disputedAt || b.disputeResolvedAt) return fail(409, "no_open_dispute");
+      await tx.appendOutbox([this.#event(b, "finance.dispute_resolved", { outcome })]);
+      return { ...b, disputeResolvedAt: this.#now(), disputeOutcome: outcome };
+    });
+  }
+
   async cancel(ref: string): Promise<ServiceResult<unknown>> {
     return this.#mutate(ref, async (b, tx) => {
       try {
@@ -578,13 +569,11 @@ export class BookingService {
         return fail(409, "invalid_transition");
       }
       const events = [this.#event(b, "booking.cancelled.notify_customer")];
-      const held = (b.collection?.amountMinor ?? 0) - b.refundedMinor;
+      const held = b.price ? collectionSummary(b.moneyEvents, b.price.total.amountMinor).net : 0;
       if (held > 0) events.push(this.#event(b, "finance.refund_due", { amountMinor: String(held) }));
       if (b.shuttleRunId) {
         const run = await tx.getRun(b.shuttleRunId);
-        if (run && (run.status === "open" || run.status === "assigned")) {
-          await tx.saveRun({ ...run, bookings: run.bookings.filter((x) => x.bookingId !== b.id) });
-        }
+        if (run && (run.status === "open" || run.status === "assigned")) await tx.saveRun({ ...run, bookings: run.bookings.filter((x) => x.bookingId !== b.id) });
       }
       await tx.appendOutbox(events);
       return { ...b, status: "cancelled", cancelledAt: this.#now() };
@@ -597,13 +586,12 @@ export class BookingService {
     return this.#mutate(ref, async (b) => (b.invoiceReference ? fail(409, "invoice_reference_already_set") : { ...b, invoiceReference: inv }));
   }
 
-  // ================================================================ Dekont ve haftalık kapanış
+  // ================================================================ Dekont, itiraz, mahsup, kapanış
 
-  /** Banka dekontu (tedarikçi → site / AGOS ödemesi). Yalnız eklenir; aynı dekont ikinci kez girilemez. */
   async addReceipt(input: Record<string, unknown>): Promise<ServiceResult<unknown>> {
     const { weekId, payerId, payeeId, amountMinor, currency, bankReference, paidAt } = input;
     const purpose = input.purpose ?? "settlement";
-    if (purpose !== "settlement" && purpose !== "subscription") return fail(422, "purpose_invalid");
+    if (purpose !== "settlement" && purpose !== "subscription" && purpose !== "overpayment_refund") return fail(422, "purpose_invalid");
     if (typeof weekId !== "string") return fail(422, "weekId_invalid");
     try {
       weekBounds(weekId);
@@ -627,18 +615,142 @@ export class BookingService {
       purpose,
     };
     return this.#d.store.transaction(async (tx) => {
-      if ((await tx.listReceipts()).some((x) => x.bank_reference === r.bank_reference && x.payer_id === r.payer_id)) {
-        return fail(409, "duplicate_bank_reference");
-      }
+      if ((await tx.listReceipts()).some((x) => x.bank_reference === r.bank_reference && x.payer_id === r.payer_id)) return fail(409, "duplicate_bank_reference");
       await tx.appendReceipt(r);
       return ok(r, 201);
+    });
+  }
+
+  /** Düzeltme/itiraz farkının yazılacağı "sonraki açık hesap dönemi": son kapanmış haftadan sonraki ilk hafta. */
+  async #openWeek(tx: Store): Promise<string> {
+    const closed = await tx.listClosedWeekIds();
+    return closed.length === 0 ? settlementWeekId(this.#now()) : nextWeekId(closed[closed.length - 1]!);
+  }
+
+  /** Ekstrenin tarafa iletildiği an (itiraz süresi buradan başlar; ilk kayıt geçerlidir). */
+  async recordStatementSent(weekId: string, input: Record<string, unknown>): Promise<ServiceResult<unknown>> {
+    const { partyId } = input;
+    if (typeof partyId !== "string" || !ID.test(partyId)) return fail(422, "party_invalid");
+    if (!(await this.#d.store.getClosedWeek(weekId))) return fail(409, "week_not_closed");
+    const at = await this.#d.store.recordStatementSent(weekId, partyId, this.#now());
+    return ok({ weekId, partyId, sentAt: at }, 201);
+  }
+
+  /** T3: kapanmış haftaya itiraz kaydı (kayıt numarası, taraf, gerekçe). Süre dışı itiraz otomatik reddedilmez. */
+  async raiseStatementDispute(weekId: string, input: Record<string, unknown>): Promise<ServiceResult<unknown>> {
+    const { raisedBy, reason, category } = input;
+    if (typeof raisedBy !== "string" || !ID.test(raisedBy)) return fail(422, "raisedBy_invalid");
+    if (typeof reason !== "string" || reason.trim().length < 5) return fail(422, "reason_required");
+    if (category !== "calculation_error" && category !== "legal_right" && category !== "fraud_suspicion" && category !== "other") return fail(422, "category_invalid");
+    return this.#d.store.transaction(async (tx) => {
+      if (!(await tx.getClosedWeek(weekId))) return fail(409, "week_not_closed");
+      const n = (await tx.listDisputes()).length + 1;
+      const d: StatementDispute = {
+        id: `ITZ-${weekId}-${String(n).padStart(4, "0")}`,
+        week_id: weekId,
+        raised_by: raisedBy,
+        reason: redactPii(reason.trim()).slice(0, 500),
+        category,
+        raised_at: this.#now(),
+        statement_sent_at: (await tx.getStatementSent(weekId, raisedBy)) ?? null,
+        status: "open",
+        decided_by: null,
+        decided_role: null,
+        decision_reason: null,
+        decided_at: null,
+        adjustment_ids: [],
+      };
+      await tx.saveDispute(d);
+      return ok(d, 201);
+    });
+  }
+
+  /**
+   * T3: yetkili yönetici (2FA) gerekçeli karar verir. Kabul edilen fark sonraki AÇIK hesap dönemine düzeltme
+   * hareketi olarak yazılır; kapanmış hafta değişmez.
+   */
+  async decideStatementDispute(actor: Actor, id: string, input: Record<string, unknown>): Promise<ServiceResult<unknown>> {
+    const denied = this.#requireMfa(actor, ["admin", "finance_manager"]);
+    if (denied) return denied;
+    const { decision, reason, adjustment } = input;
+    if (decision !== "accepted" && decision !== "rejected") return fail(422, "decision_invalid");
+    if (typeof reason !== "string" || reason.trim().length < 5) return fail(422, "reason_required");
+    return this.#d.store.transaction(async (tx) => {
+      const d = (await tx.listDisputes()).find((x) => x.id === id);
+      if (!d) return fail(404, "not_found");
+      if (d.status !== "open") return fail(409, "already_decided");
+      const adjIds: string[] = [];
+      if (decision === "accepted" && adjustment !== undefined) {
+        const a = adjustment as Record<string, unknown>;
+        if (typeof a.debtorId !== "string" || !ID.test(a.debtorId) || typeof a.creditorId !== "string" || !ID.test(a.creditorId) || !Number.isSafeInteger(a.amountMinor) || a.amountMinor === 0) {
+          return fail(422, "adjustment_invalid");
+        }
+        const adj: Adjustment = {
+          id: this.#d.random.id(),
+          week_id: await this.#openWeek(tx),
+          original_week_id: d.week_id,
+          debtor_id: a.debtorId,
+          creditor_id: a.creditorId,
+          amount: a.amountMinor as number,
+          currency: this.#d.shuttleTariff.currency,
+          kind: "dispute_decision",
+          reason: redactPii(reason.trim()).slice(0, 300),
+          adjustment_reference: `${d.id}-ADJ`,
+          written_approval_reference: null,
+          booking_id: null,
+          dispute_id: d.id,
+        };
+        await tx.appendAdjustments([adj]);
+        adjIds.push(adj.id);
+      }
+      const decided: StatementDispute = {
+        ...d,
+        status: decision,
+        decided_by: actor.id,
+        decided_role: actor.role,
+        decision_reason: redactPii(reason.trim()).slice(0, 500),
+        decided_at: this.#now(),
+        adjustment_ids: adjIds,
+      };
+      await tx.saveDispute(decided);
+      return ok(decided);
+    });
+  }
+
+  /** T1: sonraki haftaya mahsup — yalnız ilgili tarafların yazılı onayının belge referansıyla, 2FA'lı yöneticiyle. */
+  async createOffset(actor: Actor, input: Record<string, unknown>): Promise<ServiceResult<unknown>> {
+    const denied = this.#requireMfa(actor, ["admin", "finance_manager"]);
+    if (denied) return denied;
+    const { fromWeekId, debtorId, creditorId, amountMinor, writtenApprovalReference, reason } = input;
+    if (typeof writtenApprovalReference !== "string" || !/^[A-Za-z0-9./_-]{3,64}$/.test(writtenApprovalReference)) return fail(422, "written_approval_required");
+    if (typeof fromWeekId !== "string" || typeof debtorId !== "string" || !ID.test(debtorId) || typeof creditorId !== "string" || !ID.test(creditorId)) return fail(422, "party_invalid");
+    if (!Number.isSafeInteger(amountMinor) || amountMinor === 0) return fail(422, "amountMinor_invalid");
+    if (typeof reason !== "string" || reason.trim().length < 5) return fail(422, "reason_required");
+    return this.#d.store.transaction(async (tx) => {
+      if (!(await tx.getClosedWeek(fromWeekId))) return fail(409, "week_not_closed");
+      const adj: Adjustment = {
+        id: this.#d.random.id(),
+        week_id: await this.#openWeek(tx),
+        original_week_id: fromWeekId,
+        debtor_id: debtorId,
+        creditor_id: creditorId,
+        amount: amountMinor as number,
+        currency: this.#d.shuttleTariff.currency,
+        kind: "offset",
+        reason: redactPii(reason.trim()).slice(0, 300),
+        adjustment_reference: `OFS-${fromWeekId}-${writtenApprovalReference}`,
+        written_approval_reference: writtenApprovalReference,
+        booking_id: null,
+        dispute_id: null,
+      };
+      await tx.appendAdjustments([adj]);
+      return ok(adj, 201);
     });
   }
 
   async #lines(tx: Store): Promise<SettlementLine[]> {
     const out: SettlementLine[] = [];
     for (const b of await tx.listBookings()) {
-      // Test rezervasyonu hiç hesaba girmez. Mükerrer şüphesi olan iş istisna listesinde görünür (kaybolmaz).
       if (b.isTest) continue;
       const l = this.toLine(b);
       if (l) out.push(l);
@@ -646,10 +758,12 @@ export class BookingService {
     return out;
   }
 
-  /**
-   * Hafta raporu. Kapanmış haftada hesaplanan satırlar ve istisnalar kapanış anındaki gibi kalır (kural 8);
-   * dekont eşleşmesi, geciken ödemeler ve düzeltmeler güncel verilerle yeniden hesaplanır.
-   */
+  async #priorEntries(tx: Store): Promise<SettlementEntry[]> {
+    const out: SettlementEntry[] = [];
+    for (const id of await tx.listClosedWeekIds()) out.push(...((await tx.getClosedWeek(id))?.entries ?? []));
+    return out;
+  }
+
   async weekReport(weekId: string): Promise<ServiceResult<unknown>> {
     try {
       weekBounds(weekId);
@@ -662,14 +776,16 @@ export class BookingService {
       weekId,
       now: this.#now(),
       lines: closed ? [] : await this.#lines(tx),
+      priorEntries: await this.#priorEntries(tx),
       adjustments: await tx.listAdjustments(),
       receipts: await tx.listReceipts(weekId),
-      ...(closed ? { frozen: { included: closed.included, exceptions: closed.exceptions } } : {}),
+      disputes: await tx.listDisputes(),
+      policy: this.#d.shuttlePolicy,
+      ...(closed ? { frozen: { entries: closed.entries, exceptions: closed.exceptions, customer_balances: closed.customer_balances } } : {}),
     });
     return ok({ ...report, closed: Boolean(closed) });
   }
 
-  /** Haftayı kapatır: hafta bitmiş olmalı, bir kez yapılır; hesaplanan satırlara settlement_week_id yazılır. */
   async closeWeek(weekId: string): Promise<ServiceResult<unknown>> {
     let bounds;
     try {
@@ -680,7 +796,6 @@ export class BookingService {
     if (this.#now() < bounds.end_utc) return fail(409, "week_not_finished");
     return this.#d.store.transaction(async (tx) => {
       if (await tx.getClosedWeek(weekId)) return fail(409, "week_already_closed");
-      // Haftalar sırayla kapanır: önceki hafta kapanmadan sonraki kapanmaz (ilk kapanış hariç).
       const closedIds = await tx.listClosedWeekIds();
       if (closedIds.length > 0) {
         const last = closedIds[closedIds.length - 1]!;
@@ -691,13 +806,17 @@ export class BookingService {
         weekId,
         now: this.#now(),
         lines: await this.#lines(tx),
+        priorEntries: await this.#priorEntries(tx),
         adjustments: await tx.listAdjustments(),
         receipts: await tx.listReceipts(weekId),
+        disputes: await tx.listDisputes(),
+        policy: this.#d.shuttlePolicy,
+        newId: this.#d.random.id,
       });
-      for (const l of report.included) {
-        const b = await tx.getBookingById(l.booking_id);
-        if (!b || b.settlementWeekId) throw new Error("line already settled");
-        if (!(await tx.updateBooking({ ...b, settlementWeekId: weekId, settlementStatus: "included" }, b.version))) throw new Error("version_conflict");
+      for (const e of report.entries) {
+        const b = await tx.getBookingById(e.booking_id);
+        if (!b) continue;
+        if (!(await tx.updateBooking({ ...b, settlementWeekId: weekId, settlementStatus: b.settlementWeekId ? "adjusted" : "included" }, b.version))) throw new Error("version_conflict");
       }
       await tx.saveClosedWeek(report);
       return ok(report, 201);
