@@ -16,7 +16,7 @@ Bu belge, Owner'ın 03.11.2026 tarihli talebini Linear'daki mevcut kararlarla ka
 
 | # | Konu | Linear'daki durum | 03.11 talebi | Koddaki varsayılan | Karar gerekiyor mu? |
 | -- | -- | -- | -- | -- | -- |
-| K1 | Web teknolojisi | ADR-WEB-001: beş domain için Next.js + TypeScript, kademeli geçiş; Glass pilotu (Next.js 16) | Uydu siteler statik HTML + SSG | Bağımlılıksız TypeScript SSG (`@ag/ssg`) yalnız **partner uydu siteleri** için. Kendi beş domainimiz ADR-WEB-001'de kalır | **Taslak K1 (03.11): hedef Next.js + TypeScript** (SSG + gerektiğinde SSR). `@ag/ssg` ara aday; canlı siteler hemen değişmez (Ç25) |
+| K1 | Web teknolojisi | ADR-WEB-001: beş domain için Next.js + TypeScript, kademeli geçiş; Glass pilotu (Next.js 16) | Uydu siteler statik HTML + SSG | Bağımlılıksız TypeScript SSG (`@ag/ssg`) yalnız **partner uydu siteleri** için. Kendi beş domainimiz ADR-WEB-001'de kalır | **K1 (03.11):** ana site Next.js + TypeScript; partner uydu siteler statik HTML/SSG + merkezi API. `@ag/ssg` partner uydu build adayı, ana siteyi ikame etmez; canlı siteler değişmez (Ç25) |
 | K2 | Site ücreti | SEL-222'de "€100 Growth Pro" taslağı; ayrıca "partner ücretsiz katılır" kararı | **Sunum V3: 200 €/ay SaaS aboneliği**, uydu site sahibi Alanya Group'a öder. Google Ads (40 €/gün) partnerin kendi gideridir, AG cirosu değildir. Site başı iç maliyet varsayımı 40 € | `subscription_plan` = 20000 cent/ay, `site_cost_minor` = 4000; reklam bütçesi sistemde AG geliri olarak tutulmaz | **NETLEŞTİ** (sunum taslak). "Ücretsiz katılım" kararının kalktığı Linear'a işlenmeli |
 | K3 | Shuttle gelir paylaşımı | White-label SaaS v1: shuttle merkezin ürünüdür, üyeye %20. Sürücü havuzu v1.1: %70 sürücü / %30 AGOS | **OWNER KARARI 03.11:** her shuttle rezervasyonunda **satış tutarının** %70'i transferi yapan tedarikçiye, %20'si uydu siteye, %10'u Alanya Group'a | `shuttle-split-v1` = 7000/2000/1000 baz puan, satış tutarı üzerinden; her pay ayrı defter satırı. Örnekler testli: 30 → 21/6/3, 50 → 35/10/5, 60 → 42/12/6, 70 → 49/14/7 | **KARAR.** KDV'nin faturada nasıl gösterileceği mali müşavir konusudur, paylaşım kuralını değiştirmez |
 | K4 | AG'nin kendi sitesinden gelen shuttle | 03.11 öneri: %90 tedarikçi / %10 AG | **K15 KESİN KARAR:** alanyagroup.com da satış kanalıdır: %20 site (Alanya Group) / %10 AGOS / %70 tedarikçi | Aynı `shuttle-split-v1`; AG sitesinin payı `alanya-group` tarafına yazılır. Eski `shuttle-direct-v1` politikası kaldırıldı | **KARAR** (önceki öneri geçersiz) |
@@ -74,7 +74,7 @@ Durum: **TASLAK**. Kod yerel adaydır; Owner kabulü, insan bağımsız inceleme
 | K8.1 | Pilot aday hatlar; AYT↔GZP yok | 12 yön kodu; AYT-GZP/GZP-AYT kod, şema ve DB'de reddedilir | mevcut + DB probu P14 | — |
 | K8.2 | Her yön: kod, fiyat sürümü, başlangıç tarihi, kapsam, aktif/pasif | `routeInfo {active, coverage}` her hat için zorunlu; pasif hatta fiyat yok (`route_inactive`); tarife sürümü + `validFrom ≥ publishedAt` | K8 route metadata | Kapsam metinleri taslaktır (Owner teyidi) |
 | K8.3 | Canlı fiyat ayrı Owner onayı | Tarife `approval: proposed`; üretim açılışı reddeder | live gate | — |
-| K1 | Hedef: Next.js + TypeScript, SSG + gerektiğinde SSR, ortak şablon, çok dil/bölge; merkezi AGOS booking API; tek kaynak mevcut CRS PostgreSQL; WordPress içerik/SEO kontrollü geçiş; Google Ads, GA4/GTM, Meta Pixel/CAPI | Bu PR'daki `@ag/ssg` **ara aday** olarak kalır (yalnız partner örnek sitesi). API ve şema CRS eşleme adayıdır, yeni rezervasyon DB'si kurulmaz. İzleme entegrasyonu **yok** | — | Next.js geçiş planı, WordPress içerik göçü, izleme/consent (KVKK) — ayrı iş, canlı siteler değişmez |
+| K1 | Ana site alanyagroup.com: hedef Next.js + TypeScript (SSG + gerektiğinde SSR). Partner uydu siteler: statik HTML/SSG (TypeScript build) + merkezi TypeScript/Node API. Kanonik kayıt mevcut CRS PostgreSQL. WordPress göçü/SEO eşdeğerliği ayrı kapı. Google Ads, GA4/GTM, Meta Pixel/CAPI | Bu PR'daki `@ag/ssg` yalnız **partner uydu siteleri için statik build adayıdır**; ana Next.js sitenin yerine geçen nihai mimari **değildir**. API ve şema CRS eşleme adayıdır, yeni rezervasyon DB'si kurulmaz. İzleme entegrasyonu **yok** | — | Uydular bu SSG ile mi, SEL-442 yol haritasındaki ortak Next.js şablonunun statik çıktısıyla mı üretilecek: açık. WordPress göçü, izleme/consent (KVKK) ayrı iş; canlı siteler değişmez |
 | Canlı | 8 koşul + SEL-324/SEL-326 kapıları | `main.ts` üretim kapısı eksik koşulları listeler ve çıkar. Kimlik sağlayıcı ve CRS bağdaştırıcısı bu sürümde **yok** → üretim her durumda reddedilir (bayraklar set edilse bile; doğrulandı) | live gate | 8 koşulun her biri |
 
 ### Önceki kodla çelişkiler (bu PR'da düzeltildi)
@@ -90,7 +90,9 @@ Durum: **TASLAK**. Kod yerel adaydır; Owner kabulü, insan bağımsız inceleme
 | Ç22 | Kapanmış haftaya itiraz süreci yoktu (K23) | T3 | Ekstre iletimi, `ITZ-` kayıtları, gerekçeli karar, sonraki döneme düzeltme. **K23 kapandı** |
 | Ç23 | Fazla ödemenin iadesi mi mahsubu mu açıktı (K20) | T1.2 / T1.4 | İade varsayılan; mahsup yalnız yazılı onayla. **K20 kapandı** (private/VIP orantı hariç) |
 | Ç24 | Üretim açılışı yalnız tarife onayına bakıyordu | Canlı koşulları | 8 koşullu kapı; eksikleri listeler |
-| Ç25 | Statik SSG hedef teknoloji gibi anlatılıyordu | K1 | Ara aday olarak işaretlendi |
+| Ç25 | Statik SSG hedef teknoloji gibi anlatılıyordu | K1 | Yalnız partner uydu siteleri için statik build adayı; ana site Next.js hedefinde |
+| Ç26 | SEL-88 (02.11): yeni **dış B2B dağıtıcı** için %10–15 komisyon | K15 (%20 site / %10 AGOS / %70 tedarikçi) | **Bilinçli kapsam ayrımı:** K15 yalnız konsorsiyum satış siteleri (SaaS üyeleri + alanyagroup.com) içindir. Dış B2B dağıtıcı %10–15 ayrı politikadır; bu PR'da uygulanmadı ve `SHUTTLE_SPLIT_V1` ile karıştırılmamalı. Bir partner hem SaaS sitesi hem B2B dağıtıcıysa hangi oranın geçeceği **Owner kararı** |
+| Ç27 | SEL-88 (02.11) B2B tarife metni: 5 kişi tek yön toplamı **80 EUR** | Owner fiyat kararı + K17: 5+ otomatik fiyat yok, 80 € yeniden açılmaz | **ÇELİŞKİ (açık):** SEL-88 metni K17'ye göre güncellenmeli. Kod 80 €'yu hiçbir yerde kullanmıyor |
 
 ### Senkronize org skill'leriyle çelişkiler (skill'ler bu oturumdan değiştirilemez)
 
@@ -111,7 +113,8 @@ Org skill'leri senkronize ve salt okunurdur. Önerilen metin değişiklikleri: [
 1. **Private/VIP kısmi tahsilat:** kod hak edişi ve site payını tahsilatla **orantılı** böler (aday kural). Owner/mali müşavir teyidi gerekir.
 2. **K17 sayısal sınırlar:** ayrı Owner fiyat tablosu. Gelene kadar 5+ fiyat hiçbir hatta onaylanamaz.
 3. **K8 kapsam metinleri** ve hatların hangilerinin ilk açılacağı.
-4. **K1 geçişi:** Next.js şablonu, WordPress içerik/SEO göçü, GA4/GTM, Meta Pixel/CAPI, Google Ads, çerez onayı. Ayrı iş; canlı siteler bu PR ile değişmez.
+4. **K1:** ana sitenin Next.js geçişi, WordPress içerik/SEO eşdeğerliği, GA4/GTM, Meta Pixel/CAPI, Google Ads, çerez onayı. Ayrı iş ve ayrı kapı; canlı siteler bu PR ile değişmez. Partner uydularının build aracı (bu SSG mi, ortak Next.js şablonunun statik çıktısı mı) açık.
+6. **SEL-88 kapsamı:** dış B2B dağıtıcı %10–15 ile konsorsiyum %20'nin aynı partnerde çakışması (Ç26) ve SEL-88'deki 5 kişi 80 EUR metni (Ç27).
 5. **Kimlik sağlayıcı + 2FA (SEL-332)** ve **CRS bağdaştırıcısı (SEL-331)**: canlı kapının kalıcı engelleri.
 
 ## PR denetimi — K15 kesin karar (supplier collection)

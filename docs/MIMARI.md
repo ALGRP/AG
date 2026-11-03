@@ -4,7 +4,7 @@
 > Linear kapıları aynen geçerli: G0 HOLD (SEL-324/326) → G1 (SEL-327/329) → G2.
 > Bağlı kayıtlar: SEL-222 (Partner Economy / SaaS), SEL-88 (komisyon), SEL-197 (tedarikçi), SEL-281 (merkezi intake ve atıf), SEL-331 (CRS eşleme), SEL-332 (kimlik ve 2FA).
 > Linear kararlarıyla çelişen ya da onay bekleyen maddeler: [KARARLAR-VE-CELISKILER.md](./KARARLAR-VE-CELISKILER.md).
-> **K1 taslağı (03.11.2026):** hedef web teknolojisi **Next.js + TypeScript** (SSG + gerektiğinde SSR, ortak şablon, çok dil/bölge; her sitenin kendi markası, domaini ve reklam hesapları; merkezi AGOS booking API; tek kaynak mevcut CRS PostgreSQL; WordPress içerik ve SEO kontrollü göç; Google Ads, GA4/GTM, Meta Pixel/CAPI). Aşağıdaki bağımlılıksız SSG bu hedefe giden yolda **ara adaydır**; SEO kuralları (CSP, hreflang, sitemap, önizlemede noindex, elle fiyat yasağı) Next.js şablonuna taşınacak sözleşmedir. Bu karar canlı siteleri hemen değiştirmez.
+> **K1 (03.11.2026):** ana site alanyagroup.com için hedef **Next.js + TypeScript** (SSG + gerektiğinde SSR, çok dil/bölge). **Partner uydu siteler statik HTML/SSG** (TypeScript build) + merkezi TypeScript/Node API. Kanonik kayıt mevcut CRS PostgreSQL. Her sitenin kendi markası, domaini ve reklam hesapları var. WordPress içerik ve SEO eşdeğerliği ayrı kapı. Google Ads, GA4/GTM ve Meta Pixel/CAPI entegrasyonları ayrı iş. Aşağıdaki bağımlılıksız SSG **yalnız partner uydu siteleri için build adayıdır**; ana Next.js sitenin yerine geçen nihai mimari değildir. Bu karar canlı siteleri hemen değiştirmez.
 
 ## 0. Özet
 
