@@ -519,3 +519,18 @@ Sabitlenen sürüm `f6d566241157cf7a7e7779df452196aa1f0b77fc`. `npm run check`: 
 **Sıradaki iş:**
 1. PR2-N3 (A10.18), küçük tek commit.
 2. PKG-F04b: [`PKG-F04b-NAKITSIZ-KREDI.md`](./PKG-F04b-NAKITSIZ-KREDI.md). A14.1–A14.4 ve "paket F04" `todo`. H-25 açık.
+
+### 15.1 QA-F11 madde bazında karar (Owner sorusu, aynı sürüm `f6d5662` + inceleme testleri)
+
+| # | Konu | Karar | Kanıt |
+| -- | -- | -- | -- |
+| 1 | A10.2, A10.9–A10.17 | **PASS** | Yeniden koşuldu: hepsi `ok`. A10.18 (PR2-N3) `todo`, kırmızı. |
+| 2 | Sahte `Origin` / `Host` / `X-Forwarded-Host` / `Referer`, reklam parametreleri | **PASS** | A10.1, A10.2, A10.11, A10.8: satış atfı değişmiyor. |
+| 3 | Turnstile hostname/action, ağ hatası, eşzamanlı tekrar | **PASS** | A10.9, A10.10, A10.15 (hostname/action), A10.12 (hata/zaman aşımı → 403, kayıt yok), A10.13 ve A10.16 (8 eşzamanlı → 1), A10.17. `main.ts`: 5 sn `AbortSignal`, `r.ok` kontrolü, `catch` → reddet. Gerçek Cloudflare ağı **NOT_RUN**. |
+| 4 | Yerel sahte belirteç ve `devOrigins` | **PASS** | `verifyHuman`: `TURNSTILE_SECRET` yokken yerel belirteç yalnız `development`/`test`; başka modda `{ ok: false }`. Ayrıca `main.ts` üretim kapısı yerel olmayan modda sunucuyu hiç açmıyor. Gizli anahtar varsa yerel belirteç Cloudflare'e gider ve reddedilir. `devOriginsForEnvironment` yerel olmayan modda `[]` (A10.14). |
+| 5 | SSG formunda gerçek site anahtarı eksikliği | **NEEDS REVIEW (operasyon)** | `config/sites.registry.example.json`'da hiçbir sitede `turnstileSiteKey` yok. `build.ts` anahtar yoksa widget'ı ve Turnstile betiğini hiç basmıyor. `form.js` belirteç yoksa gönderimi durdurup hata gösteriyor. Sonuç güvenli (kapalı başarısızlık) ama **anahtarı eksik bir canlı sitede hiçbir rezervasyon alınamaz ve bu sessizce olur.** Öneri (küçük, ayrı commit): `build:sites` `status: "live"` olup anahtarı olmayan sitede hata versin; önizleme (`noindex`) derlemesinde uyarı versin. Gerçek site anahtarları ve gizli anahtar SEL-329 / pilot hazırlığında; bu oturumda yok. |
+| 6 | A10.7 (QA-L7) | **Ayrı düzeltme gerekmiyor** | Kaygı, tek geliştirme kökeninin her site adına rezervasyon açmasıydı. Yerel olmayan modda `devOrigins` artık boş (A10.14). Belirteç de sitenin alan adına bağlı (A10.9, A10.10). Yerelde birden çok siteyi tek kökenden denemek amaçlanan davranış. Öneri: A10.7 gerekçesiyle `skip` ("QA-F11 ile kapandı: A10.14 + alan adı bağlı belirteç"); inceleyici onayıyla. Silinmez, gevşetilmez (A1.3 emsali). |
+
+**Commit kararı değişmedi: `f6d5662` NEEDS REVIEW** (tek neden PR2-N3 / A10.18; 5. madde operasyonel öneri). Ayrıca A10.6 (QA-L6, gelecekte tarihli "self-operation" doğrulaması) ayrı bir `todo`; QA-F11 kapsamında değil.
+
+**PKG-F04b sınırları (Owner talimatıyla teyit):** komisyon yalnız gerçek nakit tahsilattan; kredi yalnız müşteri borcunu kapatır; onaysız mahsup, otomatik ödeme ve taraflar arası finans kaydı yok; H-25 açık. Şartname: [`PKG-F04b-NAKITSIZ-KREDI.md`](./PKG-F04b-NAKITSIZ-KREDI.md); kabul testleri A14.1–A14.4.
