@@ -1,8 +1,10 @@
 import type {
   BookingStatus,
-  CollectionMode,
   IntakeRequest,
   LedgerEntry,
+  PaymentEvent,
+  PaymentMethod,
+  WeeklyClosing,
   OperationsOwner,
   PaymentStatus,
   PriceSnapshot,
@@ -20,7 +22,11 @@ export interface StoredBooking {
   readonly product: Product;
   readonly status: BookingStatus;
   readonly paymentStatus: PaymentStatus;
-  readonly collectionMode?: CollectionMode;
+  /** K15: bu rezervasyonda izin verilen ödeme yöntemleri (site ayarından, rezervasyon anında dondurulur). */
+  readonly allowedPaymentMethods: readonly PaymentMethod[];
+  readonly preferredPaymentMethod?: PaymentMethod;
+  /** İşi yapan tedarikçi (hak ediş alıcısı); sefer/iş tamamlanırken yazılır. */
+  readonly carrierPayeeId?: string;
   readonly operationsOwner: OperationsOwner;
   readonly sourcePartnerId?: string;
   readonly request: IntakeRequest;
@@ -71,6 +77,12 @@ export interface Store {
   listOutbox(status?: OutboxEvent["status"]): Promise<OutboxEvent[]>;
   appendLedger(entries: readonly LedgerEntry[]): Promise<void>;
   listLedger(bookingId?: string): Promise<LedgerEntry[]>;
+  appendPayment(e: PaymentEvent): Promise<void>;
+  listPayments(bookingId?: string): Promise<PaymentEvent[]>;
+  /** Kapanış tektir: aynı hafta ikinci kez yazılamaz; bir kayıt iki kapanışa giremez. */
+  saveClosing(c: WeeklyClosing): Promise<void>;
+  getClosing(weekStart: string): Promise<WeeklyClosing | undefined>;
+  listClosings(): Promise<WeeklyClosing[]>;
 }
 
 interface Snapshot {
@@ -79,6 +91,8 @@ interface Snapshot {
   runs: Map<string, ShuttleRun>;
   outbox: number;
   ledger: number;
+  payments: number;
+  closings: Map<string, WeeklyClosing>;
 }
 
 export class MemoryStore implements Store {
@@ -89,6 +103,8 @@ export class MemoryStore implements Store {
   readonly #runs = new Map<string, ShuttleRun>();
   readonly #outbox: OutboxEvent[] = [];
   readonly #ledger: LedgerEntry[] = [];
+  readonly #payments: PaymentEvent[] = [];
+  readonly #closings = new Map<string, WeeklyClosing>();
 
   transaction<T>(fn: (tx: Store) => Promise<T>): Promise<T> {
     if (this.#inTx) return fn(this);
@@ -116,6 +132,8 @@ export class MemoryStore implements Store {
       runs: new Map(this.#runs),
       outbox: this.#outbox.length,
       ledger: this.#ledger.length,
+      payments: this.#payments.length,
+      closings: new Map(this.#closings),
     };
   }
 
@@ -128,6 +146,9 @@ export class MemoryStore implements Store {
     s.runs.forEach((v, k) => this.#runs.set(k, v));
     this.#outbox.length = s.outbox;
     this.#ledger.length = s.ledger;
+    this.#payments.length = s.payments;
+    this.#closings.clear();
+    s.closings.forEach((v, k) => this.#closings.set(k, v));
   }
 
   async getIdempotency(scope: string) {
@@ -184,5 +205,26 @@ export class MemoryStore implements Store {
   }
   async listLedger(bookingId?: string) {
     return this.#ledger.filter((e) => bookingId === undefined || e.bookingId === bookingId);
+  }
+  async appendPayment(e: PaymentEvent) {
+    this.#payments.push(e);
+  }
+  async listPayments(bookingId?: string) {
+    return this.#payments.filter((e) => bookingId === undefined || e.bookingId === bookingId);
+  }
+  async saveClosing(c: WeeklyClosing) {
+    if (this.#closings.has(c.weekStart)) throw new Error("week already closed");
+    const seenE = new Set([...this.#closings.values()].flatMap((x) => x.entryIds));
+    const seenP = new Set([...this.#closings.values()].flatMap((x) => x.paymentIds));
+    if (c.entryIds.some((id) => seenE.has(id)) || c.paymentIds.some((id) => seenP.has(id))) {
+      throw new Error("item already in another closing");
+    }
+    this.#closings.set(c.weekStart, c);
+  }
+  async getClosing(weekStart: string) {
+    return this.#closings.get(weekStart);
+  }
+  async listClosings() {
+    return [...this.#closings.values()].sort((a, b) => a.weekStart.localeCompare(b.weekStart));
   }
 }

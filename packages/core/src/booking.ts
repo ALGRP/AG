@@ -7,8 +7,10 @@ export const PRODUCTS = ["private", "vip", "shuttle"] as const;
 export type Product = (typeof PRODUCTS)[number];
 
 export type BookingStatus = "request" | "quoted" | "confirmed" | "delivered" | "cancelled";
-export type PaymentStatus = "unpaid" | "paid" | "refunded";
-export type CollectionMode = "card" | "cash_in_vehicle";
+export type PaymentStatus = "unpaid" | "partially_paid" | "paid" | "refunded";
+/** K15: online tahsilat merkezden; araçta nakit yalnız rezervasyonun izin verdiği yöntemse. */
+export type PaymentMethod = "card_online" | "cash_in_vehicle";
+export const PAYMENT_METHODS: readonly PaymentMethod[] = ["card_online", "cash_in_vehicle"];
 
 const TRANSITIONS: Readonly<Record<BookingStatus, readonly BookingStatus[]>> = {
   request: ["quoted", "confirmed", "cancelled"],

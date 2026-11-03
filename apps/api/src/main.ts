@@ -1,7 +1,7 @@
 import { randomBytes, randomInt, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { PASS_POLICY_DECK_V3, SHUTTLE_SPLIT_V1, parseShuttleTariff, parseSiteRecord, type SiteRecord } from "@ag/core";
+import { PASS_POLICY_DECK_V3, SHUTTLE_DIRECT_SPLIT_PROPOSED, SHUTTLE_SPLIT_V1, parseShuttleTariff, parseSiteRecord, type SiteRecord } from "@ag/core";
 import { createApiServer } from "./http.ts";
 import { BookingService } from "./service.ts";
 import { MemoryStore } from "./store.ts";
@@ -17,6 +17,11 @@ const env = process.env;
 const sitesRaw = readJson(env.AG_SITES_FILE ?? "config/sites.registry.example.json") as unknown[];
 const sites = new Map<string, SiteRecord>(sitesRaw.map((s) => parseSiteRecord(s)).map((s) => [s.id, s]));
 const shuttleTariff = parseShuttleTariff(readJson(env.AG_SHUTTLE_TARIFF_FILE ?? "config/shuttle-tariff.example.json"));
+// Onaylanmamış tarife (K8) ya da onay bekleyen kararlarla üretimde açılmaz.
+if (env.NODE_ENV === "production" && shuttleTariff.approval !== "approved") {
+  console.error(`refusing to start: shuttle tariff ${shuttleTariff.id} is "${shuttleTariff.approval}" (Owner approval required)`);
+  process.exit(1);
+}
 const devOrigins = (env.AG_DEV_ORIGINS ?? "http://localhost:4321").split(",").filter(Boolean);
 
 const turnstileSecret = env.TURNSTILE_SECRET;
@@ -36,7 +41,8 @@ const service = new BookingService({
   store: new MemoryStore(),
   sites,
   shuttleTariff,
-  splitPolicy: SHUTTLE_SPLIT_V1,
+  // K4 önerisi (90/10) onaylanana kadar "proposed": AG kendi sitesinden gelen shuttle için otomatik pay yazılmaz.
+  splitPolicies: { partnerSourced: SHUTTLE_SPLIT_V1, direct: SHUTTLE_DIRECT_SPLIT_PROPOSED },
   passPolicy: PASS_POLICY_DECK_V3,
   pool: { slotMinutes: 60, vehicleCapacity: 10 },
   devOrigins,

@@ -448,6 +448,13 @@ export function buildSite(opts: BuildOptions): BuildReport {
     qa(p, warnings, errors);
   }
   if (!pages.some((p) => p.path === "/")) errors.push("missing home page (content/<defaultLocale>/index.md)");
+  if (opts.shuttleTariff) {
+    for (const r of site.shuttleRoutes) {
+      if (!opts.shuttleTariff.routes.includes(r.code)) {
+        errors.push(`site.json: shuttle route ${r.code} is not in tariff ${opts.shuttleTariff.id} (single price source)`);
+      }
+    }
+  }
   const reviewsFile = join(opts.siteDir, "content", "reviews.json");
   const reviews: Review[] = existsSync(reviewsFile)
     ? (JSON.parse(readFileSync(reviewsFile, "utf8")) as Review[]).filter((r) => r.verified === true)

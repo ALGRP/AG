@@ -126,26 +126,42 @@ Statik formda sır tutulamaz. Bu yüzden form imzalanmaz; merkez her isteği ş�
 
 Site başına iki model vardır (`privateMode`, bkz. K12):
 
-**a) `pass_to_network` — Partner Sunumu V3 (varsayılan)**
+**a) `network_pass` — Model B, varsayılan (K12, öneri)**
 ```
 form ─▶ POST /v1/public/bookings (product=private|vip)
-        ├─ fiyat = site sahibinin satış fiyatı (ör. private 80 €, VIP 120 €), rezervasyonda dondurulur
-        ├─ pass  = merkezi pass politikası (ör. 47,50 € / 60 €), rezervasyonda dondurulur
+        ├─ fiyat = site sahibinin satış fiyatı (ör. private 80 €), rezervasyonda dondurulur
+        ├─ pass  = tedarikçi iş aktarım bedeli (ör. 47,50 €; örnek, sabit tarife değil), dondurulur
         └─ outbox: site sahibine bilgi (e-posta) · merkeze yeni iş · müşteriye "talebiniz alındı"
-panel ─▶ confirm ─▶ complete {araç, araç hak edişi ≤ pass, tahsil edildi mi}
-        └─ defter: site = satış − pass (32,50 €) · araç = hak ediş · merkez = pass − hak ediş
+panel ─▶ confirm ─▶ payments (ön ödeme / kalan) ─▶ complete {tedarikçi}
+        └─ tam tahsil + teslim → defter: tedarikçi = pass'ın TAMAMI (47,50 €) · site = satış − pass (32,50 €)
+                                          Alanya Group ek işlem komisyonu = 0 €
 ```
-Pass, AG'nin net kârı değildir: araç hak edişi ve operasyon gideri bu tutardan karşılanır (sunum, slayt 8). Satış fiyatı pass'ın altındaysa sistem satışı kabul etmez. Araç hak edişi pass'ı aşarsa iş tamamlanmış sayılmaz.
 
-**b) `self_operate` — site sahibi operasyonu kendisi yapar**
+**b) `self_operated` — Model A (K12, öneri)**
 ```
+yalnız selfOperationVerifiedAt dolu sitede (yasal şart ve operasyon yetkisi doğrulanmış)
 form ─▶ API ─▶ fiyatsız talep (status=request, operasyon sahibi = site sahibi)
         └─ outbox: site sahibinin e-postası (anında) · merkez · müşteri
+Alanya Group işlem komisyonu almaz; yalnız aylık SaaS aboneliği.
 ```
 
 Her iki modelde de "site sahibinin e-postasına doğrudan düşer" isteği, formun e-posta atmasıyla değil **outbox olayıyla** karşılanır. Gecikme saniyeler düzeyindedir. Gönderim tekildir, tekrar denenir ve teslim durumu izlenir. Merkez aynı kaydı görür.
 
-### 3.2.1 Para hareketleri ayrı tutulur (sunum, slayt 16)
+### 3.2.1 Tahsilat ve haftalık kapanış (K15, öneri)
+
+| Kural | Uygulama |
+| -- | -- |
+| Online kart yalnız merkezden | `card_online` tahsilatının tarafı yalnız `platform` olabilir |
+| Araçta nakit yalnız izinli yöntemse | Yöntem sitenin ve rezervasyonun izinli listesinde olmalı; tahsil eden yalnız işi yapan tedarikçi |
+| Rezervasyon başına kayıt | Toplam, ön ödeme, kalan, tahsil eden, iade (`payment_event`, silinmez) |
+| Pay ne zaman yazılır | Teslim + tam tahsil; son tahsilat kaydedildiğinde otomatik |
+| İade | Tahsil edilmiş net tutarı aşamaz; payı yazılmış işte payları bir kez ters kayıtla kapatır, finans incelemesi |
+| Haftalık kapanış | Pzt–Paz İstanbul; hafta bitmeden ve iki kez yapılmaz; her kayıt tek kapanışa girer. Taraf başına: kazanılan pay − elinde tuttuğu müşteri parası = alacak (+) / borç (−) |
+| Ödeme dağıtımı | **Kapalı.** Kapanış yalnız ekstredir; hukuki muhatap, faturalama ve PSP sözleşmesi doğrulanana kadar |
+
+Örnek (testli): uydu site kaynaklı 30 € shuttle, araçta nakit. Tedarikçi 30 € tuttu, payı 21 € → 9 € borçlu; site 6 €, Alanya Group 3 € alacaklı.
+
+### 3.2.2 Para hareketleri ayrı tutulur (sunum, slayt 16)
 
 | Hareket | Kimden → kime | Sistemdeki yeri |
 | -- | -- | -- |
@@ -162,16 +178,19 @@ form ─▶ POST /v1/public/bookings (product=shuttle, routeCode)
         ├─ fiyat = tarife(hat, tarih, kişi) — rezervasyon TOPLAMI (Owner kararı 03.11):
         │          1 kişi 30 € · 2 kişi 50 € · 3 kişi 60 € · 4 kişi 70 €
         │          5+ kişi → otomatik fiyat yok; "fiyat onayı gerekli", admin approve-price
+        ├─ hat kodu tarifeden (K8): AYT-ALN, ALN-AYT, AYT-SID … GZP-ALN (pilot); AYT↔GZP yok
         ├─ havuz: aynı hat + aynı saat dilimi (60 dk) içindeki EN DOLU açık sefere eklenir;
         │         koltuk biterse aynı dilimde yeni sefer (yeni araç) açılır — aşırı doluluk yok
         └─ outbox: shuttle.booking_received.notify_central (+ site sahibine bilgi, + müşteri)
 
-panel ─▶ confirm (request→confirmed) ─▶ assign run (taşıyıcı) ─▶ complete run (tahsil edilenler)
-        └─ her rezervasyon için, yalnız delivered + paid + fiyatı var + test değil + mükerrer değil ise,
+panel ─▶ confirm (request→confirmed) ─▶ assign run (tedarikçi) ─▶ payments ─▶ complete run
+        └─ her rezervasyon için, yalnız delivered + TAM TAHSİL + fiyatı var + test değil + mükerrer değil ise,
            SATIŞ TUTARI üzerinden ayrı satırlar:
            ledger_entry  carrier  %70   (tedarikçi)
                          partner  %20   (kaynak partner sitesiyse)
-                         platform %10   (+ kaynak AG'nin kendi sitesiyse %20 de merkeze)
+                         platform %10
+           Kaynak Alanya Group'un kendi sitesiyse (K4, öneri 90/10): onaylanana kadar otomatik pay YOK,
+           finance.review_required olayı oluşur.
 ```
 
 Komisyon mantığı (`packages/core/src/commission.ts`, `ledger.ts`):
@@ -192,9 +211,13 @@ Komisyon mantığı (`packages/core/src/commission.ts`, `ledger.ts`):
 | `GET /v1/admin/bookings` | Son 100 rezervasyon |
 | `POST /v1/admin/bookings/:ref/approve-price` | 5+ kişilik shuttle için fiyat onayı (tek seferlik, tarife para birimiyle) |
 | `POST /v1/admin/bookings/:ref/confirm` | `request → confirmed` (sürüm kontrollü; fiyatsız shuttle onaylanamaz) |
-| `POST /v1/admin/bookings/:ref/complete` | Pass modelindeki özel/VIP işi tamamla: araç, hak ediş (≤ pass), tahsilat → defter |
+| `POST /v1/admin/bookings/:ref/complete` | Model B özel/VIP işi tamamla (tedarikçi); tam tahsil edildiyse pay yazılır |
+| `POST /v1/admin/bookings/:ref/payments` | Tahsilat veya iade kaydı (K15 kurallarıyla) |
+| `POST /v1/admin/bookings/:ref/cancel` | Teslimden önce iptal; tahsil edilmiş tutar varsa `finance.refund_due` |
+| `POST /v1/admin/settlements/close-week` | Haftalık kapanış (yalnız ekstre) |
+| `GET /v1/admin/settlements` | Kapanış listesi |
 | `POST /v1/admin/shuttle-runs/:id/assign` | Sefere taşıyıcı ata |
-| `POST /v1/admin/shuttle-runs/:id/complete` | Tamamla, tahsil edilenleri işaretle, payları deftere yaz |
+| `POST /v1/admin/shuttle-runs/:id/complete` | Seferi tamamla; tam tahsil edilmiş rezervasyonlar için payları deftere yaz |
 | `GET /v1/admin/ledger/balances` | Parti × para birimi bakiyeleri |
 | `GET /v1/admin/outbox` | Bekleyen bildirim olayları |
 
@@ -204,15 +227,16 @@ Admin uçları şimdilik `AG_ADMIN_TOKEN` ile korunur; değişken tanımlı değ
 
 | # | Adım | Durum | Çıkış ölçütü |
 | -- | -- | -- | -- |
-| 0 | Owner kararları: SSG teknolojisi (K1), 70/20/10 matrahı, AG kaynaklı iş (K4), shuttle hatları (K8), özel/VIP modeli (K12), shuttle fiyat birimi (K13), araç hak edişi (K14), tahsilat yönü (K15). Ücret netleşti: 200 €/ay (K2) | KISMEN AÇIK | Linear'da KARAR olarak işaretli |
-| 1 | **Domain çekirdeği** (`@ag/core`): tarife, 70/20/10, pass modeli, durum modeli, havuz, defter, sunum ekonomisi | **LOCAL_ONLY · bu PR** | 24 birim testi geçer (Owner örnek rezervasyonları dahil) |
-| 2 | **Merkez intake API'si**: origin, idempotency, outbox, havuz, pass, admin uçları | **LOCAL_ONLY · bu PR** | 10 API testi ve tarayıcıda uçtan uca form testi geçer |
-| 3 | **SSG** ve örnek partner sitesi (EN/TR, noindex) | **LOCAL_ONLY · bu PR** | 10 SSG testi geçer, mobil 390 px'de yatay kaydırma yok |
+| 0 | Owner onayı bekleyen öneriler: K4 (90/10), K8 (hatlar ve başlangıç), K12 (iki model), K15 (merkezi tahsilat); ayrıca K1, K17 kalıcı 5+, K19, K20. Kesinleşenler: shuttle 30/50/60/70 ve 70/20/10, 200 €/ay | KISMEN AÇIK | Linear'da KARAR olarak işaretli |
+| 1 | **Domain çekirdeği** (`@ag/core`): tarife, 70/20/10, pass modeli, durum modeli, havuz, defter, sunum ekonomisi | **LOCAL_ONLY · bu PR** | 33 birim testi geçer (Owner örnek rezervasyonları, K4/K8/K12/K15 dahil) |
+| 2 | **Merkez intake API'si**: origin, idempotency, outbox, havuz, pass, admin uçları | **LOCAL_ONLY · bu PR** | 13 API testi ve tarayıcıda uçtan uca form testi geçer |
+| 3 | **SSG** ve örnek partner sitesi (EN/TR, noindex) | **LOCAL_ONLY · bu PR** | 11 SSG testi geçer, mobil 390 px'de yatay kaydırma yok |
 | 4 | CRS eşlemesi: G1 erişimiyle şema dökümü, `0001` adayının CRS tablolarına eşlenmesi, `PgStore` adaptörü | G1 bekliyor (SEL-329/331) | 13 backend sözleşmesi (white-label SaaS v1) gerçek DB'de geçer |
 | 5 | Outbox işçisi → n8n: site sahibi e-postası, merkez, müşteri onayı; domain başına SPF/DKIM | G2 | Test alıcısına tekil gönderim, teslim kanıtı |
 | 6 | Yönetim paneli MVP: rezervasyonlar, sefer atama, defter, site/partner kaydı; IdP + 2FA | SEL-332 kararı | Admin yalnız 2FA'lı oturumda |
 | 7 | İlk partner pilotu: 1 site, alt alan adı, noindex önizleme → OWNER GO → özel alan adı (TXT) → GSC → sitemap | Kapılar | TÜRSAB kanal bildirimi ve sözleşme hazır |
-| 8 | Abonelik faturası (200 €/ay), haftalık kapanış, tahsilat yönüne göre mahsup (K15), ödemeler | K15 kararı | Defter mutabakatı tutar |
+| 8 | Haftalık kapanış ve tahsilat kayıtları | **LOCAL_ONLY · bu PR** (yalnız ekstre) | Korunum ve tek-kapanış testleri geçer |
+| 8b | Abonelik faturası (200 €/ay), PSP entegrasyonu, ödeme dağıtımı | K15 hukuki onayı | Hukuki muhatap ve PSP sözleşmesi doğrulanmış |
 | 9 | 10–20 siteye ölçekleme: CI derleme matrisi, Lighthouse CI, Jaccard kontrolü, IndexNow | — | Her site için ayrı yayın ve geri alma |
 
 **İlk modül neden çekirdek?** Para, durum ve komisyon kuralları her şeyin altında durur. Kurallar yanlışsa form, panel ve site doğru çalışsa bile para yanlış dağılır. Bu yüzden önce saf, testli `@ag/core` yazıldı. API ve SSG bu kodun üstüne kuruldu.
@@ -221,7 +245,7 @@ Admin uçları şimdilik `AG_ADMIN_TOKEN` ile korunur; değişken tanımlı değ
 
 ```bash
 npm install
-npm run check                                  # tsc + 44 test
+npm run check                                  # tsc + 57 test
 AG_ADMIN_TOKEN=yerel-anahtar npm run dev:api   # http://127.0.0.1:8787
 npm run build:sites                            # dist/sites/<id>/
 npx serve -l 4321 dist/sites/ornek-alanya-transfer   # veya herhangi bir statik sunucu

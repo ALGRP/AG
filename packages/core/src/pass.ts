@@ -1,11 +1,15 @@
 import { money, type Currency, type Money } from "./money.ts";
 
-// Özel / VIP "iş aktarım (pass)" modeli — Konsorsiyum Partner Sunumu V3 (03.11.2026), slayt 8–9:
-//   Uydu site sahibi kendi satış fiyatıyla satar (örnek: private 80 €, VIP 120 €).
-//   Sabit bir PASS bedeli işi yapacak ağa (Alanya Group + araç) aktarılır (örnek: 47,50 € / 60 €).
-//   Satış − pass = uydu site satış katkısı (örnek: 32,50 € / 60 €).
-//   Pass, AG'nin net kârı DEĞİLDİR: araç hak edişi ve operasyon gideri buradan karşılanır.
-// Sunumdaki tutarlar "örnek varsayım"dır; bu yüzden sürümlü politika olarak tutulur.
+// K12 (ÖNERİ, Owner onayı bekliyor) — Özel / VIP iki modelle desteklenir; varsayılan NETWORK_PASS:
+//
+//  Model A · SELF_OPERATED: site sahibi yasal şartları ve operasyon yetkisi DOĞRULANMIŞSA kendi aracıyla yapar.
+//    Gelir ve masraf site sahibinindir. Alanya Group işlem komisyonu ALMAZ (yalnız aylık SaaS aboneliği).
+//
+//  Model B · NETWORK_PASS: site sahibi işi Alanya Group tedarikçi ağına aktarır.
+//    Örnek: müşteri 80 € · tedarikçi iş aktarım (pass) bedeli 47,50 € · site 32,50 € · Alanya Group ek komisyonu 0 €.
+//    Yani pass bedelinin TAMAMI tedarikçinindir.
+//
+// Tutarlar sabit tarife DEĞİLDİR (örnek); bu yüzden sürümlü ve "example" etiketli politika olarak tutulur.
 
 export type PassProduct = "private" | "vip";
 
@@ -56,23 +60,5 @@ export function splitPass(
       pass: money(passMinor, saleCurrency),
       partner: money(saleMinor - passMinor, saleCurrency),
     },
-  };
-}
-
-/**
- * Pass bedelinin araç ve merkez arasında bölünmesi. Araç hak edişi sunuma göre
- * "rota / araç / sözleşmeye göre netleşir" (slayt 18): sabit oran yok, atamada belirlenir.
- */
-export function splitPassToNetwork(
-  pass: Money,
-  carrierPayout: Money,
-): { ok: true; carrier: Money; platform: Money } | { ok: false; reason: "payout_exceeds_pass" | "currency_mismatch" | "negative_payout" } {
-  if (carrierPayout.currency !== pass.currency) return { ok: false, reason: "currency_mismatch" };
-  if (carrierPayout.amountMinor < 0) return { ok: false, reason: "negative_payout" };
-  if (carrierPayout.amountMinor > pass.amountMinor) return { ok: false, reason: "payout_exceeds_pass" };
-  return {
-    ok: true,
-    carrier: carrierPayout,
-    platform: money(pass.amountMinor - carrierPayout.amountMinor, pass.currency),
   };
 }

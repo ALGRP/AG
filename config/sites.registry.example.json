@@ -9,11 +9,15 @@
     ],
     "ownerEmail": "owner@ornek-alanya-transfer.example",
     "status": "preview",
-    "privateMode": "pass_to_network",
+    "privateMode": "network_pass",
     "salePrices": {
       "private": 8000,
       "vip": 12000
     },
-    "saleCurrency": "EUR"
+    "saleCurrency": "EUR",
+    "paymentMethods": [
+      "card_online",
+      "cash_in_vehicle"
+    ]
   }
 ]

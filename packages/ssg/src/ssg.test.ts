@@ -10,8 +10,10 @@ import { renderMarkdown } from "./markdown.ts";
 
 const tariff = parseShuttleTariff({
   id: "t1",
+  approval: "approved",
+  publishedAt: "2026-01-01",
   currency: "EUR",
-  routes: ["AYT-ALANYA"],
+  routes: ["AYT-ALN"],
   validFrom: "2026-01-01",
   maxPassengers: 10,
   totalsMinor: [3000, 5000, 6000, 7000],
@@ -32,7 +34,7 @@ function makeSite(over: Record<string, unknown> = {}, pages: Record<string, stri
       contact: { whatsapp: "+905000000000", email: "info@test-brand.example" },
       legal: { companyName: "Test Co" },
       theme: { accent: "#123456", accentText: "#ffffff" },
-      shuttleRoutes: [{ code: "AYT-ALANYA", label: { en: "AYT → Alanya" } }],
+      shuttleRoutes: [{ code: "AYT-ALN", label: { en: "AYT → Alanya" } }],
       ...over,
     }),
   );
@@ -77,6 +79,13 @@ describe("ssg build", () => {
     for (const p of ["€30.00", "€50.00", "€60.00", "€70.00"]) assert.ok(home.includes(p), p);
     assert.match(home, /<td>5\+<\/td><td>On request/);
     assert.doesNotMatch(home, /€80|€35/);
+  });
+
+  it("fails the build when a site offers a shuttle route that is not in the central tariff", () => {
+    assert.throws(
+      () => build(makeSite({ shuttleRoutes: [{ code: "AYT-GZP", label: { en: "AYT → GZP" } }] })),
+      /not in tariff/,
+    );
   });
 
   it("fails the build when page text contains a hand-written price (single price source)", () => {

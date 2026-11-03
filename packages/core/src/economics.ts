@@ -76,7 +76,10 @@ export interface CentreMonth {
   readonly annualisedMinor: number;
 }
 
-/** Yalnız SaaS abonelik ekonomisi; transfer operasyon gelirleri bilerek dahil değildir. */
+/**
+ * YALNIZ İÇ KULLANIM (Owner kararı K18, 03.11.2026): Alanya Group'un SaaS abonelik ekonomisi.
+ * Partner sunumlarında ve dışa açık ekranlarda gösterilmez. Transfer operasyon gelirleri bilerek dahil değildir.
+ */
 export function centreMonth(sites: number, a: CentreAssumptions = DECK_V3_CENTRE): CentreMonth {
   if (!Number.isInteger(sites) || sites < 0) throw new RangeError("sites must be a non-negative integer");
   const revenue = sites * a.subscriptionMinor;

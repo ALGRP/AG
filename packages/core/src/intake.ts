@@ -1,4 +1,4 @@
-import { PRODUCTS, type Product } from "./booking.ts";
+import { PAYMENT_METHODS, PRODUCTS, type PaymentMethod, type Product } from "./booking.ts";
 
 // Uydu site formundan gelen ham verinin doğrulanması.
 // İstemciden FİYAT KABUL EDİLMEZ: fiyat yalnız sunucuda tarifeden / teklif akışından gelir.
@@ -22,6 +22,8 @@ export interface IntakeRequest {
     readonly phone: string;
     readonly locale: string;
   };
+  /** Müşterinin tercih ettiği ödeme yöntemi; sitenin izin verdiği yöntemlerden biri olmalı (API'de kontrol). */
+  readonly paymentMethod?: PaymentMethod;
   /** Turnstile / captcha jetonu; doğrulaması API katmanında yapılır. */
   readonly humanToken?: string;
 }
@@ -124,6 +126,12 @@ export function validateIntake(raw: unknown): IntakeValidation {
 
   if (r.consent !== true) errors.push({ field: "consent", code: "required" });
 
+  let paymentMethod: PaymentMethod | undefined;
+  if (r.paymentMethod !== undefined && r.paymentMethod !== "") {
+    if ((PAYMENT_METHODS as readonly unknown[]).includes(r.paymentMethod)) paymentMethod = r.paymentMethod as PaymentMethod;
+    else errors.push({ field: "paymentMethod", code: "invalid" });
+  }
+
   if (errors.length > 0) return { ok: false, errors };
 
   const value: IntakeRequest = {
@@ -138,6 +146,7 @@ export function validateIntake(raw: unknown): IntakeValidation {
     ...(flightNo !== undefined ? { flightNo: flightNo.toUpperCase().replace(/\s/g, "") } : {}),
     ...(notes !== undefined ? { notes } : {}),
     ...(returnPickupAt !== undefined ? { returnPickupAt } : {}),
+    ...(paymentMethod !== undefined ? { paymentMethod } : {}),
     ...(typeof r.humanToken === "string" ? { humanToken: r.humanToken } : {}),
   };
   return { ok: true, value };

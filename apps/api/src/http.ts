@@ -153,6 +153,21 @@ export function createApiServer(opts: HttpOptions): Server {
         const confirm = /^\/v1\/admin\/bookings\/([A-Z0-9-]+)\/confirm$/.exec(path);
         if (req.method === "POST" && confirm) return reply(res, await opts.service.confirm(confirm[1]!));
 
+        const pay = /^\/v1\/admin\/bookings\/([A-Z0-9-]+)\/payments$/.exec(path);
+        if (req.method === "POST" && pay) {
+          const body = await readJson(req);
+          if (!body.ok) return send(res, body.status, { error: body.error });
+          return reply(res, await opts.service.recordPayment(pay[1]!, (body.value ?? {}) as Record<string, unknown>));
+        }
+        const cancel = /^\/v1\/admin\/bookings\/([A-Z0-9-]+)\/cancel$/.exec(path);
+        if (req.method === "POST" && cancel) return reply(res, await opts.service.cancel(cancel[1]!));
+        if (req.method === "GET" && path === "/v1/admin/settlements") return reply(res, await opts.service.listClosings());
+        if (req.method === "POST" && path === "/v1/admin/settlements/close-week") {
+          const body = await readJson(req);
+          if (!body.ok) return send(res, body.status, { error: body.error });
+          return reply(res, await opts.service.closeWeek(((body.value ?? {}) as Record<string, unknown>).weekStart));
+        }
+
         const approve = /^\/v1\/admin\/bookings\/([A-Z0-9-]+)\/approve-price$/.exec(path);
         if (req.method === "POST" && approve) {
           const body = await readJson(req);
@@ -176,7 +191,7 @@ export function createApiServer(opts: HttpOptions): Server {
             res,
             run[2] === "assign"
               ? await opts.service.assignRun(run[1]!, v.carrierPayeeId)
-              : await opts.service.completeRun(run[1]!, v.paidRefs),
+              : await opts.service.completeRun(run[1]!),
           );
         }
         return send(res, 404, { error: "not_found" });

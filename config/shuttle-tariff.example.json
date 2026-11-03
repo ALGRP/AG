@@ -1,8 +1,18 @@
 {
-  "_status": "Fiyatlar OWNER KARARI 03.11.2026: rezervasyon TOPLAMI 1 kişi 30 €, 2 kişi 50 €, 3 kişi 60 €, 4 kişi 70 €; 5+ kişi ayrı onay. Hat kodları ve geçerlilik tarihleri hâlâ DOĞRULANMADI (K8). Canlı fiyat kaynağı CRS fiyat motorudur.",
-  "id": "shuttle-owner-2026-11-03",
+  "_status": "FİYAT: OWNER KESİN KARARI 03.11.2026 — rezervasyon toplamı 1 kişi 30 €, 2 kişi 50 €, 3 kişi 60 €, 4 kişi 70 €; 5+ manuel. HATLAR (K8) ve BAŞLANGIÇ TARİHİ: ÖNERİ, canlıdan önce Owner onayı gerekir. approval=proposed iken üretim modunda API açılmaz.",
+  "id": "shuttle-2026-11-03-proposed",
+  "approval": "proposed",
+  "publishedAt": "2026-11-03",
   "currency": "EUR",
-  "routes": ["AYT-ALANYA", "ALANYA-AYT", "GZP-ALANYA", "ALANYA-GZP"],
+  "routes": [
+    "AYT-ALN", "ALN-AYT",
+    "AYT-SID", "SID-AYT",
+    "AYT-BLK", "BLK-AYT",
+    "AYT-KMR", "KMR-AYT",
+    "AYT-KNY", "KNY-AYT",
+    "GZP-ALN", "ALN-GZP"
+  ],
+  "pilotRoutes": ["GZP-ALN", "ALN-GZP"],
   "validFrom": "2026-11-03",
   "maxPassengers": 10,
   "totalsMinor": [3000, 5000, 6000, 7000]

@@ -3,10 +3,14 @@ import {
   assertTransition,
   balances,
   bookingRef,
+  checkPaymentEvent,
+  closeWeek,
   duplicateFingerprintInput,
   earnPassShares,
   earnShuttleShares,
   money,
+  paymentSummary,
+  reverseEntries,
   splitPass,
   placeInPool,
   priceShuttle,
@@ -14,10 +18,13 @@ import {
   slotStartFor,
   validateIntake,
   type FieldError,
+  type LedgerEntry,
+  type PartyRef,
   type PassPolicy,
+  type PaymentEvent,
+  type ShuttleSplitPolicies,
   type ShuttleTariffVersion,
   type SiteRecord,
-  type SplitPolicy,
 } from "@ag/core";
 import type { OutboxEvent, Store, StoredBooking } from "./store.ts";
 
@@ -25,7 +32,7 @@ export interface ServiceDeps {
   readonly store: Store;
   readonly sites: ReadonlyMap<string, SiteRecord>;
   readonly shuttleTariff: ShuttleTariffVersion;
-  readonly splitPolicy: SplitPolicy;
+  readonly splitPolicies: ShuttleSplitPolicies;
   readonly passPolicy: PassPolicy;
   readonly pool: { readonly slotMinutes: number; readonly vehicleCapacity: number };
   /** Yerel önizleme için ek origin'ler (ör. http://localhost:4321). Üretimde boş. */
@@ -105,6 +112,9 @@ export class BookingService {
     const site = resolveSite(this.#d.sites, req.siteId, input.origin, this.#d.devOrigins);
     if (!site.ok) return fail(site.reason === "unknown_site" ? 404 : 403, site.reason);
     if (!(await this.#d.verifyHuman(req.humanToken, input.ip))) return fail(403, "human_check_failed");
+    if (req.paymentMethod !== undefined && !site.site.paymentMethods.includes(req.paymentMethod)) {
+      return fail(422, "payment_method_not_allowed_for_site");
+    }
 
     const now = this.#d.clock().toISOString();
     const id = this.#d.random.id();
@@ -131,6 +141,8 @@ export class BookingService {
       fingerprint,
       isDuplicate,
       isTest: site.site.status === "preview",
+      allowedPaymentMethods: site.site.paymentMethods,
+      ...(req.paymentMethod !== undefined ? { preferredPaymentMethod: req.paymentMethod } : {}),
       createdAt: now,
       version: 1,
       ...(sourcePartnerId !== undefined ? { sourcePartnerId } : {}),
@@ -197,11 +209,11 @@ export class BookingService {
       };
     }
 
-    // Özel / VIP — iki model (site ayarı):
-    //  pass_to_network: site sahibi kendi fiyatıyla satar, iş pass bedeliyle AG ağına aktarılır (Partner Sunumu V3).
-    //  self_operate:    site sahibi operasyonu kendisi yapar; merkez kaydı tutar ve bilgilendirilir.
+    // Özel / VIP — K12 (öneri): varsayılan network_pass; self_operated yalnız doğrulanmış yetkiyle.
+    //  network_pass:  site kendi fiyatıyla satar, iş pass bedeliyle AG tedarikçi ağına aktarılır (AG ek komisyon 0 €).
+    //  self_operated: site sahibi kendisi yapar; merkez kaydı tutar ve bilgilendirilir; AG işlem komisyonu almaz.
     const product = req.product as "private" | "vip";
-    const toNetwork = site.site.privateMode === "pass_to_network";
+    const toNetwork = site.site.privateMode === "network_pass";
     let price: StoredBooking["price"];
     if (toNetwork && site.site.salePrices?.[product] !== undefined) {
       const sp = splitPass(product, site.site.salePrices, site.site.saleCurrency!, this.#d.passPolicy);
@@ -376,17 +388,61 @@ export class BookingService {
     });
   }
 
+  /** Pay yazmayı dener. Aynı rezervasyon için pay bir kez yazılır (ters kayıt sonrası otomatik yeniden yazılmaz). */
+  async #tryEarn(tx: Store, b: StoredBooking, now: string): Promise<string> {
+    const existing = await tx.listLedger(b.id);
+    if (existing.length > 0) return "shares_already_recorded";
+    if (!b.price) return "price_not_approved";
+    const ctx = { now, newId: this.#d.random.id };
+    const common = {
+      id: b.id,
+      status: b.status,
+      paymentStatus: b.paymentStatus,
+      isTest: b.isTest,
+      isDuplicate: b.isDuplicate,
+      ...(b.sourcePartnerId !== undefined ? { sourcePartnerId: b.sourcePartnerId } : {}),
+    };
+    const earned =
+      b.price.mode === "PARTNER_PRICE_WITH_PASS" && b.price.pass
+        ? earnPassShares(
+            { ...common, sale: b.price.total, pass: b.price.pass, passPolicyId: b.price.sourceVersionId },
+            b.carrierPayeeId,
+            ctx,
+          )
+        : b.product === "shuttle"
+          ? earnShuttleShares({ ...common, shareBase: b.price.total }, b.carrierPayeeId, this.#d.splitPolicies, ctx)
+          : ({ ok: false, reason: "self_operated_no_platform_shares" } as const);
+    if (!earned.ok) {
+      if (earned.reason === "split_policy_not_approved") {
+        await tx.appendOutbox([this.#event(b, "finance.review_required", now, { reason: earned.reason })]);
+      }
+      return earned.reason === "not_paid" ? "awaiting_payment" : earned.reason;
+    }
+    await tx.appendLedger(earned.entries);
+    return "shares_earned";
+  }
+
+  #event(b: StoredBooking, type: string, now: string, payload: Record<string, string> = {}): OutboxEvent {
+    return {
+      id: this.#d.random.id(),
+      dedupeKey: `${type}:${b.id}`,
+      type,
+      bookingId: b.id,
+      payload: { siteId: b.siteId, ...payload },
+      status: "pending",
+      createdAt: now,
+    };
+  }
+
   /**
-   * Sefer tamamlandı: onaylı rezervasyonlar "delivered" olur; tahsil edildiği bildirilenler "paid" olur;
-   * ikisi birden sağlanan, test/mükerrer olmayan rezervasyonlar için 70/20/10 pay kayıtları defterde açılır.
+   * Sefer tamamlandı: onaylı rezervasyonlar "delivered" olur ve tedarikçi (hak ediş alıcısı) yazılır.
+   * Pay, rezervasyon TAMAMEN tahsil edilmişse hemen; değilse son tahsilat kaydedildiğinde yazılır.
    */
-  async completeRun(runId: string, paidRefs: unknown): Promise<ServiceResult<unknown>> {
-    if (!Array.isArray(paidRefs) || paidRefs.some((r) => typeof r !== "string")) return fail(422, "paidRefs_invalid");
-    const paid = new Set(paidRefs as string[]);
+  async completeRun(runId: string): Promise<ServiceResult<unknown>> {
     return this.#d.store.transaction(async (tx) => {
       const run = await tx.getRun(runId);
       if (!run) return fail(404, "not_found");
-      if (run.status !== "assigned") return fail(409, "run_not_assigned");
+      if (run.status !== "assigned" || !run.carrierPayeeId) return fail(409, "run_not_assigned");
       const now = this.#d.clock().toISOString();
       const outcome: Array<{ ref: string; result: string }> = [];
       for (const item of run.bookings) {
@@ -400,75 +456,165 @@ export class BookingService {
           outcome.push({ ref: b.ref, result: "skipped_price_not_approved" });
           continue;
         }
-        const updated: StoredBooking = {
-          ...b,
-          status: "delivered",
-          paymentStatus: paid.has(b.ref) ? "paid" : b.paymentStatus,
-        };
+        const updated: StoredBooking = { ...b, status: "delivered", carrierPayeeId: run.carrierPayeeId };
         if (!(await tx.updateBooking(updated, b.version))) throw new Error("version_conflict");
-        const earned = earnShuttleShares(
-          {
-            id: b.id,
-            status: updated.status,
-            paymentStatus: updated.paymentStatus,
-            isTest: b.isTest,
-            isDuplicate: b.isDuplicate,
-            shareBase: b.price.total,
-            ...(b.sourcePartnerId !== undefined ? { sourcePartnerId: b.sourcePartnerId } : {}),
-          },
-          run.carrierPayeeId,
-          this.#d.splitPolicy,
-          { now, newId: this.#d.random.id },
-        );
-        if (earned.ok) await tx.appendLedger(earned.entries);
-        outcome.push({ ref: b.ref, result: earned.ok ? "shares_earned" : earned.reason });
+        outcome.push({ ref: b.ref, result: await this.#tryEarn(tx, { ...updated, version: b.version + 1 }, now) });
       }
       await tx.saveRun({ ...run, status: "completed" });
       return { ok: true, status: 200, body: { runId, status: "completed", bookings: outcome } };
     });
   }
 
-  /**
-   * Pass modelindeki özel/VIP işin tamamlanması: araç hak edişi atamada/sözleşmede belirlenir (≤ pass).
-   * Defter: site sahibi = satış − pass, araç = hak ediş, merkez = pass − hak ediş.
-   */
+  /** K12 Model B (network_pass) özel/VIP işin tamamlanması: tedarikçi pass'ın tamamını alır, AG 0 €. */
   async completePrivate(ref: string, input: Record<string, unknown>): Promise<ServiceResult<unknown>> {
-    const { carrierPayeeId, carrierPayoutMinor, paid } = input;
+    const { carrierPayeeId } = input;
     if (typeof carrierPayeeId !== "string" || !/^[A-Za-z0-9_-]{1,64}$/.test(carrierPayeeId)) {
       return fail(422, "carrierPayeeId_invalid");
     }
-    if (!Number.isSafeInteger(carrierPayoutMinor)) return fail(422, "carrierPayoutMinor_invalid");
-    if (typeof paid !== "boolean") return fail(422, "paid_invalid");
     return this.#d.store.transaction(async (tx) => {
       const b = await tx.getBookingByRef(ref);
       if (!b) return fail(404, "not_found");
       if (b.price?.mode !== "PARTNER_PRICE_WITH_PASS" || !b.price.pass) return fail(409, "not_a_network_pass_booking");
       if (b.status !== "confirmed") return fail(409, "invalid_transition");
-      const updated: StoredBooking = { ...b, status: "delivered", paymentStatus: paid ? "paid" : b.paymentStatus };
-      const earned = earnPassShares(
-        {
-          id: b.id,
-          status: updated.status,
-          paymentStatus: updated.paymentStatus,
-          isTest: b.isTest,
-          isDuplicate: b.isDuplicate,
-          sale: b.price.total,
-          pass: b.price.pass,
-          passPolicyId: b.price.sourceVersionId,
-          ...(b.sourcePartnerId !== undefined ? { sourcePartnerId: b.sourcePartnerId } : {}),
-        },
-        carrierPayeeId,
-        money(carrierPayoutMinor as number, b.price.pass.currency),
-        { now: this.#d.clock().toISOString(), newId: this.#d.random.id },
-      );
-      // Hak ediş pass'ı aşıyorsa iş tamamlanmış sayılmaz: önce tutar düzeltilir.
-      if (!earned.ok && ["payout_exceeds_pass", "negative_payout", "currency_mismatch"].includes(earned.reason)) {
-        return fail(422, earned.reason);
-      }
+      const updated: StoredBooking = { ...b, status: "delivered", carrierPayeeId };
       if (!(await tx.updateBooking(updated, b.version))) return fail(409, "version_conflict");
-      if (earned.ok) await tx.appendLedger(earned.entries);
-      return { ok: true, status: 200, body: { ref, status: "delivered", result: earned.ok ? "shares_earned" : earned.reason } };
+      const result = await this.#tryEarn(tx, { ...updated, version: b.version + 1 }, this.#d.clock().toISOString());
+      return { ok: true, status: 200, body: { ref, status: "delivered", result } };
     });
+  }
+
+  /**
+   * K15: tahsilat veya iade kaydı. Kayıt silinmez. Online kart yalnız merkezden; araçta nakit yalnız
+   * rezervasyonun izin verdiği yöntemse ve işi yapan tedarikçi alır. Tam tahsil + teslim → pay yazılır.
+   * Teslim edilmiş ve payı yazılmış işte iade → payların tamamı ters kayıtla kapatılır, finans incelemesine düşer.
+   */
+  async recordPayment(ref: string, input: Record<string, unknown>): Promise<ServiceResult<unknown>> {
+    const { kind, method, amountMinor, party } = input;
+    if (kind !== "collection" && kind !== "refund") return fail(422, "kind_invalid");
+    if (method !== "card_online" && method !== "cash_in_vehicle") return fail(422, "method_invalid");
+    if (!Number.isSafeInteger(amountMinor)) return fail(422, "amountMinor_invalid");
+    const p = (party ?? {}) as Record<string, unknown>;
+    let partyRef: PartyRef;
+    if (p.kind === "platform") partyRef = { kind: "platform", id: "central" };
+    else if ((p.kind === "carrier" || p.kind === "partner") && typeof p.id === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(p.id)) {
+      partyRef = { kind: p.kind, id: p.id };
+    } else return fail(422, "party_invalid");
+
+    return this.#d.store.transaction(async (tx) => {
+      const b = await tx.getBookingByRef(ref);
+      if (!b) return fail(404, "not_found");
+      const prior = await tx.listPayments(b.id);
+      const currency = b.price?.total.currency ?? this.#d.shuttleTariff.currency;
+      const ev: PaymentEvent = {
+        id: this.#d.random.id(),
+        bookingId: b.id,
+        kind,
+        method,
+        amount: money(amountMinor as number, currency),
+        party: partyRef,
+        at: this.#d.clock().toISOString(),
+      };
+      // Nakit tahsilat, işi yapan tedarikçi belliyse ona; sefere atanmış ama henüz tamamlanmamışsa seferin tedarikçisine bakılır.
+      let assignedCarrierId = b.carrierPayeeId;
+      if (!assignedCarrierId && b.shuttleRunId) assignedCarrierId = (await tx.getRun(b.shuttleRunId))?.carrierPayeeId;
+      const check = checkPaymentEvent(
+        { total: b.price?.total, allowedMethods: b.allowedPaymentMethods, assignedCarrierId },
+        prior,
+        ev,
+      );
+      if (!check.ok) return fail(422, check.reason);
+      await tx.appendPayment(ev);
+      const summary = paymentSummary(b.price!.total, [...prior, ev]);
+      let current: StoredBooking = { ...b, paymentStatus: summary.status };
+      if (!(await tx.updateBooking(current, b.version))) return fail(409, "version_conflict");
+      current = { ...current, version: b.version + 1 };
+
+      let finance = "none";
+      const now = ev.at;
+      if (kind === "collection" && current.status === "delivered" && summary.status === "paid") {
+        finance = await this.#tryEarn(tx, current, now);
+      }
+      if (kind === "refund") {
+        const ledger = await tx.listLedger(b.id);
+        const reversals = reverseEntries(ledger, b.id, { now, newId: this.#d.random.id });
+        if (reversals.length > 0) {
+          await tx.appendLedger(reversals);
+          await tx.appendOutbox([this.#event(b, "finance.review_required", now, { reason: "refund_after_shares" })]);
+          finance = "shares_reversed_review_required";
+        }
+      }
+      return {
+        ok: true,
+        status: 201,
+        body: {
+          ref,
+          payment: { kind, method, amountMinor, party: partyRef },
+          totals: {
+            totalMinor: summary.total.amountMinor,
+            collectedMinor: summary.collected.amountMinor,
+            refundedMinor: summary.refunded.amountMinor,
+            remainingMinor: summary.remaining.amountMinor,
+            status: summary.status,
+          },
+          finance,
+        },
+      };
+    });
+  }
+
+  /** İptal (teslimden önce). Tahsil edilmiş tutar varsa iade gerekir bildirimi oluşur; iade ayrı kaydedilir. */
+  async cancel(ref: string): Promise<ServiceResult<unknown>> {
+    return this.#d.store.transaction(async (tx) => {
+      const b = await tx.getBookingByRef(ref);
+      if (!b) return fail(404, "not_found");
+      try {
+        assertTransition(b.status, "cancelled");
+      } catch {
+        return fail(409, "invalid_transition");
+      }
+      if (!(await tx.updateBooking({ ...b, status: "cancelled" }, b.version))) return fail(409, "version_conflict");
+      const now = this.#d.clock().toISOString();
+      const events = [this.#event(b, "booking.cancelled.notify_customer", now)];
+      const net = b.price ? paymentSummary(b.price.total, await tx.listPayments(b.id)).net.amountMinor : 0;
+      if (net > 0) events.push(this.#event(b, "finance.refund_due", now, { amountMinor: String(net) }));
+      if (b.shuttleRunId) {
+        const run = await tx.getRun(b.shuttleRunId);
+        if (run && (run.status === "open" || run.status === "assigned")) {
+          await tx.saveRun({ ...run, bookings: run.bookings.filter((x) => x.bookingId !== b.id) });
+        }
+      }
+      await tx.appendOutbox(events);
+      return { ok: true, status: 200, body: { ref, status: "cancelled", refundDueMinor: net } };
+    });
+  }
+
+  /** K15: haftalık kapanış (Pazartesi–Pazar, Europe/Istanbul). Yalnız ekstre; ödeme gönderimi kapalı. */
+  async closeWeek(weekStart: unknown): Promise<ServiceResult<unknown>> {
+    if (typeof weekStart !== "string") return fail(422, "weekStart_invalid");
+    return this.#d.store.transaction(async (tx) => {
+      if (await tx.getClosing(weekStart)) return fail(409, "week_already_closed");
+      const closings = await tx.listClosings();
+      let closing;
+      try {
+        closing = closeWeek({
+          weekStart,
+          ledger: await tx.listLedger(),
+          payments: await tx.listPayments(),
+          closedEntryIds: new Set(closings.flatMap((c) => c.entryIds)),
+          closedPaymentIds: new Set(closings.flatMap((c) => c.paymentIds)),
+        });
+      } catch (err) {
+        return fail(422, err instanceof Error ? err.message : "weekStart_invalid");
+      }
+      // Hafta bitmeden kapanmaz: aksi halde haftanın kalan kayıtları sonraki kapanışa kayar.
+      if (this.#d.clock().toISOString() < closing.periodEndUtc) return fail(409, "week_not_finished");
+      await tx.saveClosing(closing);
+      return { ok: true, status: 201, body: closing };
+    });
+  }
+
+  async listClosings(): Promise<ServiceResult<unknown>> {
+    return { ok: true, status: 200, body: await this.#d.store.listClosings() };
   }
 
   async ledgerBalances(): Promise<ServiceResult<unknown>> {

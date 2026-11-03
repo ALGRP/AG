@@ -5,10 +5,26 @@ import { isCurrency, money, type Currency, type Money } from "./money.ts";
 //   Bunlar REZERVASYONUN TOPLAM fiyatıdır, kişi başı ücret değildir.
 //   5 kişi ve üzeri: yeni karar verilene kadar otomatik fiyat YOK → ayrı onay (requires_approval).
 //   35 € kişi başı varsayımı İPTAL. Tek fiyat kaynağı bu tarifedir; site metinlerine fiyat yazılmaz.
-// Tarife sürümlüdür: rezervasyon, fiyatı hangi sürümden aldığını taşır.
+// Tarife sürümlüdür: rezervasyon, fiyatı hangi sürümden aldığını taşır; geçmiş rezervasyonun fiyatı değişmez.
+//
+// K8 (ÖNERİ, Owner onayı bekliyor) — Hatlar, her yön ayrı kod:
+//   AYT-ALN/ALN-AYT · AYT-SID/SID-AYT · AYT-BLK/BLK-AYT · AYT-KMR/KMR-AYT · AYT-KNY/KNY-AYT
+//   GZP-ALN/ALN-GZP (Alanya Merkez, pilot). AYT ↔ GZP shuttle hattı AÇILMAZ.
+//   Geçerlilik başlangıcı, onaylanan sürümün yayın tarihine bağlıdır (validFrom ≥ publishedAt).
+//   "proposed" durumundaki tarife yalnız yerel/test ortamında kullanılabilir; üretim açılışı reddeder.
+
+/** Owner kararı: bu hatlar hiçbir tarife sürümünde yer alamaz. */
+export const FORBIDDEN_SHUTTLE_ROUTES: readonly string[] = ["AYT-GZP", "GZP-AYT"];
+const ROUTE_CODE = /^[A-Z]{3}-[A-Z]{3}$/;
 
 export interface ShuttleTariffVersion {
   readonly id: string;
+  /** Yalnız "approved" sürüm canlıda kullanılabilir. */
+  readonly approval: "proposed" | "approved";
+  /** Sürümün yayın tarihi (YYYY-MM-DD). validFrom bundan önce olamaz. */
+  readonly publishedAt: string;
+  /** Pilot hatlar (ör. GZP-ALN): satışta "pilot" olarak işaretlenir. */
+  readonly pilotRoutes: readonly string[];
   readonly currency: Currency;
   /** Bu tarifenin geçerli olduğu hat kodları (ör. "AYT-ALANYA"). */
   readonly routes: readonly string[];
@@ -71,8 +87,19 @@ export function parseShuttleTariff(raw: unknown): ShuttleTariffVersion {
   if (typeof t !== "object" || t === null) fail("not an object");
   if (typeof t.id !== "string" || t.id === "") fail("id");
   if (!isCurrency(t.currency)) fail("currency");
-  if (!Array.isArray(t.routes) || t.routes.some((r) => typeof r !== "string")) fail("routes");
+  if (t.approval !== "proposed" && t.approval !== "approved") fail("approval");
+  if (typeof t.publishedAt !== "string" || !LOCAL_DATE.test(t.publishedAt)) fail("publishedAt");
+  if (!Array.isArray(t.routes) || t.routes.length === 0 || t.routes.some((r) => typeof r !== "string" || !ROUTE_CODE.test(r))) {
+    fail("routes (each direction its own code, e.g. AYT-ALN)");
+  }
+  if (new Set(t.routes as string[]).size !== (t.routes as string[]).length) fail("duplicate route code");
+  for (const r of t.routes as string[]) {
+    if (FORBIDDEN_SHUTTLE_ROUTES.includes(r)) fail(`route ${r} is not allowed (Owner decision: no AYT-GZP shuttle)`);
+  }
+  const pilot = (t.pilotRoutes ?? []) as unknown;
+  if (!Array.isArray(pilot) || pilot.some((r) => !(t.routes as string[]).includes(r))) fail("pilotRoutes must be listed routes");
   if (typeof t.validFrom !== "string" || !LOCAL_DATE.test(t.validFrom)) fail("validFrom");
+  if ((t.validFrom as string) < (t.publishedAt as string)) fail("validFrom cannot be before publishedAt");
   if (t.validTo !== undefined && (typeof t.validTo !== "string" || !LOCAL_DATE.test(t.validTo))) {
     fail("validTo");
   }
@@ -90,6 +117,9 @@ export function parseShuttleTariff(raw: unknown): ShuttleTariffVersion {
   if ("extraPerPassengerMinor" in t) fail("extraPerPassengerMinor is no longer supported (Owner decision 03.11.2026)");
   const tariff: ShuttleTariffVersion = {
     id: t.id as string,
+    approval: t.approval as "proposed" | "approved",
+    publishedAt: t.publishedAt as string,
+    pilotRoutes: [...(pilot as string[])],
     currency: t.currency as Currency,
     routes: [...(t.routes as string[])],
     validFrom: t.validFrom as string,

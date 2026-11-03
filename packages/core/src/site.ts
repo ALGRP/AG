@@ -1,3 +1,4 @@
+import { PAYMENT_METHODS, type PaymentMethod } from "./booking.ts";
 import { isCurrency, type Currency } from "./money.ts";
 
 // Uydu site kaydı (site registry). Site registry tenant güvenliği DEĞİLDİR (Linear kararı):
@@ -13,11 +14,12 @@ export type SiteOwnership =
 export type SiteStatus = "preview" | "live" | "suspended";
 
 /**
- * Özel/VIP talebin operasyonu:
- * - pass_to_network: site sahibi satar, işi pass bedeliyle Alanya Group ağına aktarır (Partner Sunumu V3).
- * - self_operate: site sahibi operasyonu kendisi yapar; merkez yalnız kaydı tutar (03.11 ilk talep).
+ * K12 (öneri) — Özel/VIP operasyon modeli. Varsayılan "network_pass".
+ * - network_pass:  site satar, iş Alanya Group tedarikçi ağına pass bedeliyle aktarılır (AG ek komisyon 0 €).
+ * - self_operated: site sahibi kendi aracıyla yapar; yalnız yasal şartlar ve operasyon yetkisi
+ *                  DOĞRULANMIŞSA açılabilir (selfOperationVerifiedAt zorunlu). AG işlem komisyonu almaz.
  */
-export type PrivateMode = "pass_to_network" | "self_operate";
+export type PrivateMode = "network_pass" | "self_operated";
 
 export interface SiteRecord {
   readonly id: string;
@@ -30,6 +32,10 @@ export interface SiteRecord {
   readonly ownerEmail: string;
   readonly status: SiteStatus;
   readonly privateMode: PrivateMode;
+  /** self_operated için: yetki belgelerinin doğrulandığı tarih (ISO). Doğrulanmadan model açılamaz. */
+  readonly selfOperationVerifiedAt?: string;
+  /** K15: bu sitedeki rezervasyonlarda izin verilen ödeme yöntemleri. */
+  readonly paymentMethods: readonly PaymentMethod[];
   /** Site sahibinin kendi satış fiyatları (cent). Yoksa özel talep fiyatsız "request" olarak gelir. */
   readonly salePrices?: Readonly<Partial<Record<"private" | "vip", number>>>;
   readonly saleCurrency?: Currency;
@@ -86,8 +92,21 @@ export function parseSiteRecord(raw: unknown): SiteRecord {
   }
   if (typeof r.ownerEmail !== "string" || !r.ownerEmail.includes("@")) fail("ownerEmail");
   if (r.status !== "preview" && r.status !== "live" && r.status !== "suspended") fail("status");
-  const privateMode = r.privateMode ?? "pass_to_network";
-  if (privateMode !== "pass_to_network" && privateMode !== "self_operate") fail("privateMode");
+  const privateMode = r.privateMode ?? "network_pass";
+  if (privateMode !== "network_pass" && privateMode !== "self_operated") fail("privateMode");
+  if (privateMode === "self_operated") {
+    if (typeof r.selfOperationVerifiedAt !== "string" || Number.isNaN(Date.parse(r.selfOperationVerifiedAt))) {
+      fail("self_operated requires selfOperationVerifiedAt (verified licence and operating authority)");
+    }
+  }
+  const paymentMethods = r.paymentMethods ?? ["card_online"];
+  if (
+    !Array.isArray(paymentMethods) ||
+    paymentMethods.length === 0 ||
+    paymentMethods.some((m) => !(PAYMENT_METHODS as readonly unknown[]).includes(m))
+  ) {
+    fail("paymentMethods");
+  }
   let salePrices: Partial<Record<"private" | "vip", number>> | undefined;
   if (r.salePrices !== undefined) {
     const sp = r.salePrices as Record<string, unknown>;
@@ -106,6 +125,8 @@ export function parseSiteRecord(raw: unknown): SiteRecord {
     ownerEmail: r.ownerEmail as string,
     status: r.status as SiteStatus,
     privateMode: privateMode as PrivateMode,
+    paymentMethods: [...(paymentMethods as PaymentMethod[])],
+    ...(privateMode === "self_operated" ? { selfOperationVerifiedAt: r.selfOperationVerifiedAt as string } : {}),
     ...(r.ownership === "partner" ? { partnerId: r.partnerId as string } : {}),
     ...(salePrices !== undefined ? { salePrices, saleCurrency: r.saleCurrency as Currency } : {}),
   });

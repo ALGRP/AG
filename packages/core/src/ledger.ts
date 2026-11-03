@@ -1,7 +1,6 @@
 import type { BookingStatus, PaymentStatus } from "./booking.ts";
 import { splitShuttleRevenue, type SplitPolicy } from "./commission.ts";
 import { money, negate, type Money } from "./money.ts";
-import { splitPassToNetwork } from "./pass.ts";
 
 // Defter (ledger) kuralları — AGOS değişmezleri:
 // * Finans kaydı değişmez ve silinmez; düzeltme ayrı (ters) kayıtla yapılır.
@@ -33,18 +32,34 @@ export interface EarnableShuttleBooking {
   readonly isDuplicate: boolean;
   /** Kaynak site bir partner sitesiyse partner id; Alanya Group'un kendi sitesiyse yok. */
   readonly sourcePartnerId?: string;
-  /** Pay matrahı. AÇIK KARAR: KDV/indirim/iade sonrası tutar — çağıran belirler. */
+  /** Pay matrahı = rezervasyonun dondurulmuş satış tutarı (Owner kararı 03.11.2026). */
   readonly shareBase: Money;
+}
+
+export interface ShuttleSplitPolicies {
+  /** Uydu site kaynaklı (70/20/10, KESİN). */
+  readonly partnerSourced: SplitPolicy;
+  /** Alanya Group'un kendi sitesinden (K4 önerisi 90/0/10; onaylanana kadar otomatik pay yok). */
+  readonly direct: SplitPolicy;
 }
 
 export type EarnResult =
   | { ok: true; entries: LedgerEntry[] }
-  | { ok: false; reason: "not_delivered" | "not_paid" | "test_booking" | "duplicate_booking" | "no_carrier" };
+  | {
+      ok: false;
+      reason:
+        | "not_delivered"
+        | "not_paid"
+        | "test_booking"
+        | "duplicate_booking"
+        | "no_carrier"
+        | "split_policy_not_approved";
+    };
 
 export function earnShuttleShares(
   booking: EarnableShuttleBooking,
   carrierPayeeId: string | undefined,
-  policy: SplitPolicy,
+  policies: ShuttleSplitPolicies,
   ctx: { now: string; newId: () => string },
 ): EarnResult {
   if (booking.isTest) return { ok: false, reason: "test_booking" };
@@ -53,7 +68,12 @@ export function earnShuttleShares(
   if (booking.paymentStatus !== "paid") return { ok: false, reason: "not_paid" };
   if (!carrierPayeeId) return { ok: false, reason: "no_carrier" };
 
-  const split = splitShuttleRevenue(booking.shareBase, policy, booking.sourcePartnerId !== undefined);
+  const policy = booking.sourcePartnerId !== undefined ? policies.partnerSourced : policies.direct;
+  if (policy.status !== "approved") return { ok: false, reason: "split_policy_not_approved" };
+  if (booking.sourcePartnerId === undefined && policy.partnerBps !== 0) {
+    throw new Error(`policy ${policy.id} has a site share but the booking has no source site`);
+  }
+  const split = splitShuttleRevenue(booking.shareBase, policy);
   const mk = (party: PartyRef, amount: Money): LedgerEntry => ({
     id: ctx.newId(),
     bookingId: booking.id,
@@ -86,35 +106,25 @@ export interface EarnablePassBooking {
 
 export type EarnPassResult =
   | { ok: true; entries: LedgerEntry[] }
-  | {
-      ok: false;
-      reason:
-        | "not_delivered"
-        | "not_paid"
-        | "test_booking"
-        | "duplicate_booking"
-        | "payout_exceeds_pass"
-        | "currency_mismatch"
-        | "negative_payout";
-    };
+  | { ok: false; reason: "not_delivered" | "not_paid" | "test_booking" | "duplicate_booking" | "no_carrier" };
 
 /**
- * Özel/VIP pass modeli: site sahibi = satış − pass; araç = atamada belirlenen hak ediş (≤ pass);
- * merkez = pass − araç hak edişi. Kaynak AG'nin kendi sitesiyse site katkısı merkeze yazılır.
+ * K12 Model B (NETWORK_PASS): tedarikçi = pass bedelinin TAMAMI; uydu site = satış − pass;
+ * Alanya Group ek işlem komisyonu = 0 € (satır yazılmaz).
+ * Kaynak Alanya Group'un kendi sitesiyse satıcı Alanya Group'tur; satış − pass satıcı marjı olarak
+ * Alanya Group satırına yazılır (komisyon değildir — bkz. KARARLAR K19).
  */
 export function earnPassShares(
   booking: EarnablePassBooking,
-  carrierPayeeId: string,
-  carrierPayout: Money,
+  carrierPayeeId: string | undefined,
   ctx: { now: string; newId: () => string },
 ): EarnPassResult {
   if (booking.isTest) return { ok: false, reason: "test_booking" };
   if (booking.isDuplicate) return { ok: false, reason: "duplicate_booking" };
   if (booking.status !== "delivered") return { ok: false, reason: "not_delivered" };
   if (booking.paymentStatus !== "paid") return { ok: false, reason: "not_paid" };
-  const net = splitPassToNetwork(booking.pass, carrierPayout);
-  if (!net.ok) return net;
-  const partnerPart = money(booking.sale.amountMinor - booking.pass.amountMinor, booking.sale.currency);
+  if (!carrierPayeeId) return { ok: false, reason: "no_carrier" };
+  const sellerPart = money(booking.sale.amountMinor - booking.pass.amountMinor, booking.sale.currency);
   const mk = (party: PartyRef, amount: Money): LedgerEntry => ({
     id: ctx.newId(),
     bookingId: booking.id,
@@ -124,14 +134,15 @@ export function earnPassShares(
     policyId: booking.passPolicyId,
     createdAt: ctx.now,
   });
-  const entries = [mk({ kind: "carrier", id: carrierPayeeId }, net.carrier)];
-  if (booking.sourcePartnerId !== undefined) {
-    entries.push(mk({ kind: "partner", id: booking.sourcePartnerId }, partnerPart));
-    entries.push(mk({ kind: "platform", id: "central" }, net.platform));
-  } else {
-    entries.push(mk({ kind: "platform", id: "central" }, money(net.platform.amountMinor + partnerPart.amountMinor, net.platform.currency)));
-  }
-  return { ok: true, entries };
+  return {
+    ok: true,
+    entries: [
+      mk({ kind: "carrier", id: carrierPayeeId }, booking.pass),
+      booking.sourcePartnerId !== undefined
+        ? mk({ kind: "partner", id: booking.sourcePartnerId }, sellerPart)
+        : mk({ kind: "platform", id: "central" }, sellerPart),
+    ],
+  };
 }
 
 /** Ödeme sonrası iptal / iade / chargeback: her satır için tek ters kayıt. Zaten ters çevrilmiş satır atlanır. */
