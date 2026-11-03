@@ -94,11 +94,16 @@ CREATE TABLE shuttle_tariff_version (
   valid_from      date NOT NULL,
   valid_to        date,
   max_passengers  int NOT NULL CHECK (max_passengers BETWEEN 1 AND 20),
-  totals_minor    bigint[] NOT NULL,
-  extra_per_passenger_minor bigint NOT NULL,
+  -- totals_minor[i] = (i+1) kişilik REZERVASYONUN TOPLAMI. Listenin ötesi otomatik fiyatlanmaz (onaya gider).
+  totals_minor    bigint[] NOT NULL CHECK (cardinality(totals_minor) BETWEEN 1 AND max_passengers),
   approved_by     text NOT NULL,
   approved_at     timestamptz NOT NULL
 );
+-- OWNER KARARI 03.11.2026: 1 kişi 30 €, 2 kişi 50 €, 3 kişi 60 €, 4 kişi 70 € (toplam); 5+ ayrı onay.
+-- Hat kodları DOĞRULANMADI (K8).
+INSERT INTO shuttle_tariff_version (id, currency, routes, valid_from, max_passengers, totals_minor, approved_by, approved_at)
+  VALUES ('shuttle-owner-2026-11-03', 'EUR', ARRAY['AYT-ALANYA','ALANYA-AYT','GZP-ALANYA','ALANYA-GZP'],
+          '2026-11-03', 10, ARRAY[3000,5000,6000,7000]::bigint[], 'owner-decision-2026-11-03', '2026-11-03T00:00:00Z');
 
 CREATE TABLE split_policy (
   id              text PRIMARY KEY,
@@ -108,6 +113,7 @@ CREATE TABLE split_policy (
   CHECK (carrier_bps >= 0 AND partner_bps >= 0 AND platform_bps >= 0),
   CHECK (carrier_bps + partner_bps + platform_bps = 10000)
 );
+-- OWNER KARARI 03.11.2026: satış tutarının %70'i tedarikçi, %20'si uydu site, %10'u Alanya Group.
 INSERT INTO split_policy VALUES ('shuttle-split-v1', 7000, 2000, 1000);
 
 -- Özel/VIP pass bedeli (sunum örnek varsayımı: private 47,50 €, VIP 60 €).
@@ -155,7 +161,7 @@ CREATE TABLE booking (
   customer_email  text NOT NULL,
   customer_phone  text NOT NULL,
   customer_locale text NOT NULL,
-  price_mode      text CHECK (price_mode IN ('FIXED_SHUTTLE', 'PARTNER_PRICE_WITH_PASS', 'PARTNER_QUOTE')),
+  price_mode      text CHECK (price_mode IN ('FIXED_SHUTTLE', 'SHUTTLE_MANUAL_APPROVED', 'PARTNER_PRICE_WITH_PASS', 'PARTNER_QUOTE')),
   price_minor     bigint,
   pass_minor      bigint CHECK (pass_minor > 0),
   price_currency  currency,
@@ -170,6 +176,8 @@ CREATE TABLE booking (
   version         int NOT NULL DEFAULT 1,
   CHECK ((product = 'shuttle') = (route_code IS NOT NULL)),
   CHECK ((price_minor IS NULL) = (price_currency IS NULL)),
+  -- Fiyat onayı bekleyen (5+ kişi) shuttle onaylanamaz / teslim edilemez.
+  CHECK (product <> 'shuttle' OR status IN ('request', 'cancelled') OR price_minor IS NOT NULL),
   CHECK ((price_mode = 'PARTNER_PRICE_WITH_PASS') = (pass_minor IS NOT NULL)),
   CHECK (pass_minor IS NULL OR pass_minor <= price_minor),
   CHECK ((ops_owner_kind = 'partner') = (ops_owner_partner_id IS NOT NULL))

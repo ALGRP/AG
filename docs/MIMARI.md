@@ -71,12 +71,13 @@ Neden bu yapı?
 ### 2.2 İçerik yönetimi (bölge rehberleri, blog)
 
 - İçerik `sites/<id>/content/<dil>/*.md` dosyalarındadır. Ön bilgide (frontmatter) şunlar bulunur: `title`, `description`, `h1`, `type` (home/route/guide/page/lookup), `translationKey`, `nav`, `updated`, `form`.
-- **Kısa kodlar:** `{{booking_form}}`, `{{shuttle_prices}}` (merkezi tarifeden; tarife yoksa hiç basılmaz), `{{reviews}}` (yalnız doğrulanmış yorumlar), `{{lookup_form}}`.
+- **Kısa kodlar:** `{{booking_form}}`, `{{shuttle_prices}}` (merkezi tarifeden: 1–4 kişi rezervasyon toplamı, 5+ "talep üzerine"; tarife yoksa hiç basılmaz), `{{reviews}}` (yalnız doğrulanmış yorumlar), `{{lookup_form}}`.
 - **Derleme kalite kapısı.** Şu durumlarda derleme durur:
   - title 60 karakteri aşarsa,
   - gövdede H1 varsa (H1 yalnız ön bilgiden gelir),
   - aynı URL iki kez üretilirse,
-  - ana sayfa yoksa.
+  - ana sayfa yoksa,
+  - sayfa metninde, başlıkta ya da açıklamada elle yazılmış bir fiyat varsa (tek fiyat kaynağı kuralı; Owner kararı 03.11).
 
   Şu durumlarda uyarı verilir: description 140–155 aralığı dışındaysa, bilinmeyen kısa kod varsa, kırık iç link varsa.
 - **Editör akışı:** önce Git + PR (önizleme derlemesi) kullanılır. Editör sayısı artarsa headless CMS eklenir; Payload mı WordPress içeriği mi sorusu Linear §8-2'de açık karardır. CMS yalnız Markdown/JSON üretir, SSG değişmez.
@@ -158,14 +159,17 @@ Her iki modelde de "site sahibinin e-postasına doğrudan düşer" isteği, form
 
 ```
 form ─▶ POST /v1/public/bookings (product=shuttle, routeCode)
-        ├─ fiyat = tarife(hat, tarih, kişi)            ör. 2 kişi → 50 €
+        ├─ fiyat = tarife(hat, tarih, kişi) — rezervasyon TOPLAMI (Owner kararı 03.11):
+        │          1 kişi 30 € · 2 kişi 50 € · 3 kişi 60 € · 4 kişi 70 €
+        │          5+ kişi → otomatik fiyat yok; "fiyat onayı gerekli", admin approve-price
         ├─ havuz: aynı hat + aynı saat dilimi (60 dk) içindeki EN DOLU açık sefere eklenir;
         │         koltuk biterse aynı dilimde yeni sefer (yeni araç) açılır — aşırı doluluk yok
         └─ outbox: shuttle.booking_received.notify_central (+ site sahibine bilgi, + müşteri)
 
 panel ─▶ confirm (request→confirmed) ─▶ assign run (taşıyıcı) ─▶ complete run (tahsil edilenler)
-        └─ her rezervasyon için, yalnız delivered + paid + test değil + mükerrer değil ise:
-           ledger_entry  carrier  %70
+        └─ her rezervasyon için, yalnız delivered + paid + fiyatı var + test değil + mükerrer değil ise,
+           SATIŞ TUTARI üzerinden ayrı satırlar:
+           ledger_entry  carrier  %70   (tedarikçi)
                          partner  %20   (kaynak partner sitesiyse)
                          platform %10   (+ kaynak AG'nin kendi sitesiyse %20 de merkeze)
 ```
@@ -186,7 +190,8 @@ Komisyon mantığı (`packages/core/src/commission.ts`, `ledger.ts`):
 | `GET /v1/public/bookings/:ref` | Müşteri sorgulama (`X-Lookup-Token`) |
 | `GET /v1/public/shuttle-quote?route&date&passengers` | Fiyat önizleme (5 dk önbellek) |
 | `GET /v1/admin/bookings` | Son 100 rezervasyon |
-| `POST /v1/admin/bookings/:ref/confirm` | `request → confirmed` (sürüm kontrollü) |
+| `POST /v1/admin/bookings/:ref/approve-price` | 5+ kişilik shuttle için fiyat onayı (tek seferlik, tarife para birimiyle) |
+| `POST /v1/admin/bookings/:ref/confirm` | `request → confirmed` (sürüm kontrollü; fiyatsız shuttle onaylanamaz) |
 | `POST /v1/admin/bookings/:ref/complete` | Pass modelindeki özel/VIP işi tamamla: araç, hak ediş (≤ pass), tahsilat → defter |
 | `POST /v1/admin/shuttle-runs/:id/assign` | Sefere taşıyıcı ata |
 | `POST /v1/admin/shuttle-runs/:id/complete` | Tamamla, tahsil edilenleri işaretle, payları deftere yaz |
@@ -200,9 +205,9 @@ Admin uçları şimdilik `AG_ADMIN_TOKEN` ile korunur; değişken tanımlı değ
 | # | Adım | Durum | Çıkış ölçütü |
 | -- | -- | -- | -- |
 | 0 | Owner kararları: SSG teknolojisi (K1), 70/20/10 matrahı, AG kaynaklı iş (K4), shuttle hatları (K8), özel/VIP modeli (K12), shuttle fiyat birimi (K13), araç hak edişi (K14), tahsilat yönü (K15). Ücret netleşti: 200 €/ay (K2) | KISMEN AÇIK | Linear'da KARAR olarak işaretli |
-| 1 | **Domain çekirdeği** (`@ag/core`): tarife, 70/20/10, pass modeli, durum modeli, havuz, defter, sunum ekonomisi | **LOCAL_ONLY · bu PR** | 21 birim testi geçer |
-| 2 | **Merkez intake API'si**: origin, idempotency, outbox, havuz, pass, admin uçları | **LOCAL_ONLY · bu PR** | 8 API testi ve tarayıcıda uçtan uca form testi geçer |
-| 3 | **SSG** ve örnek partner sitesi (EN/TR, noindex) | **LOCAL_ONLY · bu PR** | 9 SSG testi geçer, mobil 390 px'de yatay kaydırma yok |
+| 1 | **Domain çekirdeği** (`@ag/core`): tarife, 70/20/10, pass modeli, durum modeli, havuz, defter, sunum ekonomisi | **LOCAL_ONLY · bu PR** | 24 birim testi geçer (Owner örnek rezervasyonları dahil) |
+| 2 | **Merkez intake API'si**: origin, idempotency, outbox, havuz, pass, admin uçları | **LOCAL_ONLY · bu PR** | 10 API testi ve tarayıcıda uçtan uca form testi geçer |
+| 3 | **SSG** ve örnek partner sitesi (EN/TR, noindex) | **LOCAL_ONLY · bu PR** | 10 SSG testi geçer, mobil 390 px'de yatay kaydırma yok |
 | 4 | CRS eşlemesi: G1 erişimiyle şema dökümü, `0001` adayının CRS tablolarına eşlenmesi, `PgStore` adaptörü | G1 bekliyor (SEL-329/331) | 13 backend sözleşmesi (white-label SaaS v1) gerçek DB'de geçer |
 | 5 | Outbox işçisi → n8n: site sahibi e-postası, merkez, müşteri onayı; domain başına SPF/DKIM | G2 | Test alıcısına tekil gönderim, teslim kanıtı |
 | 6 | Yönetim paneli MVP: rezervasyonlar, sefer atama, defter, site/partner kaydı; IdP + 2FA | SEL-332 kararı | Admin yalnız 2FA'lı oturumda |
@@ -216,7 +221,7 @@ Admin uçları şimdilik `AG_ADMIN_TOKEN` ile korunur; değişken tanımlı değ
 
 ```bash
 npm install
-npm run check                                  # tsc + 38 test
+npm run check                                  # tsc + 44 test
 AG_ADMIN_TOKEN=yerel-anahtar npm run dev:api   # http://127.0.0.1:8787
 npm run build:sites                            # dist/sites/<id>/
 npx serve -l 4321 dist/sites/ornek-alanya-transfer   # veya herhangi bir statik sunucu

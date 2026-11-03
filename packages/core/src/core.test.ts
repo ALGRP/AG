@@ -26,18 +26,24 @@ const tariff = parseShuttleTariff({
   validFrom: "2026-11-01",
   validTo: "2027-03-31",
   maxPassengers: 10,
-  totalsMinor: [3000, 5000, 6000],
-  extraPerPassengerMinor: 1000,
+  totalsMinor: [3000, 5000, 6000, 7000],
 });
 
-describe("shuttle tariff", () => {
-  it("prices group totals 30/50/60/70/80 and +10 per person", () => {
-    const totals = [1, 2, 3, 4, 5, 10].map((p) => {
+describe("shuttle tariff (Owner decision 03.11.2026)", () => {
+  it("prices booking totals 30/50/60/70 for 1–4 passengers (not per person)", () => {
+    const totals = [1, 2, 3, 4].map((p) => {
       const r = priceShuttle(tariff, "AYT-ALANYA", "2026-12-01", p);
       assert.ok(r.ok);
+      assert.equal(r.tariffVersionId, "test-tariff");
       return r.total.amountMinor;
     });
-    assert.deepEqual(totals, [3000, 5000, 6000, 7000, 8000, 13000]);
+    assert.deepEqual(totals, [3000, 5000, 6000, 7000]);
+  });
+
+  it("sends 5 or more passengers to manual approval instead of extrapolating", () => {
+    for (const p of [5, 6, 10]) {
+      assert.deepEqual(priceShuttle(tariff, "AYT-ALANYA", "2026-12-01", p), { ok: false, reason: "requires_approval" });
+    }
   });
 
   it("refuses to invent a price outside the tariff", () => {
@@ -46,9 +52,38 @@ describe("shuttle tariff", () => {
     assert.deepEqual(priceShuttle(tariff, "AYT-ALANYA", "2026-12-01", 11), { ok: false, reason: "over_capacity" });
     assert.deepEqual(priceShuttle(tariff, "AYT-ALANYA", "2026-12-01", 0), { ok: false, reason: "invalid_passengers" });
   });
+
+  it("rejects a stale config that still carries a per-person extra", () => {
+    assert.throws(
+      () =>
+        parseShuttleTariff({
+          id: "old",
+          currency: "EUR",
+          routes: ["AYT-ALANYA"],
+          validFrom: "2026-01-01",
+          maxPassengers: 10,
+          totalsMinor: [3000],
+          extraPerPassengerMinor: 3500,
+        }),
+      /no longer supported/,
+    );
+  });
 });
 
 describe("commission split 70/20/10", () => {
+  it("splits each Owner sample booking exactly: supplier 70 %, site 20 %, centre 10 %", () => {
+    const expected: Array<[number, number, number, number]> = [
+      [3000, 2100, 600, 300],
+      [5000, 3500, 1000, 500],
+      [6000, 4200, 1200, 600],
+      [7000, 4900, 1400, 700],
+    ];
+    for (const [sale, supplier, site, centre] of expected) {
+      const s = splitShuttleRevenue(money(sale, "EUR"), SHUTTLE_SPLIT_V1, true);
+      assert.deepEqual([s.carrier.amountMinor, s.partner.amountMinor, s.platform.amountMinor], [supplier, site, centre]);
+    }
+  });
+
   it("splits a partner-sourced booking exactly", () => {
     const s = splitShuttleRevenue(money(5000, "EUR"), SHUTTLE_SPLIT_V1, true);
     assert.equal(s.carrier.amountMinor, 3500);
@@ -116,6 +151,20 @@ describe("ledger", () => {
       ok: false,
       reason: "duplicate_booking",
     });
+  });
+
+  it("records supplier, site and centre shares as separate entries", () => {
+    const earned = earnShuttleShares({ ...booking, id: "b-sep" }, "supplier-1", SHUTTLE_SPLIT_V1, ctx);
+    assert.ok(earned.ok);
+    assert.deepEqual(
+      earned.entries.map((e) => [e.party.kind, e.party.id, e.amount.amountMinor, e.policyId]),
+      [
+        ["carrier", "supplier-1", 3500, "shuttle-split-v1"],
+        ["partner", "p1", 1000, "shuttle-split-v1"],
+        ["platform", "central", 500, "shuttle-split-v1"],
+      ],
+    );
+    assert.equal(new Set(earned.entries.map((e) => e.id)).size, 3);
   });
 
   it("reverses each share exactly once after a post-payment cancellation", () => {
@@ -240,29 +289,20 @@ describe("partner deck V3 (03.11.2026)", () => {
     assert.deepEqual(splitPass("vip", {}, "EUR", PASS_POLICY_DECK_V3), { ok: false, reason: "no_sale_price" });
   });
 
-  it("shuttle ticket 35 € under 70/20/10 gives the site 7 € and the network 28 €", () => {
-    const s = splitShuttleRevenue(money(3500, "EUR"), SHUTTLE_SPLIT_V1, true);
-    assert.equal(s.partner.amountMinor, 700);
-    assert.equal(s.carrier.amountMinor + s.platform.amountMinor, 2800);
-  });
-
-  it("reproduces the partner scenarios on slides 10–12", async () => {
+  it("partner month: deck private figures with the Owner shuttle rule (2-person booking 50 € → 10 €)", async () => {
     const { partnerMonth, breakEvenUnits } = await import("./index.ts");
-    const base = { privateContributionMinor: 3250, shuttleContributionMinor: 700 };
-    const rows = [
-      [1, 2, 139500, -500],
-      [1.5, 3, 209250, 69250],
-      [3, 8, 460500, 320500],
-      [5, 15, 802500, 662500],
-    ] as const;
-    for (const [pr, sh, gross, after] of rows) {
-      const m = partnerMonth({ ...base, privatePerDay: pr, shuttleTicketsPerDay: sh });
-      assert.equal(m.costsMinor, 140000);
-      assert.equal(m.grossContributionMinor, gross);
-      assert.equal(m.afterCostsMinor, after);
-    }
-    assert.equal(breakEvenUnits(140000, 3250), 44);
-    assert.equal(breakEvenUnits(140000, 700), 200);
+    // Private: sunum slayt 8 (32,50 € katkı). Shuttle: Owner kararı, 2 kişilik rezervasyon 50 € × %20 = 10 €.
+    const m = partnerMonth({
+      privatePerDay: 1.5,
+      privateContributionMinor: 3250,
+      shuttleBookingsPerDay: 3,
+      shuttleContributionMinor: 1000,
+    });
+    assert.equal(m.costsMinor, 140000); // 200 € abonelik + 40 € × 30 gün reklam
+    assert.equal(m.grossContributionMinor, 146250 + 90000);
+    assert.equal(m.afterCostsMinor, 236250 - 140000);
+    assert.equal(breakEvenUnits(140000, 3250), 44, "slide 12: 44 private bookings");
+    assert.equal(breakEvenUnits(140000, 1000), 140, "2-person shuttle bookings (replaces the obsolete 200-ticket figure)");
   });
 
   it("reproduces the centre projection on slides 13–15", async () => {

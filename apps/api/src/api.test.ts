@@ -50,8 +50,7 @@ const service = new BookingService({
     routes: ["AYT-ALANYA"],
     validFrom: "2026-01-01",
     maxPassengers: 10,
-    totalsMinor: [3000, 5000, 6000],
-    extraPerPassengerMinor: 1000,
+    totalsMinor: [3000, 5000, 6000, 7000],
   }),
   splitPolicy: SHUTTLE_SPLIT_V1,
   passPolicy: PASS_POLICY_DECK_V3,
@@ -216,6 +215,72 @@ describe("shuttle pool → 70/20/10 ledger", () => {
     assert.equal(get("carrier", "c-9"), 4000);
     assert.equal(get("partner", "p-001"), 1000 + 3250, "shuttle %20 (earlier test) + private 32,50 €");
     assert.equal(get("platform", "central"), 1400 + 750);
+  });
+
+  it("Owner sample bookings 1–4 pax: price 30/50/60/70 and 70/20/10 shares recorded per party", async () => {
+    const refs: string[] = [];
+    for (const pax of [1, 2, 3, 4]) {
+      const r = await post(
+        "/v1/public/bookings",
+        shuttleBody({
+          pickupAt: "2026-12-12T11:10",
+          routeCode: "AYT-ALANYA",
+          passengers: pax,
+          customer: { name: `S${pax}`, email: `s${pax}@example.com`, phone: `+90 535 000 000${pax}`, locale: "en" },
+        }),
+        { ...fromPartner, "idempotency-key": `k-owner-sample-${pax}-000` },
+      );
+      assert.equal(r.status, 201);
+      assert.deepEqual(r.body.price, { amountMinor: [3000, 5000, 6000, 7000][pax - 1], currency: "EUR" });
+      refs.push(r.body.ref);
+    }
+    const list = (await fetch(base + "/v1/admin/bookings", { headers: admin }).then((x) => x.json())) as any[];
+    const runIds = [...new Set(list.filter((b) => refs.includes(b.ref)).map((b) => b.shuttleRunId))];
+    assert.equal(runIds.length, 1, "1+2+3+4 = 10 seats fill exactly one vehicle (capacity 10)");
+
+    for (const ref of refs) await post(`/v1/admin/bookings/${ref}/confirm`, {}, admin);
+    const before = (await fetch(base + "/v1/admin/ledger/balances", { headers: admin }).then((x) => x.json())) as any[];
+    const amount = (rows: any[], kind: string, id: string) => rows.find((r) => r.party.kind === kind && r.party.id === id)?.amountMinor ?? 0;
+    for (const runId of runIds) {
+      await post(`/v1/admin/shuttle-runs/${runId}/assign`, { carrierPayeeId: "supplier-owner-test" }, admin);
+      await post(`/v1/admin/shuttle-runs/${runId}/complete`, { paidRefs: refs }, admin);
+    }
+    const after = (await fetch(base + "/v1/admin/ledger/balances", { headers: admin }).then((x) => x.json())) as any[];
+    // Toplam satış 30 + 50 + 60 + 70 = 210 € → tedarikçi 147 €, site 42 €, merkez 21 €
+    assert.equal(amount(after, "carrier", "supplier-owner-test"), 14700);
+    assert.equal(amount(after, "partner", "p-001") - amount(before, "partner", "p-001"), 4200);
+    assert.equal(amount(after, "platform", "central") - amount(before, "platform", "central"), 2100);
+  });
+
+  it("5+ passengers: no automatic price; manual approval, then the same 70/20/10 split", async () => {
+    const quote = await fetch(`${base}/v1/public/shuttle-quote?route=AYT-ALANYA&date=2026-12-13&passengers=5`);
+    assert.equal(quote.status, 200);
+    assert.deepEqual(await quote.json(), { requiresApproval: true });
+
+    const r = await post(
+      "/v1/public/bookings",
+      shuttleBody({ pickupAt: "2026-12-13T08:00", passengers: 5, customer: { name: "Big", email: "big@example.com", phone: "+90 536 000 0000", locale: "en" } }),
+      { ...fromPartner, "idempotency-key": "k-five-pax-0000001" },
+    );
+    assert.equal(r.status, 201);
+    assert.equal(r.body.price, undefined, "no automatic price for 5+");
+    assert.equal(r.body.next, "price_requires_approval");
+    const ref = r.body.ref;
+
+    assert.equal((await post(`/v1/admin/bookings/${ref}/confirm`, {}, admin)).body.error, "price_requires_approval");
+    assert.equal((await post(`/v1/admin/bookings/${ref}/approve-price`, { amountMinor: 8000, currency: "USD" }, admin)).status, 422);
+    assert.equal((await post(`/v1/admin/bookings/${ref}/approve-price`, { amountMinor: 8000, currency: "EUR" }, admin)).status, 200);
+    assert.equal((await post(`/v1/admin/bookings/${ref}/approve-price`, { amountMinor: 9000, currency: "EUR" }, admin)).body.error, "price_already_set");
+    assert.equal((await post(`/v1/admin/bookings/${ref}/confirm`, {}, admin)).status, 200);
+
+    const list = (await fetch(base + "/v1/admin/bookings", { headers: admin }).then((x) => x.json())) as any[];
+    const row = list.find((b) => b.ref === ref);
+    assert.equal(row.price.mode, "SHUTTLE_MANUAL_APPROVED");
+    await post(`/v1/admin/shuttle-runs/${row.shuttleRunId}/assign`, { carrierPayeeId: "supplier-five" }, admin);
+    const done = await post(`/v1/admin/shuttle-runs/${row.shuttleRunId}/complete`, { paidRefs: [ref] }, admin);
+    assert.equal(done.body.bookings[0].result, "shares_earned");
+    const bal = (await fetch(base + "/v1/admin/ledger/balances", { headers: admin }).then((x) => x.json())) as any[];
+    assert.equal(bal.find((b) => b.party.id === "supplier-five").amountMinor, 5600); // %70 × 80 €
   });
 
   it("keeps admin endpoints closed without the token", async () => {

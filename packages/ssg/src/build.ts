@@ -195,6 +195,8 @@ function bookingForm(site: SiteConfig, page: Page, apiBase: string): string {
   const attrs = {
     sending: s.sending,
     price: s.priceFrom,
+    "needs-approval": s.priceNeedsApproval,
+    "ok-approval": s.successApproval,
     "ok-shuttle": s.successShuttle,
     "ok-private": s.successPrivate,
     ref: s.yourRef,
@@ -242,17 +244,17 @@ function lookupForm(page: Page, apiBase: string): string {
 }
 
 function shuttlePriceTable(page: Page, tariff: ShuttleTariffVersion | undefined): string {
-  // Fiyat yalnız merkezi tarifeden; tarife yoksa tablo hiç basılmaz (metne fiyat uydurulmaz).
+  // Tek fiyat kaynağı: merkezi tarife. Tarife yoksa tablo hiç basılmaz (metne fiyat uydurulmaz).
+  // Yalnız Owner'ın karar verdiği kişi sayıları listelenir; üstü "onaya tabi" satırıdır.
   if (!tariff) return "";
   const s = t(page.locale);
-  const rows: string[] = [];
-  for (let pax = 1; pax <= Math.min(tariff.maxPassengers, 6); pax++) {
-    const listed = tariff.totalsMinor.length;
-    const minor =
-      pax <= listed ? tariff.totalsMinor[pax - 1]! : tariff.totalsMinor[listed - 1]! + (pax - listed) * tariff.extraPerPassengerMinor;
-    rows.push(`<tr><td>${pax}</td><td>${escapeHtml(formatMoney(money(minor, tariff.currency), page.locale))}</td></tr>`);
+  const rows = tariff.totalsMinor.map(
+    (minor, i) => `<tr><td>${i + 1}</td><td>${escapeHtml(formatMoney(money(minor, tariff.currency), page.locale))}</td></tr>`,
+  );
+  if (tariff.maxPassengers > tariff.totalsMinor.length) {
+    rows.push(`<tr><td>${tariff.totalsMinor.length + 1}+</td><td>${escapeHtml(s.priceOnRequest)}</td></tr>`);
   }
-  return `<table><thead><tr><th>${escapeHtml(s.passengers)}</th><th>${escapeHtml(s.priceFrom)}</th></tr></thead><tbody>${rows.join("")}</tbody></table>`;
+  return `<table><thead><tr><th>${escapeHtml(s.passengers)}</th><th>${escapeHtml(s.totalForBooking)}</th></tr></thead><tbody>${rows.join("")}</tbody></table>`;
 }
 
 function reviewsBlock(page: Page, reviews: readonly Review[]): string {
@@ -379,7 +381,13 @@ ${footer(site, page)}
 `;
 }
 
+// Fiyat yalnız {{shuttle_prices}} (merkezi tarife) ile basılır; içerikte elle yazılmış tutar derlemeyi durdurur.
+const HAND_WRITTEN_PRICE = /(?:€|EUR|TRY|₺|\$|£|USD|GBP)\s?\d|\d(?:[.,]\d+)?\s?(?:€|EUR|TRY|TL|₺|USD|GBP|euro)\b|\d\s?(?:€|₺)/i;
+
 function qa(page: Page, warnings: string[], errors: string[]) {
+  if (HAND_WRITTEN_PRICE.test(page.body) || HAND_WRITTEN_PRICE.test(page.title) || HAND_WRITTEN_PRICE.test(page.description)) {
+    errors.push(`${page.source}: hand-written price found; use {{shuttle_prices}} (single price source)`);
+  }
   if (page.title.length > 60) errors.push(`${page.source}: title is ${page.title.length} chars (max 60)`);
   if (page.description.length < 70 || page.description.length > 160) {
     warnings.push(`${page.source}: description is ${page.description.length} chars (target 140–155)`);

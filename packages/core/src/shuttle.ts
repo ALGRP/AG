@@ -1,34 +1,43 @@
 import { isCurrency, money, type Currency, type Money } from "./money.ts";
 
-// Shuttle fiyatı yalnız onaylı, sürümlü tarifeden gelir (Linear: Sistem Tasarımı v2 §2,
-// white-label SaaS v1 "FIXED_SHUTTLE"). Tarifesi olmayan hatta fiyat uydurulmaz.
-// Kişi sayısına göre GRUP TOPLAMI: 1 → 30 €, 2 → 50 €, 3 → 60 €, sonraki her kişi +10 €.
+// OWNER KARARI (03.11.2026) — Shuttle fiyatı:
+//   1 kişi 30 €, 2 kişi 50 €, 3 kişi 60 €, 4 kişi 70 €.
+//   Bunlar REZERVASYONUN TOPLAM fiyatıdır, kişi başı ücret değildir.
+//   5 kişi ve üzeri: yeni karar verilene kadar otomatik fiyat YOK → ayrı onay (requires_approval).
+//   35 € kişi başı varsayımı İPTAL. Tek fiyat kaynağı bu tarifedir; site metinlerine fiyat yazılmaz.
+// Tarife sürümlüdür: rezervasyon, fiyatı hangi sürümden aldığını taşır.
 
 export interface ShuttleTariffVersion {
   readonly id: string;
   readonly currency: Currency;
-  /** Bu tarifenin geçerli olduğu hat kodları (ör. "AYT-ALANYA"). Her hatta aynı fiyat varsayılmaz. */
+  /** Bu tarifenin geçerli olduğu hat kodları (ör. "AYT-ALANYA"). */
   readonly routes: readonly string[];
   /** Yerel tarih (Europe/Istanbul), dahil. */
   readonly validFrom: string;
   /** Yerel tarih, dahil. Yoksa açık uçlu. */
   readonly validTo?: string;
-  /** Paylaşımlı shuttle'da tek rezervasyon grubu için üst sınır (Owner: en fazla 10). */
+  /** Paylaşımlı shuttle'da tek rezervasyon grubu için üst sınır (araç kapasitesi; Owner: en fazla 10). */
   readonly maxPassengers: number;
-  /** totalsMinor[i] = (i+1) kişilik grup toplamı. */
+  /**
+   * totalsMinor[i] = (i+1) kişilik rezervasyonun TOPLAM fiyatı. Otomatik fiyat yalnız bu listenin
+   * kapsadığı kişi sayıları için üretilir; üstü ayrı onaya gider. Ekstrapolasyon yoktur.
+   */
   readonly totalsMinor: readonly number[];
-  /** totalsMinor bittikten sonra kişi başı ek. */
-  readonly extraPerPassengerMinor: number;
 }
 
 export type ShuttlePriceResult =
   | { ok: true; total: Money; tariffVersionId: string; passengers: number }
   | {
       ok: false;
-      reason: "invalid_passengers" | "over_capacity" | "route_not_in_tariff" | "date_out_of_range";
+      reason: "invalid_passengers" | "over_capacity" | "route_not_in_tariff" | "date_out_of_range" | "requires_approval";
     };
 
 const LOCAL_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Otomatik fiyatlanan en büyük grup (bugün 4). */
+export function autoPricedUpTo(tariff: ShuttleTariffVersion): number {
+  return tariff.totalsMinor.length;
+}
 
 export function priceShuttle(
   tariff: ShuttleTariffVersion,
@@ -44,17 +53,10 @@ export function priceShuttle(
   if (tariff.validTo !== undefined && localDate > tariff.validTo) {
     return { ok: false, reason: "date_out_of_range" };
   }
-
-  const listed = tariff.totalsMinor.length;
-  let totalMinor: number;
-  if (passengers <= listed) {
-    totalMinor = tariff.totalsMinor[passengers - 1]!;
-  } else {
-    totalMinor = tariff.totalsMinor[listed - 1]! + (passengers - listed) * tariff.extraPerPassengerMinor;
-  }
+  if (passengers > autoPricedUpTo(tariff)) return { ok: false, reason: "requires_approval" };
   return {
     ok: true,
-    total: money(totalMinor, tariff.currency),
+    total: money(tariff.totalsMinor[passengers - 1]!, tariff.currency),
     tariffVersionId: tariff.id,
     passengers,
   };
@@ -82,9 +84,10 @@ export function parseShuttleTariff(raw: unknown): ShuttleTariffVersion {
   ) {
     fail("totalsMinor");
   }
-  if (!Number.isSafeInteger(t.extraPerPassengerMinor) || (t.extraPerPassengerMinor as number) < 0) {
-    fail("extraPerPassengerMinor");
-  }
+  if ((t.totalsMinor as number[]).length > (t.maxPassengers as number)) fail("totalsMinor longer than maxPassengers");
+  // Eski "kişi başı ek ücret" alanı Owner kararıyla kaldırıldı; kalmış bir yapılandırma sessizce
+  // fiyat üretmesin diye reddedilir.
+  if ("extraPerPassengerMinor" in t) fail("extraPerPassengerMinor is no longer supported (Owner decision 03.11.2026)");
   const tariff: ShuttleTariffVersion = {
     id: t.id as string,
     currency: t.currency as Currency,
@@ -92,7 +95,6 @@ export function parseShuttleTariff(raw: unknown): ShuttleTariffVersion {
     validFrom: t.validFrom as string,
     maxPassengers: t.maxPassengers as number,
     totalsMinor: [...(t.totalsMinor as number[])],
-    extraPerPassengerMinor: t.extraPerPassengerMinor as number,
     ...(t.validTo !== undefined ? { validTo: t.validTo as string } : {}),
   };
   return Object.freeze(tariff);

@@ -14,8 +14,7 @@ const tariff = parseShuttleTariff({
   routes: ["AYT-ALANYA"],
   validFrom: "2026-01-01",
   maxPassengers: 10,
-  totalsMinor: [3000, 5000, 6000],
-  extraPerPassengerMinor: 1000,
+  totalsMinor: [3000, 5000, 6000, 7000],
 });
 
 function makeSite(over: Record<string, unknown> = {}, pages: Record<string, string> = {}, reviews: unknown[] = []) {
@@ -73,9 +72,21 @@ describe("ssg build", () => {
     assert.match(read("robots.txt"), /Sitemap: https:\/\/www.test-brand.example\/sitemap.xml/);
   });
 
-  it("renders shuttle prices only from the central tariff", () => {
-    const { read } = build(makeSite());
-    assert.match(read("index.html"), /€50\.00/);
+  it("renders shuttle prices only from the central tariff: 1–4 pax totals, 5+ on request", () => {
+    const home = build(makeSite()).read("index.html");
+    for (const p of ["€30.00", "€50.00", "€60.00", "€70.00"]) assert.ok(home.includes(p), p);
+    assert.match(home, /<td>5\+<\/td><td>On request/);
+    assert.doesNotMatch(home, /€80|€35/);
+  });
+
+  it("fails the build when page text contains a hand-written price (single price source)", () => {
+    for (const text of ["Only 35 € per person!", "Ab €30 pro Fahrt", "Fiyat 30 EUR", "Sadece 1.000 TL"]) {
+      assert.throws(
+        () => build(makeSite({}, { "en/promo.md": `---\ntitle: Promo\ndescription: d\nh1: Promo\nupdated: 2026-11-03\n---\n${text}\n` })),
+        /hand-written price/,
+        text,
+      );
+    }
   });
 
   it("adds the Alanya Group brand statement only on ag_brand sites", () => {

@@ -1,11 +1,11 @@
 import { money, type Money } from "./money.ts";
 
-// Shuttle gelir paylaşımı (Owner talebi, 03.11.2026):
-//   %70 → seferi yapan taşıyıcı araç (hak ediş alıcısı: araç tedarikçiye aitse tedarikçi, değilse şoför)
-//   %20 → rezervasyonu getiren uydu site sahibi (partner)
-//   %10 → merkez (Alanya Group / platform)
-// Oranlar kodda sabit değil, sürümlü politika olarak tutulur; her rezervasyon kullandığı politikanın id'sini taşır.
-// MATRAH (KDV, indirim, iade, ödeme komisyonu) AÇIK karardır — fonksiyon matrahı dışarıdan alır.
+// OWNER KARARI (03.11.2026) — Shuttle gelir paylaşımı, her shuttle rezervasyonunda SATIŞ TUTARI üzerinden:
+//   %70 → transferi gerçekleştiren tedarikçi (hak ediş alıcısı: araç tedarikçiye aitse tedarikçi, değilse şoför)
+//   %20 → rezervasyonu getiren uydu site
+//   %10 → Alanya Group (merkez)
+// Oranlar sürümlü politika olarak tutulur; her pay kaydı kullandığı politikanın id'sini taşır.
+// Örnekler (tam sayı, yuvarlama yok): 30 € → 21 / 6 / 3 · 50 € → 35 / 10 / 5 · 60 € → 42 / 12 / 6 · 70 € → 49 / 14 / 7.
 
 export interface SplitPolicy {
   readonly id: string;
@@ -39,7 +39,7 @@ export function assertValidPolicy(p: SplitPolicy): void {
 }
 
 /**
- * Matrahı üç paya böler. Paylar her zaman matraha tam eşit toplanır:
+ * Satış tutarını üç paya böler. Paylar her zaman matraha tam eşit toplanır:
  * taşıyıcı ve partner payı aşağı yuvarlanır, kuruş farkı merkeze kalır (belgelenmiş, deterministik).
  * Kaynak bir partner sitesi değilse (Alanya Group'un kendi sitesi) partner payı merkeze eklenir.
  */

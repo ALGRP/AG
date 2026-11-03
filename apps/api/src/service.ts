@@ -112,7 +112,12 @@ export class BookingService {
     const fingerprint = sha256(duplicateFingerprintInput(req));
     const isDuplicate = (await tx.findActiveByFingerprint(fingerprint)) !== undefined;
     const sourcePartnerId = site.site.ownership === "partner" ? site.site.partnerId : undefined;
-    const ref = bookingRef(this.#d.random.index);
+    // Kod çakışması (31^6 olasılık) nadirdir ama mümkündür: boş kod bulunana kadar en çok 8 deneme.
+    let ref = bookingRef(this.#d.random.index);
+    for (let i = 0; (await tx.getBookingByRef(ref)) !== undefined; i++) {
+      if (i >= 8) throw new Error("could not allocate a unique booking ref");
+      ref = bookingRef(this.#d.random.index);
+    }
 
     const base = {
       id,
@@ -145,8 +150,8 @@ export class BookingService {
     if (req.product === "shuttle") {
       if (req.returnPickupAt !== undefined) return fail(422, "shuttle_return_must_be_booked_separately");
       const price = priceShuttle(this.#d.shuttleTariff, req.routeCode!, req.pickupAt.slice(0, 10), req.passengers);
-      if (!price.ok) return fail(422, price.reason);
-
+      // 5+ kişi: Owner kararıyla otomatik fiyat yok; rezervasyon fiyatsız alınır ve fiyat onayı bekler.
+      if (!price.ok && price.reason !== "requires_approval") return fail(422, price.reason);
       const slotRuns = await tx.listRuns(req.routeCode!, slotStartFor(req.pickupAt, this.#d.pool.slotMinutes));
       const placement = placeInPool(
         slotRuns,
@@ -159,15 +164,20 @@ export class BookingService {
         ...base,
         operationsOwner: { kind: "central" },
         shuttleRunId: placement.run.id,
-        price: {
-          mode: "FIXED_SHUTTLE",
-          total: price.total,
-          sourceVersionId: price.tariffVersionId,
-          frozenAt: now,
-        },
+        ...(price.ok
+          ? {
+              price: {
+                mode: "FIXED_SHUTTLE" as const,
+                total: price.total,
+                sourceVersionId: price.tariffVersionId,
+                frozenAt: now,
+              },
+            }
+          : {}),
       };
       await tx.insertBooking(booking);
       events.push(event("shuttle.booking_received.notify_central", { runId: placement.run.id }));
+      if (!price.ok) events.push(event("shuttle.price_approval_required.notify_central", { runId: placement.run.id }));
       events.push(event("booking.request_received.notify_customer"));
       if (sourcePartnerId !== undefined) {
         events.push(event("shuttle.booking_received.notify_site_owner", { partnerId: sourcePartnerId }));
@@ -181,8 +191,8 @@ export class BookingService {
           lookupToken,
           product: req.product,
           status: booking.status,
-          price: { amountMinor: price.total.amountMinor, currency: price.total.currency },
-          next: "central_operations_will_confirm",
+          ...(price.ok ? { price: { amountMinor: price.total.amountMinor, currency: price.total.currency } } : {}),
+          next: price.ok ? "central_operations_will_confirm" : "price_requires_approval",
         },
       };
     }
@@ -258,6 +268,8 @@ export class BookingService {
 
   quoteShuttle(routeCode: string, date: string, passengers: number): ServiceResult<unknown> {
     const r = priceShuttle(this.#d.shuttleTariff, routeCode, date, passengers);
+    // 5+ kişi hata değil, iş kuralıdır: fiyat yok, onay gerekir.
+    if (!r.ok && r.reason === "requires_approval") return { ok: true, status: 200, body: { requiresApproval: true } };
     if (!r.ok) return fail(422, r.reason);
     return {
       ok: true,
@@ -283,6 +295,8 @@ export class BookingService {
         pickupAt: b.request.pickupAt,
         passengers: b.request.passengers,
         shuttleRunId: b.shuttleRunId ?? null,
+        price: b.price ? { amountMinor: b.price.total.amountMinor, currency: b.price.total.currency, mode: b.price.mode } : null,
+        priceStatus: b.price ? "set" : b.product === "shuttle" ? "requires_approval" : "quote_pending",
         isDuplicate: b.isDuplicate,
         isTest: b.isTest,
       })),
@@ -293,6 +307,7 @@ export class BookingService {
     return this.#d.store.transaction(async (tx) => {
       const b = await tx.getBookingByRef(ref);
       if (!b) return fail(404, "not_found");
+      if (b.product === "shuttle" && !b.price) return fail(409, "price_requires_approval");
       try {
         assertTransition(b.status, "confirmed");
       } catch {
@@ -312,6 +327,39 @@ export class BookingService {
         },
       ]);
       return { ok: true, status: 200, body: { ref, status: "confirmed" } };
+    });
+  }
+
+  /**
+   * 5+ kişilik shuttle için fiyatın elle onayı (Owner kararı: yeni karar verilene kadar ayrı onay).
+   * Onaylanan tutar dondurulur; 70/20/10 paylaşımı bu tutar üzerinden otomatik hesaplanır.
+   * NOT: onaylayanın kimliği, gerçek yönetim girişi (IdP + 2FA, SEL-332) gelene kadar kaydedilemiyor.
+   */
+  async approveShuttlePrice(ref: string, input: Record<string, unknown>): Promise<ServiceResult<unknown>> {
+    const { amountMinor, currency } = input;
+    if (!Number.isSafeInteger(amountMinor) || (amountMinor as number) <= 0) return fail(422, "amountMinor_invalid");
+    if (currency !== this.#d.shuttleTariff.currency) return fail(422, "currency_must_match_tariff");
+    return this.#d.store.transaction(async (tx) => {
+      const b = await tx.getBookingByRef(ref);
+      if (!b) return fail(404, "not_found");
+      if (b.product !== "shuttle") return fail(409, "not_a_shuttle_booking");
+      if (b.price) return fail(409, "price_already_set");
+      if (b.status !== "request") return fail(409, "invalid_transition");
+      const now = this.#d.clock().toISOString();
+      const ok = await tx.updateBooking(
+        {
+          ...b,
+          price: {
+            mode: "SHUTTLE_MANUAL_APPROVED",
+            total: money(amountMinor as number, this.#d.shuttleTariff.currency),
+            sourceVersionId: `manual-approval:${this.#d.shuttleTariff.id}`,
+            frozenAt: now,
+          },
+        },
+        b.version,
+      );
+      if (!ok) return fail(409, "version_conflict");
+      return { ok: true, status: 200, body: { ref, price: { amountMinor, currency }, priceStatus: "set" } };
     });
   }
 
@@ -348,6 +396,10 @@ export class BookingService {
           outcome.push({ ref: b.ref, result: `skipped_${b.status}` });
           continue;
         }
+        if (!b.price) {
+          outcome.push({ ref: b.ref, result: "skipped_price_not_approved" });
+          continue;
+        }
         const updated: StoredBooking = {
           ...b,
           status: "delivered",
@@ -361,7 +413,7 @@ export class BookingService {
             paymentStatus: updated.paymentStatus,
             isTest: b.isTest,
             isDuplicate: b.isDuplicate,
-            shareBase: b.price!.total,
+            shareBase: b.price.total,
             ...(b.sourcePartnerId !== undefined ? { sourcePartnerId: b.sourcePartnerId } : {}),
           },
           run.carrierPayeeId,

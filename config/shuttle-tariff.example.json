@@ -1,11 +1,9 @@
 {
-  "_status": "EXAMPLE — hat kodları ve geçerlilik tarihleri DOĞRULANMADI (Linear: RUNTIME_PRICE_AUTHORITY=UNVERIFIED). Canlı fiyat kaynağı CRS fiyat motorudur.",
-  "id": "shuttle-example-2026-v1",
+  "_status": "Fiyatlar OWNER KARARI 03.11.2026: rezervasyon TOPLAMI 1 kişi 30 €, 2 kişi 50 €, 3 kişi 60 €, 4 kişi 70 €; 5+ kişi ayrı onay. Hat kodları ve geçerlilik tarihleri hâlâ DOĞRULANMADI (K8). Canlı fiyat kaynağı CRS fiyat motorudur.",
+  "id": "shuttle-owner-2026-11-03",
   "currency": "EUR",
   "routes": ["AYT-ALANYA", "ALANYA-AYT", "GZP-ALANYA", "ALANYA-GZP"],
-  "validFrom": "2026-11-01",
-  "validTo": "2027-10-31",
+  "validFrom": "2026-11-03",
   "maxPassengers": 10,
-  "totalsMinor": [3000, 5000, 6000],
-  "extraPerPassengerMinor": 1000
+  "totalsMinor": [3000, 5000, 6000, 7000]
 }

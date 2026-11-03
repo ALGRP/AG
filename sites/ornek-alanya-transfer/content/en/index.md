@@ -19,7 +19,7 @@ The **shared shuttle** is the budget option: you share a minibus with other trav
 
 ## Shuttle prices
 
-Shuttle prices are per group, for the whole group, one way.
+Shuttle prices are the total for the whole booking, one way — not per person.
 
 {{shuttle_prices}}
 

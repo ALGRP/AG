@@ -1,4 +1,6 @@
 // Aylık ekonomi hesapları — Konsorsiyum Partner Sunumu V3 (03.11.2026), slayt 7 ve 10–15.
+// DİKKAT: sunumun shuttle rakamları (slayt 9–12) iptal edilen 35 € kişi başı varsayımına dayanır;
+// bu fonksiyonlar Owner'ın 03.11 shuttle kararıyla (rezervasyon toplamı × %20) çalışır.
 // Amaç: panelde ve satış görüşmesinde aynı formülün kullanılması. Sonuçlar KAZANÇ GARANTİSİ
 // veya NET KÂR değildir: vergi, KDV, iade, iptal ve araç maliyetleri dahil değildir.
 // Tüm tutarlar cent (minor unit), tek para birimi (EUR).
@@ -20,11 +22,14 @@ export const DECK_V3_PARTNER_COSTS: PartnerCostAssumptions = Object.freeze({
 export interface PartnerScenario {
   /** Günlük ortalama private iş (kesirli olabilir: 1,5). */
   readonly privatePerDay: number;
-  /** Günlük shuttle bileti (yolcu). */
-  readonly shuttleTicketsPerDay: number;
+  /** Günlük shuttle REZERVASYONU (kişi değil; fiyat rezervasyon toplamıdır). */
+  readonly shuttleBookingsPerDay: number;
   /** Private iş başına uydu site katkısı = satış − pass (sunum: 32,50 €). */
   readonly privateContributionMinor: number;
-  /** Shuttle bileti başına uydu site komisyonu (sunum: 35 € × %20 = 7 €). */
+  /**
+   * Shuttle rezervasyonu başına uydu site payı = rezervasyon toplamı × %20 (Owner kararı 03.11.2026),
+   * ör. 2 kişilik 50 € → 10 €. Sunumdaki "35 € bilet / 7 €" varsayımı İPTAL edildi.
+   */
   readonly shuttleContributionMinor: number;
 }
 
@@ -36,7 +41,7 @@ export interface PartnerMonth {
 
 export function partnerMonth(s: PartnerScenario, c: PartnerCostAssumptions = DECK_V3_PARTNER_COSTS): PartnerMonth {
   const gross = Math.round(
-    (s.privatePerDay * s.privateContributionMinor + s.shuttleTicketsPerDay * s.shuttleContributionMinor) * c.daysInMonth,
+    (s.privatePerDay * s.privateContributionMinor + s.shuttleBookingsPerDay * s.shuttleContributionMinor) * c.daysInMonth,
   );
   const costs = c.subscriptionMinor + c.adsPerDayMinor * c.daysInMonth;
   return { grossContributionMinor: gross, costsMinor: costs, afterCostsMinor: gross - costs };

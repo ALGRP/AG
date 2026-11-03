@@ -15,7 +15,7 @@ updated: 2026-11-03
 
 ## Shuttle fiyatları
 
-Fiyatlar tek yön ve grubun tamamı içindir.
+Fiyatlar tek yön ve rezervasyonun toplamıdır; kişi başı değildir.
 
 {{shuttle_prices}}
 

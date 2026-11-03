@@ -40,7 +40,10 @@
       if (!route || !at || !pax) return;
       fetch(api + "/v1/public/shuttle-quote?route=" + encodeURIComponent(route) + "&date=" + encodeURIComponent(at.slice(0, 10)) + "&passengers=" + encodeURIComponent(pax))
         .then(function (r) { return r.ok ? r.json() : null; })
-        .then(function (q) { if (q) priceEl.textContent = t(form, "price") + ": " + money(q, locale); })
+        .then(function (q) {
+          if (!q) return;
+          priceEl.textContent = q.requiresApproval ? t(form, "needs-approval") : t(form, "price") + ": " + money(q, locale);
+        })
         .catch(function () {});
     }
     form.addEventListener("change", sync);
@@ -81,7 +84,8 @@
           btn.disabled = false;
           if (!res.ok) { show(out, t(form, "error")); return; }
           var b = res.body;
-          show(out, (b.product === "shuttle" ? t(form, "ok-shuttle") : t(form, "ok-private")) + " " +
+          var lead = b.next === "price_requires_approval" ? t(form, "ok-approval") : (b.product === "shuttle" ? t(form, "ok-shuttle") : t(form, "ok-private"));
+          show(out, lead + " " +
             t(form, "ref") + ": " + b.ref + " · " + t(form, "token") + ": " + b.lookupToken +
             (b.price ? " · " + money(b.price, locale) : ""));
           form.querySelectorAll("input:not([type=radio]):not([type=checkbox]),textarea").forEach(function (i) { if (i.name !== "passengers") i.value = ""; });
