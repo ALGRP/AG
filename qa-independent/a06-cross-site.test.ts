@@ -1,7 +1,7 @@
 // Area 6 — cross-site data access (public + admin endpoints, tenant-scoped authorisation).
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
-import { ADMIN_TOKEN, ORIGIN, W45, harness } from "./harness.ts";
+import { ADMIN_TOKEN, ORIGIN, SITE_TOKEN, W45, harness } from "./harness.ts";
 
 describe("A6 cross-site access", () => {
   const h = harness();
@@ -68,4 +68,43 @@ describe("A6 cross-site access", () => {
     assert.ok(stored);
     assert.equal(JSON.stringify(stored).includes(created.body.lookupToken), false, "plaintext lookup token persisted in the idempotency store");
   });
+
+  // ---- QA-F3 acceptance with a site-scoped credential (LOCAL_ONLY; the credential, not a header, carries the scope) ----
+  const asPartner = { authorization: `Bearer ${SITE_TOKEN.partner}` };
+
+  it("A6.8 [RULE] a site-scoped credential sees only its own site, whatever x-site-id says", { todo: "QA-F3 · Codex Paket-02 (site kapsamlı kimlik)" }, async () => {
+    for (const extra of [{}, { "x-site-id": "rival-site" }, { "x-site-id": "partner-site" }]) {
+      const r = await h.adminGet("/v1/admin/bookings", { ...asPartner, ...extra });
+      if (r.status === 403) continue;
+      assert.equal(r.status, 200, `site credential refused for its own data (${JSON.stringify(extra)}): ${r.status}`);
+      const seen = new Set((r.body as any[]).map((x) => x.siteId));
+      assert.deepEqual([...seen], ["partner-site"], `site credential with ${JSON.stringify(extra)} sees: ${[...seen].join(", ")}`);
+    }
+    const st = await h.adminGet(`/v1/admin/settlements/${W45}`, { ...asPartner, "x-site-id": "rival-site" });
+    assert.equal(st.status, 200, `own statement refused: ${st.status}`);
+    const parties = new Set<string>([
+      ...(st.body.site_receivables as any[]).map((x) => x.site_party_id),
+      ...(st.body.entries as any[]).map((x) => x.selling_party_id),
+    ]);
+    assert.ok([...parties].every((p) => p === "p-001"), `statement for partner-site credential contains parties: ${[...parties].join(", ")}`);
+  });
+
+  it("A6.9 [RULE] a site-scoped credential cannot use platform operations", { todo: "QA-F3 · Codex Paket-02 (platform uçları)" }, async () => {
+    const calls: [string, () => Promise<{ status: number }>][] = [
+      ["GET outbox", () => h.adminGet("/v1/admin/outbox", asPartner)],
+      ["POST receipts", () => h.adminPost("/v1/admin/receipts", { weekId: W45, payerId: "sup-a", payeeId: "agos", amountMinor: 1, currency: "EUR", bankReference: "TR-SCOPE-1", paidAt: "2026-11-04T08:00:00Z" }, asPartner)],
+      ["POST close", () => h.adminPost(`/v1/admin/settlements/${W45}/close`, {}, asPartner)],
+      ["POST offsets", () => h.adminPost("/v1/admin/settlements/offsets", { fromWeekId: W45, debtorId: "agos", creditorId: "p-001", amountMinor: 1, reason: "kapsam denemesi", writtenApprovalReference: "ONAY-SCOPE-1" }, asPartner)],
+      ["POST run assign", async () => h.adminPost(`/v1/admin/shuttle-runs/${await h.runOf(a.ref)}/assign`, { supplierId: "sup-a" }, asPartner)],
+    ];
+    const got = await Promise.all(calls.map(async ([name, f]) => `${name}:${(await f()).status}`));
+    assert.deepEqual(got, calls.map(([name]) => `${name}:403`));
+  });
+
+  it("A6.10 [RULE] another site's booking reference is not found for a site-scoped credential, and stays unchanged", { todo: "QA-F3 · Codex Paket-02 (varlık sızdırmaz)" }, async () => {
+    const r = await h.adminPost(`/v1/admin/bookings/${b.ref}/cancel`, {}, asPartner);
+    assert.equal(r.status, 404, `cancel of rival-site booking with partner-site credential returned ${r.status}`);
+    assert.notEqual((await h.row(b.ref)).status, "cancelled");
+  });
 });
+

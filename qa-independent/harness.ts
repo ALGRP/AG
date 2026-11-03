@@ -15,6 +15,15 @@ import { BookingService, type Actor } from "../apps/api/src/service.ts";
 import { MemoryStore } from "../apps/api/src/store.ts";
 
 export const ADMIN_TOKEN = "qa-independent-admin-token-0001";
+/**
+ * QA-F3 (LOCAL_ONLY): site-scoped test credentials -> siteId. The API does not know them yet; once Paket-02 adds
+ * site-scoped principals, these map to one site each. Not a production identity model (SEL-332).
+ */
+export const SITE_TOKENS: Readonly<Record<string, string>> = {
+  "qa-site-token-partner-000000001": "partner-site",
+  "qa-site-token-rival-0000000001": "rival-site",
+};
+export const SITE_TOKEN = { partner: "qa-site-token-partner-000000001", rival: "qa-site-token-rival-0000000001" } as const;
 export const MANAGER: Actor = { id: "qa-fin-mgr", role: "finance_manager", mfa: true };
 export const W45 = "2026-W45"; // Mon 2026-11-02 00:00 IST (2026-11-01T21:00Z) .. Mon 2026-11-09 00:00 IST
 export const W46 = "2026-W46";
@@ -229,7 +238,8 @@ export function harness(opts: HarnessOptions = {}) {
     },
     // ---------------- HTTP (local only) ----------------
     async start(): Promise<void> {
-      server = createApiServer({ service, sites: siteMap, devOrigins, adminToken: ADMIN_TOKEN, publicRateLimitPerMinute: 100000 });
+      const siteScope = { siteTokens: SITE_TOKENS }; // ignored until the API supports site-scoped principals
+      server = createApiServer({ service, sites: siteMap, devOrigins, adminToken: ADMIN_TOKEN, publicRateLimitPerMinute: 100000, ...siteScope });
       await new Promise<void>((r) => server!.listen(0, "127.0.0.1", () => r()));
       h.base = `http://127.0.0.1:${(server!.address() as AddressInfo).port}`;
     },
