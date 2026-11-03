@@ -208,4 +208,15 @@ describe("A4 statement disputes timing (T3)", () => {
       assert.equal(r.status, 201, `receipt ${JSON.stringify(bad)} accepted and first close now demands ${r.body.error}`);
     }
   });
+
+  it("A4.15 [RULE] an ancient but self-consistent receipt (old week, paid in that week) must not force an ancient first close", { todo: "PR1-N7 · Codex Paket-01e (768667a eksik kalan durum)" }, async () => {
+    const h = harness();
+    h.setNow("2026-11-04T10:00:00Z");
+    await h.shuttleJob({}, "sup-a", 5000); // W45 activity
+    await h.service.addReceipt({ weekId: "2020-W01", payerId: "sup-a", payeeId: "agos", amountMinor: 500, currency: "EUR", bankReference: "TR-ANCIENT-1", paidAt: "2020-01-01T10:00:00Z" });
+    h.setNow("2026-11-16T06:00:00Z");
+    const r = await h.close(W45);
+    assert.equal(r.status, 201, `ancient receipt accepted and first close now demands ${r.body.error}`);
+  });
 });
+

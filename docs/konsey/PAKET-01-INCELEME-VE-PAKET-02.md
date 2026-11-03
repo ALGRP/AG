@@ -370,3 +370,38 @@ Sabitlenen sürüm `66d5ecba2c481dc7a3345dff32d4deff38c857a8`. `npm run check`: 
 **Kapsam dışı:** gerçek IdP (SEL-332), staging veritabanı (SEL-329), canlı göç.
 
 **Sonraki sıra (değişmedi):** QA-F14 → QA-F9 (H-26) → QA-F11 → PKG-F04b (H-25).
+
+## 12. PR1-N6, PR2-N1 ve QA-F3 akran incelemesi (`6f29d50` → `afaac11`)
+
+Sabitlenen sürüm `afaac11eb5644687a0c68ffd0ddf459ed83255aa`.
+
+**Bu oturumda koşulanlar:**
+- `npm run check`: **193 test: 179 geçti, 0 kaldı, 13 todo, 1 skip** (Codex ile aynı).
+- PostgreSQL 16.15, atılabilir yerel küme (ağ yok, gerçek veri yok): `AG_TEST_PG=1 AG_TEST_PG_ISOLATED=YES` ile `tenant-rls.test.ts` + `schema-probes.test.ts`: **42 test: 7 geçti, 0 kaldı, 35 todo.** RLS testleri 4/4; "QA-F3 (DB)" geçti; P1–P16 ve C01–C05 reddedildi. **Q01–Q35 (QA-F4) hâlâ todo; geçti sayılmaz.** Küme sonra durduruldu.
+- Test dosyalarında **assertion değişikliği yok**; yalnız `todo` işaretleri kaldırıldı. Fikstür değişikliği yok.
+
+| Commit | Kalem | Karar | Kanıt ve not |
+| -- | -- | -- | -- |
+| 759580a | PR2-N1 denetim geçmişi | **PASS** | A8.7 geçiyor. Her karar `disputeResolutionHistory` listesine ekleniyor; outbox anahtarı karar sırasıyla ayrışıyor. Tekrar gönderim `no_open_dispute` (409). Yerel defter kalıcı CRS değildir. |
+| 768667a | PR1-N6 dekont tarihi | **NEEDS REVIEW** | A4.14 geçiyor; 6 hafta geç gelen gerçek ödeme (faaliyetli hafta) kabul ediliyor. **Ama** kendi içinde tutarlı eski dekont (`weekId` 2020-W01, `paidAt` 2020-01-01) kabul ediliyor ve ilk kapanışı 2020-W01'e zorluyor (**PR1-N7**, A4.15 `todo`). 28 gün eşiği yalnız `paidAt − hafta sonu` farkına bakıyor; haftanın **bugüne göre** yaşına bakmıyor. Gelecek tarihli dekont da kabul ediliyor (P3). 28 gün yerel bir eşik; finansal saklama politikası değil. |
+| fb3df6a | QA-F3 API | **PASS (yerel)** | A6.3, A6.4, A6.8, A6.9, A6.10 geçiyor. Site anahtarıyla `Origin` ve `x-site-id` kapsamı değiştirmiyor; outbox ve platform uçları 403; bilinmeyen `x-site-id` 403; site anahtarıyla gövdede `raisedBy: p-003` gönderilen ekstre itirazı `p-001` adına kaydediliyor. Site anahtarları sentetik ve yalnız yerel. |
+| 794daff | QA-F3 ekstre | **PASS (yerel)** | A6.5 ve A6.8 ekstre kısmı geçiyor. Kendi tarama probum: rakip site rezervasyonu, rakip tedarikçi, rakip dekont, eşleşmeyen dekont, rakip itiraz notu, rakip mahsup ve rakip ekstre itirazı varken partner-site W45 ve W46 ekstrelerinde **sızıntı yok**. `supplier_statements`, `agos_fees` ve `unmatched_receipts` site görünümünde boş. Platform raporu değişmedi (`weekReport` aynı yol). |
+| afaac11 | QA-F3 DB | **PASS (aday)** | 12 tabloda `ENABLE` + `FORCE RLS`; tablolar `ag_owner`'a ait; `ag_app` `NOBYPASSRLS`, `DELETE` yok, `ag_platform` üyeliği yok; kapsamsız oturum 0 satır; sahte `app.scope=platform` 0 satır. Yalnız atılabilir veritabanında. |
+
+**Yeni bulgular ve notlar:**
+
+| # | Önem | Bulgu | Kabul |
+| -- | -- | -- | -- |
+| **PR1-N7** | P2 | Eski ama kendi içinde tutarlı dekont ilk kapanışı yıllar öncesine zorluyor (768667a eksik kalan durum). Öneri: faaliyetsiz haftaya ait dekontta `now − hafta sonu > 28 gün` ise reddet; ya da ilk kapanış hesabında dekontları sayma, eşleşmeyen dekont olarak raporla. | `A4.15` (`todo: PR1-N7`) |
+| PR1-N8 | P3 | Gelecek tarihli `paidAt` kabul ediliyor. | gözlem |
+| QA-F3-N1 | P3 | `listBookingsForActor` önce tüm sitelerden son 200 kaydı alıp sonra süzüyor; yoğun bir başka site, sitenin eski kayıtlarını listeden düşürebilir. Sızıntı değil, eksik liste. Sayfalama ve kapsamlı sorgu CRS adaptöründe. | gözlem |
+| QA-F3-N2 | Tasarım | `ag_app` yalnız okuyabiliyor; yazma `ag_platform` gerektiriyor ve ona geçiş yok. Uygulamanın yazma yolu (doğrulanmış ağ geçidi + kapsamlı bağlantı) SEL-331/332 tasarımında çözülmeli. `app.party_id` kriptografik kimlik değil; bağlantıyı ele geçiren onu ayarlayabilir. | SEL-332 |
+| QA-F3-N3 | Tasarım | `ag_app` `LOGIN … PASSWORD NULL`: yerel `trust` doğrulamasında parolasız giriş. Atılabilir küme için kabul; staging ve üretimde yasak. | SEL-329 |
+| QA-F3-N4 | Kapsam | `partner`, `site`, `subscription_invoice` gibi kayıt tablolarına hiçbir role izin verilmedi (platform dahil). Platform ekranları için ayrı izin gerekecek. | sonraki DB paketi |
+
+**Durum:** 194 test (A4.15 eklendi): 179 geçti, 0 kaldı, 14 todo, 1 skip.
+
+**Sıradaki iş:**
+1. Paket-01e: PR1-N7 (A4.15), küçük tek commit.
+2. Paket-02 devam: **QA-F14** (tahsil edilmiş ama tamamlanmamış rezervasyonun görünmesi, A2.7). Şartname §7.5.
+3. Sonra QA-F9 (H-26), QA-F11, PKG-F04b (H-25). QA-F4 DB kısıtları (35 prob) ayrı paket.
