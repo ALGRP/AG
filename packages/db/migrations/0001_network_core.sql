@@ -37,6 +37,13 @@ CREATE TABLE site (
   owner_email     text NOT NULL,
   whatsapp_e164   text NOT NULL CHECK (whatsapp_e164 ~ '^\+[0-9]{8,15}$'),
   status          site_status NOT NULL DEFAULT 'preview',
+  -- Özel/VIP: pass_to_network = site satar, iş pass bedeliyle AG ağına aktarılır (Partner Sunumu V3);
+  --           self_operate    = site sahibi operasyonu kendisi yapar.
+  private_mode    text NOT NULL DEFAULT 'pass_to_network' CHECK (private_mode IN ('pass_to_network', 'self_operate')),
+  -- Site sahibinin kendi satış fiyatları (cent); yoksa talep fiyatsız gelir.
+  sale_private_minor bigint CHECK (sale_private_minor > 0),
+  sale_vip_minor  bigint CHECK (sale_vip_minor > 0),
+  sale_currency   currency,
   gsc_property    text,
   created_at      timestamptz NOT NULL DEFAULT now(),
   CHECK ((ownership = 'partner') = (partner_id IS NOT NULL))
@@ -52,7 +59,8 @@ CREATE TABLE site_domain (
 );
 CREATE UNIQUE INDEX site_domain_one_canonical ON site_domain(site_id) WHERE is_canonical;
 
--- Kurulum / aylık ücret (Owner talebi 03.11.2026: 200 €; tutar plan satırında, kodda sabit değil).
+-- Abonelik: Partner Sunumu V3 — 200 €/ay SaaS aboneliği uydu site sahibinden Alanya Group'a.
+-- Google Ads bütçesi (40 €/gün) partnerin kendi gideridir; burada TUTULMAZ, merkezin cirosu değildir.
 CREATE TABLE subscription_plan (
   id              text PRIMARY KEY,
   setup_fee_minor bigint NOT NULL CHECK (setup_fee_minor >= 0),
@@ -60,6 +68,11 @@ CREATE TABLE subscription_plan (
   currency        currency NOT NULL,
   active          boolean NOT NULL DEFAULT true
 );
+
+-- Site başı değişken maliyet (hosting + yazılım + destek; sunum varsayımı 40 €) iç maliyet olarak plan satırında.
+ALTER TABLE subscription_plan ADD COLUMN site_cost_minor bigint NOT NULL DEFAULT 0 CHECK (site_cost_minor >= 0);
+INSERT INTO subscription_plan (id, setup_fee_minor, monthly_fee_minor, currency, site_cost_minor)
+  VALUES ('partner-saas-deck-v3', 0, 20000, 'EUR', 4000);
 
 CREATE TABLE subscription_invoice (
   id              uuid PRIMARY KEY,
@@ -97,6 +110,15 @@ CREATE TABLE split_policy (
 );
 INSERT INTO split_policy VALUES ('shuttle-split-v1', 7000, 2000, 1000);
 
+-- Özel/VIP pass bedeli (sunum örnek varsayımı: private 47,50 €, VIP 60 €).
+CREATE TABLE pass_policy (
+  id              text PRIMARY KEY,
+  currency        currency NOT NULL,
+  pass_private_minor bigint NOT NULL CHECK (pass_private_minor > 0),
+  pass_vip_minor  bigint NOT NULL CHECK (pass_vip_minor > 0)
+);
+INSERT INTO pass_policy VALUES ('pass-deck-v3-example', 'EUR', 4750, 6000);
+
 CREATE TABLE shuttle_run (
   id              uuid PRIMARY KEY,
   route_code      text NOT NULL,
@@ -133,8 +155,9 @@ CREATE TABLE booking (
   customer_email  text NOT NULL,
   customer_phone  text NOT NULL,
   customer_locale text NOT NULL,
-  price_mode      text CHECK (price_mode IN ('FIXED_SHUTTLE', 'PARTNER_QUOTE')),
+  price_mode      text CHECK (price_mode IN ('FIXED_SHUTTLE', 'PARTNER_PRICE_WITH_PASS', 'PARTNER_QUOTE')),
   price_minor     bigint,
+  pass_minor      bigint CHECK (pass_minor > 0),
   price_currency  currency,
   price_source_version text,
   price_frozen_at timestamptz,
@@ -147,6 +170,8 @@ CREATE TABLE booking (
   version         int NOT NULL DEFAULT 1,
   CHECK ((product = 'shuttle') = (route_code IS NOT NULL)),
   CHECK ((price_minor IS NULL) = (price_currency IS NULL)),
+  CHECK ((price_mode = 'PARTNER_PRICE_WITH_PASS') = (pass_minor IS NOT NULL)),
+  CHECK (pass_minor IS NULL OR pass_minor <= price_minor),
   CHECK ((ops_owner_kind = 'partner') = (ops_owner_partner_id IS NOT NULL))
 );
 CREATE INDEX booking_fingerprint ON booking(fingerprint) WHERE status <> 'cancelled';
@@ -180,13 +205,13 @@ CREATE TABLE ledger_entry (
   party_id        text NOT NULL,
   amount_minor    bigint NOT NULL,
   currency        currency NOT NULL,
-  kind            text NOT NULL CHECK (kind IN ('shuttle_share', 'reversal')),
-  policy_id       text NOT NULL REFERENCES split_policy(id),
+  kind            text NOT NULL CHECK (kind IN ('shuttle_share', 'pass_share', 'reversal')),
+  policy_id       text NOT NULL,              -- split_policy.id veya pass_policy.id
   reverses_entry_id uuid UNIQUE REFERENCES ledger_entry(id),  -- bir satır en fazla bir kez ters çevrilir
   created_at      timestamptz NOT NULL DEFAULT now(),
   CHECK ((kind = 'reversal') = (reverses_entry_id IS NOT NULL))
 );
-CREATE UNIQUE INDEX ledger_one_share_per_party ON ledger_entry(booking_id, party_kind) WHERE kind = 'shuttle_share';
+CREATE UNIQUE INDEX ledger_one_share_per_party ON ledger_entry(booking_id, party_kind) WHERE kind <> 'reversal';
 
 CREATE FUNCTION ledger_entry_immutable() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN

@@ -153,6 +153,13 @@ export function createApiServer(opts: HttpOptions): Server {
         const confirm = /^\/v1\/admin\/bookings\/([A-Z0-9-]+)\/confirm$/.exec(path);
         if (req.method === "POST" && confirm) return reply(res, await opts.service.confirm(confirm[1]!));
 
+        const done = /^\/v1\/admin\/bookings\/([A-Z0-9-]+)\/complete$/.exec(path);
+        if (req.method === "POST" && done) {
+          const body = await readJson(req);
+          if (!body.ok) return send(res, body.status, { error: body.error });
+          return reply(res, await opts.service.completePrivate(done[1]!, (body.value ?? {}) as Record<string, unknown>));
+        }
+
         const run = /^\/v1\/admin\/shuttle-runs\/([A-Za-z0-9-]+)\/(assign|complete)$/.exec(path);
         if (req.method === "POST" && run) {
           const body = await readJson(req);

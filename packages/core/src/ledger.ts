@@ -1,6 +1,7 @@
 import type { BookingStatus, PaymentStatus } from "./booking.ts";
 import { splitShuttleRevenue, type SplitPolicy } from "./commission.ts";
-import { negate, type Money } from "./money.ts";
+import { money, negate, type Money } from "./money.ts";
+import { splitPassToNetwork } from "./pass.ts";
 
 // Defter (ledger) kuralları — AGOS değişmezleri:
 // * Finans kaydı değişmez ve silinmez; düzeltme ayrı (ters) kayıtla yapılır.
@@ -18,7 +19,7 @@ export interface LedgerEntry {
   readonly bookingId: string;
   readonly party: PartyRef;
   readonly amount: Money;
-  readonly kind: "shuttle_share" | "reversal";
+  readonly kind: "shuttle_share" | "pass_share" | "reversal";
   readonly policyId: string;
   readonly createdAt: string;
   readonly reversesEntryId?: string;
@@ -70,6 +71,69 @@ export function earnShuttleShares(
   return { ok: true, entries };
 }
 
+export interface EarnablePassBooking {
+  readonly id: string;
+  readonly status: BookingStatus;
+  readonly paymentStatus: PaymentStatus;
+  readonly isTest: boolean;
+  readonly isDuplicate: boolean;
+  readonly sourcePartnerId?: string;
+  /** Rezervasyonda dondurulmuş satış fiyatı ve pass bedeli. */
+  readonly sale: Money;
+  readonly pass: Money;
+  readonly passPolicyId: string;
+}
+
+export type EarnPassResult =
+  | { ok: true; entries: LedgerEntry[] }
+  | {
+      ok: false;
+      reason:
+        | "not_delivered"
+        | "not_paid"
+        | "test_booking"
+        | "duplicate_booking"
+        | "payout_exceeds_pass"
+        | "currency_mismatch"
+        | "negative_payout";
+    };
+
+/**
+ * Özel/VIP pass modeli: site sahibi = satış − pass; araç = atamada belirlenen hak ediş (≤ pass);
+ * merkez = pass − araç hak edişi. Kaynak AG'nin kendi sitesiyse site katkısı merkeze yazılır.
+ */
+export function earnPassShares(
+  booking: EarnablePassBooking,
+  carrierPayeeId: string,
+  carrierPayout: Money,
+  ctx: { now: string; newId: () => string },
+): EarnPassResult {
+  if (booking.isTest) return { ok: false, reason: "test_booking" };
+  if (booking.isDuplicate) return { ok: false, reason: "duplicate_booking" };
+  if (booking.status !== "delivered") return { ok: false, reason: "not_delivered" };
+  if (booking.paymentStatus !== "paid") return { ok: false, reason: "not_paid" };
+  const net = splitPassToNetwork(booking.pass, carrierPayout);
+  if (!net.ok) return net;
+  const partnerPart = money(booking.sale.amountMinor - booking.pass.amountMinor, booking.sale.currency);
+  const mk = (party: PartyRef, amount: Money): LedgerEntry => ({
+    id: ctx.newId(),
+    bookingId: booking.id,
+    party,
+    amount,
+    kind: "pass_share",
+    policyId: booking.passPolicyId,
+    createdAt: ctx.now,
+  });
+  const entries = [mk({ kind: "carrier", id: carrierPayeeId }, net.carrier)];
+  if (booking.sourcePartnerId !== undefined) {
+    entries.push(mk({ kind: "partner", id: booking.sourcePartnerId }, partnerPart));
+    entries.push(mk({ kind: "platform", id: "central" }, net.platform));
+  } else {
+    entries.push(mk({ kind: "platform", id: "central" }, money(net.platform.amountMinor + partnerPart.amountMinor, net.platform.currency)));
+  }
+  return { ok: true, entries };
+}
+
 /** Ödeme sonrası iptal / iade / chargeback: her satır için tek ters kayıt. Zaten ters çevrilmiş satır atlanır. */
 export function reverseEntries(
   all: readonly LedgerEntry[],
@@ -78,7 +142,7 @@ export function reverseEntries(
 ): LedgerEntry[] {
   const reversed = new Set(all.filter((e) => e.kind === "reversal").map((e) => e.reversesEntryId));
   return all
-    .filter((e) => e.bookingId === bookingId && e.kind === "shuttle_share" && !reversed.has(e.id))
+    .filter((e) => e.bookingId === bookingId && e.kind !== "reversal" && !reversed.has(e.id))
     .map((e) => ({
       id: ctx.newId(),
       bookingId,

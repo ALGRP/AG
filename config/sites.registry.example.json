@@ -3,8 +3,17 @@
     "id": "ornek-alanya-transfer",
     "ownership": "partner",
     "partnerId": "partner-demo-001",
-    "domains": ["ornek-alanya-transfer.example", "www.ornek-alanya-transfer.example"],
+    "domains": [
+      "ornek-alanya-transfer.example",
+      "www.ornek-alanya-transfer.example"
+    ],
     "ownerEmail": "owner@ornek-alanya-transfer.example",
-    "status": "preview"
+    "status": "preview",
+    "privateMode": "pass_to_network",
+    "salePrices": {
+      "private": 8000,
+      "vip": 12000
+    },
+    "saleCurrency": "EUR"
   }
 ]

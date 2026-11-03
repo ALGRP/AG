@@ -4,13 +4,17 @@ import {
   balances,
   bookingRef,
   duplicateFingerprintInput,
+  earnPassShares,
   earnShuttleShares,
+  money,
+  splitPass,
   placeInPool,
   priceShuttle,
   resolveSite,
   slotStartFor,
   validateIntake,
   type FieldError,
+  type PassPolicy,
   type ShuttleTariffVersion,
   type SiteRecord,
   type SplitPolicy,
@@ -22,6 +26,7 @@ export interface ServiceDeps {
   readonly sites: ReadonlyMap<string, SiteRecord>;
   readonly shuttleTariff: ShuttleTariffVersion;
   readonly splitPolicy: SplitPolicy;
+  readonly passPolicy: PassPolicy;
   readonly pool: { readonly slotMinutes: number; readonly vehicleCapacity: number };
   /** Yerel önizleme için ek origin'ler (ör. http://localhost:4321). Üretimde boş. */
   readonly devOrigins: readonly string[];
@@ -182,14 +187,37 @@ export class BookingService {
       };
     }
 
-    // Özel / VIP: operasyonu talebi getiren site sahibi yapar; kopyası merkezde (tek kayıt).
+    // Özel / VIP — iki model (site ayarı):
+    //  pass_to_network: site sahibi kendi fiyatıyla satar, iş pass bedeliyle AG ağına aktarılır (Partner Sunumu V3).
+    //  self_operate:    site sahibi operasyonu kendisi yapar; merkez kaydı tutar ve bilgilendirilir.
+    const product = req.product as "private" | "vip";
+    const toNetwork = site.site.privateMode === "pass_to_network";
+    let price: StoredBooking["price"];
+    if (toNetwork && site.site.salePrices?.[product] !== undefined) {
+      const sp = splitPass(product, site.site.salePrices, site.site.saleCurrency!, this.#d.passPolicy);
+      if (!sp.ok) {
+        console.error("site_pricing_misconfigured", site.site.id, sp.reason);
+        return fail(503, "site_pricing_misconfigured");
+      }
+      price = {
+        mode: "PARTNER_PRICE_WITH_PASS",
+        total: sp.split.sale,
+        pass: sp.split.pass,
+        sourceVersionId: sp.split.policyId,
+        frozenAt: now,
+      };
+    }
     const booking: StoredBooking = {
       ...base,
-      operationsOwner: sourcePartnerId !== undefined ? { kind: "partner", partnerId: sourcePartnerId } : { kind: "central" },
+      operationsOwner:
+        toNetwork || sourcePartnerId === undefined
+          ? { kind: "central" }
+          : { kind: "partner", partnerId: sourcePartnerId },
+      ...(price ? { price } : {}),
     };
     await tx.insertBooking(booking);
-    events.push(event("private.request_received.notify_site_owner", { to: "site_owner_email" }));
-    events.push(event("private.request_received.notify_central"));
+    events.push(event("private.request_received.notify_site_owner", { to: "site_owner_email", mode: site.site.privateMode }));
+    events.push(event("private.request_received.notify_central", { mode: site.site.privateMode }));
     events.push(event("booking.request_received.notify_customer"));
     await tx.appendOutbox(events);
     return {
@@ -200,7 +228,8 @@ export class BookingService {
         lookupToken,
         product: req.product,
         status: booking.status,
-        next: "site_owner_will_send_quote",
+        ...(price ? { price: { amountMinor: price.total.amountMinor, currency: price.total.currency } } : {}),
+        next: toNetwork ? "central_operations_will_confirm" : "site_owner_will_send_quote",
       },
     };
   }
@@ -344,6 +373,49 @@ export class BookingService {
       }
       await tx.saveRun({ ...run, status: "completed" });
       return { ok: true, status: 200, body: { runId, status: "completed", bookings: outcome } };
+    });
+  }
+
+  /**
+   * Pass modelindeki özel/VIP işin tamamlanması: araç hak edişi atamada/sözleşmede belirlenir (≤ pass).
+   * Defter: site sahibi = satış − pass, araç = hak ediş, merkez = pass − hak ediş.
+   */
+  async completePrivate(ref: string, input: Record<string, unknown>): Promise<ServiceResult<unknown>> {
+    const { carrierPayeeId, carrierPayoutMinor, paid } = input;
+    if (typeof carrierPayeeId !== "string" || !/^[A-Za-z0-9_-]{1,64}$/.test(carrierPayeeId)) {
+      return fail(422, "carrierPayeeId_invalid");
+    }
+    if (!Number.isSafeInteger(carrierPayoutMinor)) return fail(422, "carrierPayoutMinor_invalid");
+    if (typeof paid !== "boolean") return fail(422, "paid_invalid");
+    return this.#d.store.transaction(async (tx) => {
+      const b = await tx.getBookingByRef(ref);
+      if (!b) return fail(404, "not_found");
+      if (b.price?.mode !== "PARTNER_PRICE_WITH_PASS" || !b.price.pass) return fail(409, "not_a_network_pass_booking");
+      if (b.status !== "confirmed") return fail(409, "invalid_transition");
+      const updated: StoredBooking = { ...b, status: "delivered", paymentStatus: paid ? "paid" : b.paymentStatus };
+      const earned = earnPassShares(
+        {
+          id: b.id,
+          status: updated.status,
+          paymentStatus: updated.paymentStatus,
+          isTest: b.isTest,
+          isDuplicate: b.isDuplicate,
+          sale: b.price.total,
+          pass: b.price.pass,
+          passPolicyId: b.price.sourceVersionId,
+          ...(b.sourcePartnerId !== undefined ? { sourcePartnerId: b.sourcePartnerId } : {}),
+        },
+        carrierPayeeId,
+        money(carrierPayoutMinor as number, b.price.pass.currency),
+        { now: this.#d.clock().toISOString(), newId: this.#d.random.id },
+      );
+      // Hak ediş pass'ı aşıyorsa iş tamamlanmış sayılmaz: önce tutar düzeltilir.
+      if (!earned.ok && ["payout_exceeds_pass", "negative_payout", "currency_mismatch"].includes(earned.reason)) {
+        return fail(422, earned.reason);
+      }
+      if (!(await tx.updateBooking(updated, b.version))) return fail(409, "version_conflict");
+      if (earned.ok) await tx.appendLedger(earned.entries);
+      return { ok: true, status: 200, body: { ref, status: "delivered", result: earned.ok ? "shares_earned" : earned.reason } };
     });
   }
 

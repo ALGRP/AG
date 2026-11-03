@@ -1,7 +1,7 @@
 import { randomBytes, randomInt, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { SHUTTLE_SPLIT_V1, parseShuttleTariff, parseSiteRecord, type SiteRecord } from "@ag/core";
+import { PASS_POLICY_DECK_V3, SHUTTLE_SPLIT_V1, parseShuttleTariff, parseSiteRecord, type SiteRecord } from "@ag/core";
 import { createApiServer } from "./http.ts";
 import { BookingService } from "./service.ts";
 import { MemoryStore } from "./store.ts";
@@ -37,6 +37,7 @@ const service = new BookingService({
   sites,
   shuttleTariff,
   splitPolicy: SHUTTLE_SPLIT_V1,
+  passPolicy: PASS_POLICY_DECK_V3,
   pool: { slotMinutes: 60, vehicleCapacity: 10 },
   devOrigins,
   clock: () => new Date(),

@@ -1,3 +1,5 @@
+import { isCurrency, type Currency } from "./money.ts";
+
 // Uydu site kaydı (site registry). Site registry tenant güvenliği DEĞİLDİR (Linear kararı):
 // yetki her zaman sunucudaki oturumdan gelir; bu kayıt yalnız talebin hangi siteden geldiğini
 // ve kime bildirileceğini belirler.
@@ -10,6 +12,13 @@ export type SiteOwnership =
 
 export type SiteStatus = "preview" | "live" | "suspended";
 
+/**
+ * Özel/VIP talebin operasyonu:
+ * - pass_to_network: site sahibi satar, işi pass bedeliyle Alanya Group ağına aktarır (Partner Sunumu V3).
+ * - self_operate: site sahibi operasyonu kendisi yapar; merkez yalnız kaydı tutar (03.11 ilk talep).
+ */
+export type PrivateMode = "pass_to_network" | "self_operate";
+
 export interface SiteRecord {
   readonly id: string;
   readonly ownership: SiteOwnership;
@@ -20,6 +29,10 @@ export interface SiteRecord {
   /** Özel/VIP taleplerin anında düşeceği e-posta (site sahibi). */
   readonly ownerEmail: string;
   readonly status: SiteStatus;
+  readonly privateMode: PrivateMode;
+  /** Site sahibinin kendi satış fiyatları (cent). Yoksa özel talep fiyatsız "request" olarak gelir. */
+  readonly salePrices?: Readonly<Partial<Record<"private" | "vip", number>>>;
+  readonly saleCurrency?: Currency;
 }
 
 export type SiteResolution =
@@ -73,12 +86,27 @@ export function parseSiteRecord(raw: unknown): SiteRecord {
   }
   if (typeof r.ownerEmail !== "string" || !r.ownerEmail.includes("@")) fail("ownerEmail");
   if (r.status !== "preview" && r.status !== "live" && r.status !== "suspended") fail("status");
+  const privateMode = r.privateMode ?? "pass_to_network";
+  if (privateMode !== "pass_to_network" && privateMode !== "self_operate") fail("privateMode");
+  let salePrices: Partial<Record<"private" | "vip", number>> | undefined;
+  if (r.salePrices !== undefined) {
+    const sp = r.salePrices as Record<string, unknown>;
+    salePrices = {};
+    for (const k of Object.keys(sp)) {
+      if (k !== "private" && k !== "vip") fail(`salePrices.${k}`);
+      if (!Number.isSafeInteger(sp[k]) || (sp[k] as number) <= 0) fail(`salePrices.${k}`);
+      salePrices[k as "private" | "vip"] = sp[k] as number;
+    }
+    if (!isCurrency(r.saleCurrency)) fail("saleCurrency required with salePrices");
+  }
   return Object.freeze({
     id: r.id as string,
     ownership: r.ownership as SiteOwnership,
     domains: [...(r.domains as string[])],
     ownerEmail: r.ownerEmail as string,
     status: r.status as SiteStatus,
+    privateMode: privateMode as PrivateMode,
     ...(r.ownership === "partner" ? { partnerId: r.partnerId as string } : {}),
+    ...(salePrices !== undefined ? { salePrices, saleCurrency: r.saleCurrency as Currency } : {}),
   });
 }

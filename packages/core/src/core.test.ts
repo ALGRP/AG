@@ -225,3 +225,57 @@ describe("intake validation", () => {
     assert.deepEqual(r.errors, [{ field: "routeCode", code: "required" }]);
   });
 });
+
+describe("partner deck V3 (03.11.2026)", () => {
+  it("pass model: private 80 → site 32,50; VIP 120 → site 60", async () => {
+    const { PASS_POLICY_DECK_V3, splitPass } = await import("./index.ts");
+    const prices = { private: 8000, vip: 12000 };
+    const p = splitPass("private", prices, "EUR", PASS_POLICY_DECK_V3);
+    assert.ok(p.ok);
+    assert.equal(p.split.partner.amountMinor, 3250);
+    const v = splitPass("vip", prices, "EUR", PASS_POLICY_DECK_V3);
+    assert.ok(v.ok);
+    assert.equal(v.split.partner.amountMinor, 6000);
+    assert.deepEqual(splitPass("private", { private: 4000 }, "EUR", PASS_POLICY_DECK_V3), { ok: false, reason: "sale_below_pass" });
+    assert.deepEqual(splitPass("vip", {}, "EUR", PASS_POLICY_DECK_V3), { ok: false, reason: "no_sale_price" });
+  });
+
+  it("shuttle ticket 35 € under 70/20/10 gives the site 7 € and the network 28 €", () => {
+    const s = splitShuttleRevenue(money(3500, "EUR"), SHUTTLE_SPLIT_V1, true);
+    assert.equal(s.partner.amountMinor, 700);
+    assert.equal(s.carrier.amountMinor + s.platform.amountMinor, 2800);
+  });
+
+  it("reproduces the partner scenarios on slides 10–12", async () => {
+    const { partnerMonth, breakEvenUnits } = await import("./index.ts");
+    const base = { privateContributionMinor: 3250, shuttleContributionMinor: 700 };
+    const rows = [
+      [1, 2, 139500, -500],
+      [1.5, 3, 209250, 69250],
+      [3, 8, 460500, 320500],
+      [5, 15, 802500, 662500],
+    ] as const;
+    for (const [pr, sh, gross, after] of rows) {
+      const m = partnerMonth({ ...base, privatePerDay: pr, shuttleTicketsPerDay: sh });
+      assert.equal(m.costsMinor, 140000);
+      assert.equal(m.grossContributionMinor, gross);
+      assert.equal(m.afterCostsMinor, after);
+    }
+    assert.equal(breakEvenUnits(140000, 3250), 44);
+    assert.equal(breakEvenUnits(140000, 700), 200);
+  });
+
+  it("reproduces the centre projection on slides 13–15", async () => {
+    const { centreMonth, centreBreakEvenSites } = await import("./index.ts");
+    assert.deepEqual(
+      [10, 25, 50, 100].map((n) => [centreMonth(n).afterCostsMinor, centreMonth(n).annualisedMinor]),
+      [
+        [-40000, -480000],
+        [200000, 2400000],
+        [600000, 7200000],
+        [1400000, 16800000],
+      ],
+    );
+    assert.equal(centreBreakEvenSites(), 13);
+  });
+});

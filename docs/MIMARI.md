@@ -123,15 +123,36 @@ Statik formda sır tutulamaz. Bu yüzden form imzalanmaz; merkez her isteği ş�
 
 ### 3.2 Akış: Özel / VIP
 
+Site başına iki model vardır (`privateMode`, bkz. K12):
+
+**a) `pass_to_network` — Partner Sunumu V3 (varsayılan)**
 ```
 form ─▶ POST /v1/public/bookings (product=private|vip)
-        └─ booking (status=request, ops_owner=partner, source_partner=partner)   tek kayıt, merkezde
-        └─ outbox: private.request_received.notify_site_owner  ─▶ n8n ─▶ site sahibinin e-postası (anında)
-                   private.request_received.notify_central     ─▶ merkez paneli / operasyon
-                   booking.request_received.notify_customer
+        ├─ fiyat = site sahibinin satış fiyatı (ör. private 80 €, VIP 120 €), rezervasyonda dondurulur
+        ├─ pass  = merkezi pass politikası (ör. 47,50 € / 60 €), rezervasyonda dondurulur
+        └─ outbox: site sahibine bilgi (e-posta) · merkeze yeni iş · müşteriye "talebiniz alındı"
+panel ─▶ confirm ─▶ complete {araç, araç hak edişi ≤ pass, tahsil edildi mi}
+        └─ defter: site = satış − pass (32,50 €) · araç = hak ediş · merkez = pass − hak ediş
+```
+Pass, AG'nin net kârı değildir: araç hak edişi ve operasyon gideri bu tutardan karşılanır (sunum, slayt 8). Satış fiyatı pass'ın altındaysa sistem satışı kabul etmez. Araç hak edişi pass'ı aşarsa iş tamamlanmış sayılmaz.
+
+**b) `self_operate` — site sahibi operasyonu kendisi yapar**
+```
+form ─▶ API ─▶ fiyatsız talep (status=request, operasyon sahibi = site sahibi)
+        └─ outbox: site sahibinin e-postası (anında) · merkez · müşteri
 ```
 
-"Site sahibinin e-postasına doğrudan düşer" isteği, formun e-posta atmasıyla değil **outbox olayıyla** karşılanır. Gecikme saniyeler düzeyindedir. Gönderim tekildir, tekrar denenir ve teslim durumu izlenir. Merkez aynı kaydı görür. Operasyonu site sahibi yapar, teklif ve onay merkez kaydı üzerinden ilerler (`request → quoted → confirmed`).
+Her iki modelde de "site sahibinin e-postasına doğrudan düşer" isteği, formun e-posta atmasıyla değil **outbox olayıyla** karşılanır. Gecikme saniyeler düzeyindedir. Gönderim tekildir, tekrar denenir ve teslim durumu izlenir. Merkez aynı kaydı görür.
+
+### 3.2.1 Para hareketleri ayrı tutulur (sunum, slayt 16)
+
+| Hareket | Kimden → kime | Sistemdeki yeri |
+| -- | -- | -- |
+| 200 €/ay SaaS aboneliği | Site sahibi → Alanya Group | `subscription_plan` / `subscription_invoice` |
+| 40 €/gün Google Ads | Site sahibi → Google | Sistemde AG geliri olarak **yok** |
+| İş başına satış / pass / shuttle payı | Müşteri → site / AG / araç | `ledger_entry` (kayıtlar silinmez) |
+
+`@ag/core` içindeki `partnerMonth`, `breakEvenUnits`, `centreMonth` ve `centreBreakEvenSites` fonksiyonları sunumdaki senaryoları birebir üretir; testler slayt 10–15'teki tüm rakamları sabitler. Yönetim paneli ve satış görüşmeleri aynı formülü kullanmalıdır. Sonuçlar kazanç garantisi veya net kâr değildir.
 
 ### 3.3 Akış: Shuttle havuzu
 
@@ -166,6 +187,7 @@ Komisyon mantığı (`packages/core/src/commission.ts`, `ledger.ts`):
 | `GET /v1/public/shuttle-quote?route&date&passengers` | Fiyat önizleme (5 dk önbellek) |
 | `GET /v1/admin/bookings` | Son 100 rezervasyon |
 | `POST /v1/admin/bookings/:ref/confirm` | `request → confirmed` (sürüm kontrollü) |
+| `POST /v1/admin/bookings/:ref/complete` | Pass modelindeki özel/VIP işi tamamla: araç, hak ediş (≤ pass), tahsilat → defter |
 | `POST /v1/admin/shuttle-runs/:id/assign` | Sefere taşıyıcı ata |
 | `POST /v1/admin/shuttle-runs/:id/complete` | Tamamla, tahsil edilenleri işaretle, payları deftere yaz |
 | `GET /v1/admin/ledger/balances` | Parti × para birimi bakiyeleri |
@@ -177,15 +199,15 @@ Admin uçları şimdilik `AG_ADMIN_TOKEN` ile korunur; değişken tanımlı değ
 
 | # | Adım | Durum | Çıkış ölçütü |
 | -- | -- | -- | -- |
-| 0 | Owner kararları: SSG teknolojisi (§K1), ücret planı, 70/20/10 matrahı, AG kaynaklı işte partner payının merkeze gitmesi, shuttle hat kodları | AÇIK | Linear'da KARAR olarak işaretli |
-| 1 | **Domain çekirdeği** (`@ag/core`): tarife, 70/20/10, durum modeli, havuz, defter | **LOCAL_ONLY · bu PR** | 17 birim testi geçer |
-| 2 | **Merkez intake API'si**: origin, idempotency, outbox, havuz, admin uçları | **LOCAL_ONLY · bu PR** | 7 API testi ve tarayıcıda uçtan uca form testi geçer |
+| 0 | Owner kararları: SSG teknolojisi (K1), 70/20/10 matrahı, AG kaynaklı iş (K4), shuttle hatları (K8), özel/VIP modeli (K12), shuttle fiyat birimi (K13), araç hak edişi (K14), tahsilat yönü (K15). Ücret netleşti: 200 €/ay (K2) | KISMEN AÇIK | Linear'da KARAR olarak işaretli |
+| 1 | **Domain çekirdeği** (`@ag/core`): tarife, 70/20/10, pass modeli, durum modeli, havuz, defter, sunum ekonomisi | **LOCAL_ONLY · bu PR** | 21 birim testi geçer |
+| 2 | **Merkez intake API'si**: origin, idempotency, outbox, havuz, pass, admin uçları | **LOCAL_ONLY · bu PR** | 8 API testi ve tarayıcıda uçtan uca form testi geçer |
 | 3 | **SSG** ve örnek partner sitesi (EN/TR, noindex) | **LOCAL_ONLY · bu PR** | 9 SSG testi geçer, mobil 390 px'de yatay kaydırma yok |
 | 4 | CRS eşlemesi: G1 erişimiyle şema dökümü, `0001` adayının CRS tablolarına eşlenmesi, `PgStore` adaptörü | G1 bekliyor (SEL-329/331) | 13 backend sözleşmesi (white-label SaaS v1) gerçek DB'de geçer |
 | 5 | Outbox işçisi → n8n: site sahibi e-postası, merkez, müşteri onayı; domain başına SPF/DKIM | G2 | Test alıcısına tekil gönderim, teslim kanıtı |
 | 6 | Yönetim paneli MVP: rezervasyonlar, sefer atama, defter, site/partner kaydı; IdP + 2FA | SEL-332 kararı | Admin yalnız 2FA'lı oturumda |
 | 7 | İlk partner pilotu: 1 site, alt alan adı, noindex önizleme → OWNER GO → özel alan adı (TXT) → GSC → sitemap | Kapılar | TÜRSAB kanal bildirimi ve sözleşme hazır |
-| 8 | Abonelik faturası (200 €), haftalık kapanış, ödemeler | Karar sonrası | Defter mutabakatı tutar |
+| 8 | Abonelik faturası (200 €/ay), haftalık kapanış, tahsilat yönüne göre mahsup (K15), ödemeler | K15 kararı | Defter mutabakatı tutar |
 | 9 | 10–20 siteye ölçekleme: CI derleme matrisi, Lighthouse CI, Jaccard kontrolü, IndexNow | — | Her site için ayrı yayın ve geri alma |
 
 **İlk modül neden çekirdek?** Para, durum ve komisyon kuralları her şeyin altında durur. Kurallar yanlışsa form, panel ve site doğru çalışsa bile para yanlış dağılır. Bu yüzden önce saf, testli `@ag/core` yazıldı. API ve SSG bu kodun üstüne kuruldu.
@@ -194,7 +216,7 @@ Admin uçları şimdilik `AG_ADMIN_TOKEN` ile korunur; değişken tanımlı değ
 
 ```bash
 npm install
-npm run check                                  # tsc + 33 test
+npm run check                                  # tsc + 38 test
 AG_ADMIN_TOKEN=yerel-anahtar npm run dev:api   # http://127.0.0.1:8787
 npm run build:sites                            # dist/sites/<id>/
 npx serve -l 4321 dist/sites/ornek-alanya-transfer   # veya herhangi bir statik sunucu

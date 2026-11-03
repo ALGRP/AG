@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import type { AddressInfo } from "node:net";
 import { after, before, describe, it } from "node:test";
-import { SHUTTLE_SPLIT_V1, parseShuttleTariff, parseSiteRecord, type SiteRecord } from "@ag/core";
+import { PASS_POLICY_DECK_V3, SHUTTLE_SPLIT_V1, parseShuttleTariff, parseSiteRecord, type SiteRecord } from "@ag/core";
 import { createApiServer } from "./http.ts";
 import { BookingService } from "./service.ts";
 import { MemoryStore } from "./store.ts";
@@ -13,6 +13,18 @@ const partnerSite = parseSiteRecord({
   domains: ["www.partner.example"],
   ownerEmail: "owner@partner.example",
   status: "live",
+  privateMode: "pass_to_network",
+  salePrices: { private: 8000, vip: 12000 },
+  saleCurrency: "EUR",
+});
+const selfOpSite = parseSiteRecord({
+  id: "self-op-site",
+  ownership: "partner",
+  partnerId: "p-002",
+  domains: ["www.selfop.example"],
+  ownerEmail: "owner@selfop.example",
+  status: "live",
+  privateMode: "self_operate",
 });
 const agSite = parseSiteRecord({
   id: "ag-brand-site",
@@ -24,6 +36,7 @@ const agSite = parseSiteRecord({
 const sites = new Map<string, SiteRecord>([
   [partnerSite.id, partnerSite],
   [agSite.id, agSite],
+  [selfOpSite.id, selfOpSite],
 ]);
 
 let seq = 0;
@@ -41,6 +54,7 @@ const service = new BookingService({
     extraPerPassengerMinor: 1000,
   }),
   splitPolicy: SHUTTLE_SPLIT_V1,
+  passPolicy: PASS_POLICY_DECK_V3,
   pool: { slotMinutes: 60, vehicleCapacity: 10 },
   devOrigins: [],
   clock: () => new Date("2026-11-03T10:00:00Z"),
@@ -110,14 +124,15 @@ describe("public intake", () => {
     assert.equal(conflict.status, 409);
   });
 
-  it("routes private requests to the site owner and the centre", async () => {
+  it("self_operate: private request goes to the site owner, unpriced, and the centre is informed", async () => {
     const r = await post(
       "/v1/public/bookings",
-      shuttleBody({ product: "vip", routeCode: undefined, passengers: 4, pickupAt: "2026-12-06T09:00" }),
-      { ...fromPartner, "idempotency-key": "k-private-00000001" },
+      shuttleBody({ siteId: "self-op-site", product: "vip", routeCode: undefined, passengers: 4, pickupAt: "2026-12-06T09:00" }),
+      { origin: "https://www.selfop.example", "idempotency-key": "k-private-00000001" },
     );
     assert.equal(r.status, 201);
     assert.equal(r.body.next, "site_owner_will_send_quote");
+    assert.equal(r.body.price, undefined);
     const outbox = await fetch(base + "/v1/admin/outbox", { headers: admin }).then((x) => x.json());
     const types = (outbox as Array<{ type: string }>).map((e) => e.type);
     assert.ok(types.includes("private.request_received.notify_site_owner"));
@@ -176,6 +191,31 @@ describe("shuttle pool → 70/20/10 ledger", () => {
     assert.equal(get("carrier", "carrier-7"), 3500 + 2100); // %70 × (50 + 30)
     assert.equal(get("partner", "p-001"), 1000); // %20 × 50 (yalnız partner kaynaklı)
     assert.equal(get("platform", "central"), 500 + 900); // %10 × 50 + (%10 + %20) × 30
+  });
+
+  it("pass model (deck V3): private 80 € → site 32,50 €; pass 47,50 € split between vehicle and centre", async () => {
+    const created = await post(
+      "/v1/public/bookings",
+      shuttleBody({ product: "private", routeCode: undefined, pickupAt: "2026-12-11T09:00", customer: { name: "P", email: "p@example.com", phone: "+90 534 000 0000", locale: "en" } }),
+      { ...fromPartner, "idempotency-key": "k-pass-private-0001" },
+    );
+    assert.equal(created.status, 201);
+    assert.deepEqual(created.body.price, { amountMinor: 8000, currency: "EUR" });
+    assert.equal(created.body.next, "central_operations_will_confirm");
+    const ref = created.body.ref;
+
+    assert.equal((await post(`/v1/admin/bookings/${ref}/complete`, { carrierPayeeId: "c-9", carrierPayoutMinor: 4000, paid: true }, admin)).status, 409, "must be confirmed first");
+    assert.equal((await post(`/v1/admin/bookings/${ref}/confirm`, {}, admin)).status, 200);
+    const tooMuch = await post(`/v1/admin/bookings/${ref}/complete`, { carrierPayeeId: "c-9", carrierPayoutMinor: 4800, paid: true }, admin);
+    assert.equal(tooMuch.status, 422, "vehicle payout cannot exceed the pass");
+    const done = await post(`/v1/admin/bookings/${ref}/complete`, { carrierPayeeId: "c-9", carrierPayoutMinor: 4000, paid: true }, admin);
+    assert.equal(done.body.result, "shares_earned");
+
+    const bal = (await fetch(base + "/v1/admin/ledger/balances", { headers: admin }).then((x) => x.json())) as any[];
+    const get = (kind: string, id: string) => bal.find((r) => r.party.kind === kind && r.party.id === id)?.amountMinor;
+    assert.equal(get("carrier", "c-9"), 4000);
+    assert.equal(get("partner", "p-001"), 1000 + 3250, "shuttle %20 (earlier test) + private 32,50 €");
+    assert.equal(get("platform", "central"), 1400 + 750);
   });
 
   it("keeps admin endpoints closed without the token", async () => {

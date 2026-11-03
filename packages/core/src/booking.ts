@@ -40,8 +40,10 @@ export function assertTransition(from: BookingStatus, to: BookingStatus): void {
 export type OperationsOwner = { kind: "central" } | { kind: "partner"; partnerId: string };
 
 export interface PriceSnapshot {
-  readonly mode: "FIXED_SHUTTLE" | "PARTNER_QUOTE";
+  readonly mode: "FIXED_SHUTTLE" | "PARTNER_PRICE_WITH_PASS" | "PARTNER_QUOTE";
   readonly total: Money;
+  /** Yalnız PARTNER_PRICE_WITH_PASS: ağa aktarılan pass bedeli (rezervasyon anında dondurulur). */
+  readonly pass?: Money;
   /** tariff_version_id veya teklif id'si — fiyat sonradan sessizce değişmez. */
   readonly sourceVersionId: string;
   readonly frozenAt: string;
