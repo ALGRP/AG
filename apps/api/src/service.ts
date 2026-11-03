@@ -210,15 +210,22 @@ export class BookingService {
       // 5+ kişi: Owner kararı K17 — otomatik fiyat yok, manuel onay.
       if (!price.ok && price.reason !== "requires_approval") return fail(422, price.reason);
       const slotRuns = await tx.listRuns(req.routeCode!, slotStartFor(req.pickupAt, this.#d.pool.slotMinutes));
-      const placement = placeInPool(
-        slotRuns,
-        { bookingId: id, passengers: req.passengers, routeCode: req.routeCode!, pickupAt: req.pickupAt },
-        { slotMinutes: this.#d.pool.slotMinutes, capacity: this.#d.pool.vehicleCapacity, newRunId: this.#d.random.id },
-      );
+      const poolBooking = { bookingId: id, passengers: req.passengers, routeCode: req.routeCode!, pickupAt: req.pickupAt };
+      const poolOpts = { slotMinutes: this.#d.pool.slotMinutes, capacity: this.#d.pool.vehicleCapacity, newRunId: this.#d.random.id };
+      let placement = placeInPool(slotRuns, poolBooking, poolOpts);
+      // A late joiner inherits the run's assigned supplier only after the same eligibility check.
+      // If that supplier cannot serve this site, keep the booking in a different OPEN run.
+      if (placement.run.status === "assigned") {
+        const payee = placement.run.carrierPayeeId;
+        if (!payee || this.#checkSupplier(site, payee)) {
+          placement = placeInPool(slotRuns.filter((run) => run.status === "open"), poolBooking, poolOpts);
+        }
+      }
       await tx.saveRun(placement.run);
       booking = {
         ...booking,
         shuttleRunId: placement.run.id,
+        ...(placement.run.status === "assigned" && placement.run.carrierPayeeId ? { supplierId: placement.run.carrierPayeeId } : {}),
         ...(price.ok
           ? { price: { mode: "FIXED_SHUTTLE" as const, total: price.total, sourceVersionId: price.tariffVersionId, frozenAt: now, splitPolicyId: this.#d.shuttlePolicy.id } }
           : {}),
@@ -457,6 +464,11 @@ export class BookingService {
         if (b.status !== "confirmed" || !b.price) {
           pending++;
           outcome.push({ ref: b.ref, result: b.price ? `pending_${b.status}` : "pending_price_not_approved" });
+          continue;
+        }
+        if (!run.carrierPayeeId || b.supplierId !== run.carrierPayeeId) {
+          pending++;
+          outcome.push({ ref: b.ref, result: "pending_supplier_assignment" });
           continue;
         }
         if (!(await tx.updateBooking({ ...b, status: "delivered", completedAt: now }, b.version))) throw new Error("version_conflict");

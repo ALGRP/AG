@@ -102,7 +102,7 @@ describe("A2 partial collection", () => {
     assert.deepEqual(quad(all, ref), [5000, 1000, 500, 3500]);
   });
 
-  it("A2.6 [RULE] a shuttle booking that joins an already-assigned run must still be settled (site 20 % / AGOS 10 %)", { todo: "QA-F1 · Codex Paket-01" }, async () => {
+  it("A2.6 [RULE] a shuttle booking that joins an already-assigned run must still be settled (site 20 % / AGOS 10 %)", async () => {
     const h = harness();
     h.setNow("2026-11-04T08:00:00Z");
     const first = await h.book({ pickupAt: "2026-11-04T13:00" });
