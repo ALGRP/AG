@@ -2,6 +2,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { ORIGIN, W45, harness, sumFor } from "./harness.ts";
+import { MemoryStore } from "../apps/api/src/store.ts";
 
 const body = (over: Record<string, unknown> = {}) => ({
   siteId: "partner-site",
@@ -66,7 +67,7 @@ describe("A5 duplicate submissions", () => {
     assert.equal((await h.collect(ref, 3000, { reference: "POS-SAME" })).body.error, "reference_already_recorded");
   });
 
-  it("A5.4 [RULE] one physical slip/receipt number of the same supplier must not be recorded on two bookings", { todo: "QA-F9 · Paket-02 (tahsis modeli kararı)" }, async () => {
+  it("A5.4 [RULE] one physical slip/receipt number of the same supplier must not be recorded on two bookings", async () => {
     const h = harness();
     h.setNow("2026-11-04T08:00:00Z");
     const r1 = await h.shuttleJob({}, "sup-a", null);
@@ -109,7 +110,7 @@ describe("A5 QA-F9 receipt reuse across bookings (Paket-02; default deny until H
     return { h, r1, r2 };
   };
 
-  it("A5.7 [RULE] the same slip number typed in another letter case is the same slip", { todo: "QA-F9 · Codex Paket-02" }, async () => {
+  it("A5.7 [RULE] the same slip number typed in another letter case is the same slip", async () => {
     const { h, r1, r2 } = await twoJobs("sup-a", "sup-a");
     assert.equal((await h.collect(r1, 5000, { reference: "makbuz-0007" })).status, 200);
     const second = await h.collect(r2, 5000, { reference: "MAKBUZ-0007" });
@@ -122,10 +123,60 @@ describe("A5 QA-F9 receipt reuse across bookings (Paket-02; default deny until H
     assert.equal((await h.collect(r2, 5000, { reference: "MAKBUZ-0008" })).status, 200, "different suppliers may print the same slip number");
   });
 
-  it("A5.9 [RULE] two simultaneous collections with one slip on two bookings: exactly one is recorded", { todo: "QA-F9 · Codex Paket-02" }, async () => {
+  it("A5.9 [RULE] two simultaneous collections with one slip on two bookings: exactly one is recorded", async () => {
     const { h, r1, r2 } = await twoJobs("sup-a", "sup-a");
     const rs = await Promise.all([h.collect(r1, 5000, { reference: "MAKBUZ-0009" }), h.collect(r2, 5000, { reference: "MAKBUZ-0009" })]);
     assert.deepEqual(rs.map((r) => r.status).sort(), [200, 409]);
   });
 });
 
+
+describe("A5 QA-F9 historical receipts and transaction ordering (LOCAL_ONLY)", () => {
+  it("A5.10 collection slip remains consumed after cancellation or full refund", async () => {
+    const h = harness();
+    h.setNow("2026-11-04T08:00:00Z");
+
+    const cancelled = (await h.book()).body.ref;
+    assert.equal((await h.service.confirm(cancelled)).status, 200);
+    assert.equal((await h.service.assignRun(await h.runOf(cancelled), "sup-a")).status, 200);
+    assert.equal((await h.collect(cancelled, 3000, { reference: "SLIP-CANCELLED" })).status, 200);
+    assert.equal((await h.service.cancel(cancelled)).status, 200);
+    const afterCancel = await h.shuttleJob({}, "sup-a", null);
+    const reusedCancelled = await h.collect(afterCancel, 3000, { reference: "slip-cancelled" });
+    assert.deepEqual([reusedCancelled.status, reusedCancelled.body.error], [409, "reference_used_on_other_booking"]);
+
+    const refunded = await h.shuttleJob({}, "sup-a", null);
+    assert.equal((await h.collect(refunded, 5000, { reference: "SLIP-REFUNDED" })).status, 200);
+    assert.equal((await h.service.refund(refunded, { amountMinor: 5000, refundReference: "RF-CASH-001" })).status, 200);
+    const afterRefund = await h.shuttleJob({}, "sup-a", null);
+    const reusedRefunded = await h.collect(afterRefund, 5000, { reference: "slip-refunded" });
+    assert.deepEqual([reusedRefunded.status, reusedRefunded.body.error], [409, "reference_used_on_other_booking"]);
+    const repeatSame = await h.collect(refunded, 1000, { reference: "slip-refunded" });
+    assert.equal(repeatSame.body.error, "reference_already_recorded");
+  });
+
+  it("A5.11 MemoryStore runs concurrent external transactions serially (nested remains reentrant)", async () => {
+    const store = new MemoryStore();
+    let entered!: () => void;
+    let release!: () => void;
+    const started = new Promise<void>((done) => { entered = done; });
+    const pause = new Promise<void>((done) => { release = done; });
+    const order: string[] = [];
+    const first = store.transaction(async (tx) => {
+      order.push("first-start");
+      entered();
+      await tx.transaction(async () => { order.push("first-nested"); });
+      await pause;
+      order.push("first-end");
+    });
+    await started;
+    const second = store.transaction(async () => {
+      order.push("second-start");
+    });
+    await Promise.resolve();
+    assert.deepEqual(order, ["first-start", "first-nested"]);
+    release();
+    await Promise.all([first, second]);
+    assert.deepEqual(order, ["first-start", "first-nested", "first-end", "second-start"]);
+  });
+});

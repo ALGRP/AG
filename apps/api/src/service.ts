@@ -563,7 +563,11 @@ export class BookingService {
     if (collector !== "supplier" && collector !== "site") return fail(422, "collector_invalid");
     if (!Number.isSafeInteger(amountMinor) || (amountMinor as number) <= 0) return fail(422, "amountMinor_invalid");
     if (typeof reference !== "string" || !/^[A-Za-z0-9./_-]{3,64}$/.test(reference)) return fail(422, "reference_required");
-    return this.#mutate(ref, async (b) => {
+    return this.#mutate(ref, async (b, tx) => {
+      const normalizedRef = normalizeBankReference(reference);
+      if (b.moneyEvents.some((e) => e.kind === "collection" && normalizeBankReference(e.reference) === normalizedRef)) {
+        return fail(409, "reference_already_recorded");
+      }
       if (b.moneyEvents.some((e) => e.reference === reference)) return fail(409, "reference_already_recorded");
       if (!b.price) return fail(409, "price_not_set");
       if (!b.supplierId) return fail(409, "supplier_not_assigned");
@@ -572,6 +576,20 @@ export class BookingService {
       const first = b.moneyEvents.find((e) => e.kind === "collection");
       if (first && first.collector !== collector) return fail(422, "collector_must_not_change");
       if (!b.allowedCollectionMethods.includes(method as CollectionMethod)) return fail(422, "method_not_allowed_for_booking");
+
+      // QA-F9: the physical receipt belongs to one collecting party, not to one booking ID.
+      // This is one serialized local transaction, including cancelled/refunded historical bookings.
+      const collectorParty = collector === "supplier" ? b.supplierId : b.sellingPartyId;
+      const reused = (await tx.listBookings()).some((other) => {
+        if (other.id === b.id) return false;
+        return other.moneyEvents.some((event) =>
+          event.kind === "collection" &&
+          (event.collector === "supplier" ? other.supplierId : other.sellingPartyId) === collectorParty &&
+          normalizeBankReference(event.reference) === normalizedRef,
+        );
+      });
+      if (reused) return fail(409, "reference_used_on_other_booking");
+
       const ev: MoneyEvent = { id: this.#d.random.id(), kind: "collection", amount: amountMinor as number, at: this.#now(), method: method as CollectionMethod, collector: collector as Collector, reference };
       return { ...b, moneyEvents: [...b.moneyEvents, ev] };
     });

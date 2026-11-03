@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import type {
   Adjustment,
   BankReceipt,
@@ -152,7 +153,10 @@ interface Snapshot {
 
 export class MemoryStore implements Store {
   #queue: Promise<unknown> = Promise.resolve();
-  #inTx = false;
+  // A single boolean incorrectly treats a *concurrent external call* as nested.
+  // AsyncLocalStorage differentiates reentrancy from another request, preserving serial writes.
+  readonly #txContext = new AsyncLocalStorage<symbol>();
+  #activeTx: symbol | undefined;
   readonly #idem = new Map<string, IdempotencyRecord>();
   readonly #bookings = new Map<string, StoredBooking>();
   readonly #runs = new Map<string, ShuttleRun>();
@@ -164,18 +168,23 @@ export class MemoryStore implements Store {
   readonly #sent = new Map<string, string>();
 
   transaction<T>(fn: (tx: Store) => Promise<T>): Promise<T> {
-    if (this.#inTx) return fn(this);
-    const run = this.#queue.then(async () => {
-      this.#inTx = true;
+    if (this.#activeTx !== undefined && this.#txContext.getStore() === this.#activeTx) {
+      return fn(this); // Only a true nested call inside this same transaction.
+    }
+    const run = this.#queue.then(() => {
+      const token = Symbol("memory-transaction");
+      this.#activeTx = token;
       const snapshot = this.#snapshot();
-      try {
-        return await fn(this);
-      } catch (err) {
-        this.#restore(snapshot);
-        throw err;
-      } finally {
-        this.#inTx = false;
-      }
+      return this.#txContext.run(token, async () => {
+        try {
+          return await fn(this);
+        } catch (err) {
+          this.#restore(snapshot);
+          throw err;
+        } finally {
+          this.#activeTx = undefined;
+        }
+      });
     });
     this.#queue = run.catch(() => undefined);
     return run;
