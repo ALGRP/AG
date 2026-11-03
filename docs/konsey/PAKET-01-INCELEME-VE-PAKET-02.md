@@ -428,3 +428,19 @@ Not: Süper kullanıcı oturumunda `SET SESSION AUTHORIZATION ag_app` sonrası t
 **Müşteri verisi:** yönetim listesi (`#adminView`) müşteri adı, e-posta veya telefon döndürmüyor; site kimliği ve platform için aynı. Ortak seferde site kimliği yalnız kendi rezervasyonlarını görüyor. DB'de site, kendi rezervasyonlarının müşteri kolonlarını görebilir (beklenen); tedarikçi politikası bilerek kaldırıldı.
 
 **Sıradaki iş:** PR1-N7 (A4.15), sonra QA-F14: [`QA-F14-TAHSIL-EDILMIS-TAMAMLANMAMIS.md`](./QA-F14-TAHSIL-EDILMIS-TAMAMLANMAMIS.md) (A2.7, A2.8, A2.10; A2.9 koruma testi).
+
+## 13. PR1-N7 ve QA-F14 akran incelemesi (`f8227bd` → `7971f7f`)
+
+Sabitlenen sürüm `7971f7fcc3d3c081912719526d2f801c6f4da67a`. `npm run check`: **197 test: 184 geçti, 0 kaldı, 12 todo, 1 skip** (Codex ile aynı). Test dosyalarında yalnız `todo` kaldırılmış; assertion değişikliği yok. `npm run report:sample` sonrası izlenen örnek dosyalar değişmedi (git diff boş). PostgreSQL bu turda koşulmadı; bu iki commit şemaya dokunmuyor.
+
+| Commit | Karar | Kanıt |
+| -- | -- | -- |
+| 1c09815 PR1-N7 | **PASS** | A4.15, A4.14, A4.12, A4.13 geçiyor. Kapanmış W45 için 7 hafta sonra gelen dekont → 201. Faaliyetli W45 için 10 hafta sonra → 201. Boş W40 (5 hafta önce) yazım hatası → 422 `unverified_historical_receipt_week`. 28 gün eşiği yerel bir sezgi; Owner veya mali müşavir onaylı bir politika değildir. |
+| 7971f7f QA-F14 | **PASS** | A2.7, A2.8, A2.10 geçiyor; A2.9 koruması yeşil. Sıfıra kadar iade → istisna yok. Çoklu tahsilat → tek satır, net 2500. Kısmi iade → net 3000. İtiraz → `disputed` + `collected_not_completed`. Hiçbirinde pay kaydı veya müşteri bakiyesi yok. Görülen tek borç/itiraz satırı mevcut `booking_dispute` kaydı (F14 öncesinden). |
+
+Notlar (karar gerektirmez):
+- PR1-N8 (P3, açık): gelecek tarihli dekont (2027-W20) hâlâ kabul ediliyor.
+- PR1-N9 (P3): son 28 gün içindeki boş bir hafta için dekont kabul ediliyor ve ilk kapanışı en fazla ~4 hafta geriye çekebiliyor (ör. W43). Sınırlı; kabul edilebilir.
+- F14-N1 (P3, sunum): fazla tahsil edilmiş ve tamamlanmamış işte iki istisna satırı aynı tutarı (8000) gösteriyor. Okuyan aynı parayı iki kez saymamalı; raporda tek satırda birleştirme ileride düşünülebilir.
+
+**Sıradaki iş:** QA-F9: [`QA-F9-MAKBUZ-TAHSIS.md`](./QA-F9-MAKBUZ-TAHSIS.md). A5.4, A5.7, A5.9 `todo`; A5.8 koruma testi. Ardından QA-F11, sonra PKG-F04b (H-25).
