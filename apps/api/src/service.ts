@@ -848,7 +848,7 @@ export class BookingService {
         }
         for (const a of await tx.listAdjustments()) activity.push(a.week_id);
         const earliest = activity.sort()[0];
-        if (earliest !== undefined && earliest < weekId) return fail(409, `close_first_active_week:${earliest}`);
+        if (earliest !== undefined && earliest !== weekId) return fail(409, `close_first_active_week:${earliest}`);
         // The bootstrap age limit only applies to a completely empty ledger.
         // Historical activity must remain closable, even if it was over four weeks ago;
         // otherwise the earliest active week and all following weeks become deadlocked.

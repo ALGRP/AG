@@ -104,7 +104,7 @@ describe("A4 weekly close", () => {
     assert.equal(w45.week.payment_due_utc, "2026-11-10T15:00:00.000Z", "Tue 18:00 Istanbul");
   });
 
-  it("A4.8 ISO week 53: 2026-W52 -> 2026-W53 -> 2027-W01 close in order; Sun 3 Jan 2027 23:59:59 IST is W53", async () => {
+  it("A4.8 ISO week 53: reject empty W52 bootstrap; W53 -> W01 close in order at year boundary", async () => {
     assert.equal(settlementWeekId("2027-01-03T20:59:59.999Z"), "2026-W53");
     assert.equal(settlementWeekId("2027-01-03T21:00:00.000Z"), "2027-W01");
     assert.equal(nextWeekId("2026-W52"), "2026-W53");
@@ -118,7 +118,8 @@ describe("A4 weekly close", () => {
     h.setNow("2027-01-03T21:00:00.000Z");
     const w01job = await h.shuttleJob({ passengers: 3 }, "sup-a", 6000); // 3 pax = 60 EUR
     h.setNow("2027-01-11T06:00:00Z");
-    assert.equal((await h.close("2026-W52")).status, 201);
+    // PR1-N5 supersedes the old permissive W52 bootstrap: earliest activity is W53.
+    assert.equal((await h.close("2026-W52")).body.error, "close_first_active_week:2026-W53");
     const w53 = (await h.close("2026-W53")).body;
     const w01 = (await h.close("2027-W01")).body;
     assert.deepEqual([sumFor(w53.entries, w53job, "collected_delta"), sumFor(w53.entries, lastSecond, "collected_delta"), sumFor(w53.entries, w01job, "collected_delta")], [5000, 3000, 0]);
@@ -186,7 +187,7 @@ describe("A4 statement disputes timing (T3)", () => {
     assert.equal((await h.close(W46)).status, 201, "the following week closes in order");
   });
 
-  it("A4.13 [RULE] with recorded activity, the first close must be the earliest active week, not an older empty week", { todo: "PR1-N5 · Codex Paket-01c (f2a5bd4 gerilemesi)" }, async () => {
+  it("A4.13 [RULE] with recorded activity, the first close must be the earliest active week, not an older empty week", async () => {
     const h = harness();
     h.setNow("2026-11-04T10:00:00Z");
     await h.shuttleJob({}, "sup-a", 5000); // W45 activity
