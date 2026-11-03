@@ -236,7 +236,7 @@ describe("A8.6 manager approval evidence for booking-level financial hold releas
 });
 
 describe("A8.7 audit history for repeated booking-level decisions", () => {
-  it("A8.7 [RULE] a second dispute decision on the same booking must not erase the first decision's audit evidence", { todo: "PR2-N1 · Codex Paket-02 (QA-F10 denetim geçmişi)" }, async () => {
+  it("A8.7 [RULE] a second dispute decision on the same booking must not erase the first decision's audit evidence", async () => {
     const x = harness({ idPrefix: "qa-f10-hist" });
     x.setNow("2026-11-04T10:00:00Z");
     const ref = await x.shuttleJob({}, "sup-a", 5000);

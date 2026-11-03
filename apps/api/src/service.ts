@@ -362,6 +362,7 @@ export class BookingService {
       isDuplicate: b.isDuplicate,
       duplicateClearAudit: b.duplicateClearAudit ?? null,
       disputeResolutionAudit: b.disputeResolutionAudit ?? null,
+      disputeResolutionHistory: b.disputeResolutionHistory ?? (b.disputeResolutionAudit ? [b.disputeResolutionAudit] : []),
       isTest: b.isTest,
       moneyEvents: b.moneyEvents,
       settlement: line ? settlement : null,
@@ -606,15 +607,22 @@ export class BookingService {
     if (reason.length < 5) return fail(422, "reason_required");
     return this.#mutate(ref, async (b, tx) => {
       if (!b.disputedAt || b.disputeResolvedAt) return fail(409, "no_open_dispute");
+      const decision = this.#sensitiveAudit(actor, reason);
+      const history = b.disputeResolutionHistory ?? (b.disputeResolutionAudit ? [b.disputeResolutionAudit] : []);
+      const sequence = history.length + 1;
+      // The outbox dedupe key is per *decision*, not per booking; old events survive a reopened dispute.
+      const financeEvent = this.#event(b, "finance.dispute_resolved", { outcome });
+      const auditEvent = this.#event(b, "audit.booking_dispute_resolved", { actor: actor.id, role: actor.role, outcome });
       await tx.appendOutbox([
-        this.#event(b, "finance.dispute_resolved", { outcome }),
-        this.#event(b, "audit.booking_dispute_resolved", { actor: actor.id, role: actor.role, outcome }),
+        { ...financeEvent, dedupeKey: `${financeEvent.dedupeKey}:${sequence}` },
+        { ...auditEvent, dedupeKey: `${auditEvent.dedupeKey}:${sequence}` },
       ]);
       return {
         ...b,
         disputeResolvedAt: this.#now(),
         disputeOutcome: outcome,
-        disputeResolutionAudit: this.#sensitiveAudit(actor, reason),
+        disputeResolutionAudit: decision,
+        disputeResolutionHistory: [...history, decision],
       };
     });
   }

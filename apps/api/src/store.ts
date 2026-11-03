@@ -75,6 +75,8 @@ export interface StoredBooking {
   readonly duplicateClearAudit?: SensitiveDecisionAudit;
   /** Required when an authorised manager resolves a booking-level dispute. */
   readonly disputeResolutionAudit?: SensitiveDecisionAudit;
+  /** Append-only local audit history: a second dispute must never erase the earlier decision. */
+  readonly disputeResolutionHistory?: readonly SensitiveDecisionAudit[];
 
   /** Bir kez yazılır (kapanışta). */
   readonly settlementWeekId?: string;
