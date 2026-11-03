@@ -99,3 +99,33 @@ describe("A5 duplicate submissions", () => {
     assert.deepEqual({ dup: dup.status, paid: ob.paid, status: ob.status }, { dup: 409, paid: 1000, status: "paid" }, "one 10 EUR transfer is counted as 20 EUR paid");
   });
 });
+
+describe("A5 QA-F9 receipt reuse across bookings (Paket-02; default deny until H-26)", () => {
+  const twoJobs = async (supA: string, supB: string) => {
+    const h = harness();
+    h.setNow("2026-11-04T08:00:00Z");
+    const r1 = await h.shuttleJob({}, supA, null);
+    const r2 = await h.shuttleJob({}, supB, null);
+    return { h, r1, r2 };
+  };
+
+  it("A5.7 [RULE] the same slip number typed in another letter case is the same slip", { todo: "QA-F9 · Codex Paket-02" }, async () => {
+    const { h, r1, r2 } = await twoJobs("sup-a", "sup-a");
+    assert.equal((await h.collect(r1, 5000, { reference: "makbuz-0007" })).status, 200);
+    const second = await h.collect(r2, 5000, { reference: "MAKBUZ-0007" });
+    assert.equal(second.status, 409, "the same slip of sup-a accepted on a second booking via a case variant");
+  });
+
+  it("A5.8 the same slip number from a DIFFERENT collecting supplier is a different slip (QA-F9 guard)", async () => {
+    const { h, r1, r2 } = await twoJobs("sup-a", "sup-b");
+    assert.equal((await h.collect(r1, 5000, { reference: "MAKBUZ-0008" })).status, 200);
+    assert.equal((await h.collect(r2, 5000, { reference: "MAKBUZ-0008" })).status, 200, "different suppliers may print the same slip number");
+  });
+
+  it("A5.9 [RULE] two simultaneous collections with one slip on two bookings: exactly one is recorded", { todo: "QA-F9 · Codex Paket-02" }, async () => {
+    const { h, r1, r2 } = await twoJobs("sup-a", "sup-a");
+    const rs = await Promise.all([h.collect(r1, 5000, { reference: "MAKBUZ-0009" }), h.collect(r2, 5000, { reference: "MAKBUZ-0009" })]);
+    assert.deepEqual(rs.map((r) => r.status).sort(), [200, 409]);
+  });
+});
+
