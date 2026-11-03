@@ -1,0 +1,5 @@
+schema_version: "1.1"
+name: dort-kisi-shuttle-toplam-ve-paylar
+expected_outcome: |
+  Toplam 70 € (rezervasyon toplamı, kişi başı değil). Paylar: site 14 €, AGOS 7 €, tedarikçi 49 €.
+  Paylar fiilen tahsil edilen tutar üzerinden ve transfer tamamlandıktan sonra doğar.

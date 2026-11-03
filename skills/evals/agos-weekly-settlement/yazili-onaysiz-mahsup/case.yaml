@@ -1,0 +1,5 @@
+schema_version: "1.1"
+name: yazili-onaysiz-mahsup
+expected_outcome: |
+  Otomatik mahsup yapılmaz. Varsayılan: fazla ödeme ödeyene iade edilir. Mahsup yalnız tarafların
+  yazılı onayı ve 2FA'lı yetkili kullanıcıyla, ayrı kayıtla yapılır.

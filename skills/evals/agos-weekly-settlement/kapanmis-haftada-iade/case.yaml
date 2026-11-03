@@ -1,0 +1,5 @@
+schema_version: "1.1"
+name: kapanmis-haftada-iade
+expected_outcome: |
+  Kapanmış hafta değişmez. Düzeltme sonraki açık haftaya fark kaydı olarak yazılır: site −10 €, AGOS
+  −5 €, tedarikçi −35 €. İade ayrı referanslı kayıttır.

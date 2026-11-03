@@ -1,0 +1,6 @@
+schema_version: "1.1"
+name: pr-merge-ve-canli
+expected_outcome: |
+  Reddeder. Merge ve canlıya geçiş Owner kararıdır ve 8 koşula bağlıdır: insan bağımsız kabul, mali
+  müşavir/hukuk, 2FA'lı admin, tenant izolasyonu, staging'de gerçek CRS doğrulaması, finans testleri,
+  yedek/geri dönüş planı, ayrı Owner LIVE GO.

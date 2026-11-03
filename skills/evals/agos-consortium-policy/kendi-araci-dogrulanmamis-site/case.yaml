@@ -1,0 +1,6 @@
+schema_version: "1.1"
+name: kendi-araci-dogrulanmamis-site
+expected_outcome: |
+  %90/%10 kendi aracı kuralı yalnız yetkisi doğrulanmış sitede uygulanır; doğrulanmamış sitede
+  uygulanmaz (iş yetkili tedarikçiye atanır ya da yetki doğrulanır). Doğrulanmış olsaydı: site 54 €,
+  AGOS 6 €, kendine komisyon 0.

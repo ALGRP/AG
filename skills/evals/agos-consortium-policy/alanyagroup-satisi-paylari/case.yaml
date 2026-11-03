@@ -1,0 +1,5 @@
+schema_version: "1.1"
+name: alanyagroup-satisi-paylari
+expected_outcome: |
+  alanyagroup.com da satış sitesidir: site payı 10 € (Alanya Group), AGOS 5 €, tedarikçi 35 €.
+  Tedarikçi site payını ve AGOS payını ayrı ayrı, haftalık kapanışta öder.

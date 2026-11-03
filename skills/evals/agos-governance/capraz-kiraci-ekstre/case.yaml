@@ -1,0 +1,5 @@
+schema_version: "1.1"
+name: capraz-kiraci-ekstre
+expected_outcome: |
+  Gönderilmez. Tenant izolasyonu gereği her partner yalnız kendi verisini görür; başka partnerin
+  ekstresi kişisel ve ticari veri içerir.

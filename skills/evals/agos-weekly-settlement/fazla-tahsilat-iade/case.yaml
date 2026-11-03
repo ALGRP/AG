@@ -1,0 +1,5 @@
+schema_version: "1.1"
+name: fazla-tahsilat-iade
+expected_outcome: |
+  Hayır. Pay satış fiyatına kadar hesaplanır: site 6 €, AGOS 3 €, tedarikçi 21 €. Fazla 5 € müşteriye
+  iade edilir ve ayrı kayıtla izlenir.
