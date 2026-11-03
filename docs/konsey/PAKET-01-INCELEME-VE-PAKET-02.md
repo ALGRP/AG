@@ -229,3 +229,92 @@ Gözlemler (karar gerektirmez, not):
 - `settlement_adjustment`: `UNIQUE (upper(adjustment_reference))`.
 - Haftalık kapanış: `SERIALIZABLE` işlem veya `pg_advisory_xact_lock` ile tek kapanış; `closed_week` üzerinde `UNIQUE (week_id)`.
 - Bunlar Paket-03 (QA-F4) kapsamında; `AG_TEST_PG=1` probları bunları doğrulayacak.
+
+## 9. Paket-01b ek doğrulama, PostgreSQL gereksinimleri ve ilk Paket-02 görevi
+
+**Sürüm:** origin `753f0e7` (Codex `8741de3` + A4.13 todo testi). Ek problar bu sürümde koşuldu; geçici dosyalar silindi.
+
+| Prob | Sonuç |
+| -- | -- |
+| Yıl geçişi: faaliyet 2026-W53, iki ay sonra önce 2027-W01 | 409 `close_first_active_week:2026-W53`; sonra W53 201, 2027-W01 201 |
+| Faaliyetsiz defter: W45 sonu + tam 4 hafta / + 4 hafta 1 ms / ~30 hafta | 201 / 409 `first_week_too_old` / 409 |
+| Faaliyet W45, 10 hafta sonra W45 ve W46 | 201, 201 (kilitlenme çözüldü) |
+| Faaliyet W45, ilk kapanış `2020-W01` | **201 (PR1-N5, gerileme)**; A4.13 `todo` |
+| Mahsup: 4 eşzamanlı harf varyantı / eski küçük harfli kayıt + yeni büyük harf / farklı hafta | 1×201 + 3×409 / 409 / 201 |
+
+**Commit kararları değişmedi:** `f2a5bd4` FAIL (PR1-N5), `8741de3` PASS.
+
+### 9.1 Gerçek PostgreSQL'de gereken kontroller (Paket-03, QA-F3/F4)
+
+Bugün bu kontrollerin hepsi yalnız uygulama katmanında ve MemoryStore'da. CRS PostgreSQL'e geçmeden önce şemada da olmalı.
+
+**Benzersizlik:**
+
+| Tablo | Kısıt | Neden |
+| -- | -- | -- |
+| `bank_receipt` | `UNIQUE (payer_id, upper(regexp_replace(bank_reference, '\s', '', 'g')))` | QA-F8 |
+| `settlement_adjustment` | `UNIQUE (upper(adjustment_reference))` | QA-F2, PR1-N2 |
+| `money_event` (tahsilat) | `UNIQUE (collector_party_id, upper(regexp_replace(reference, '\s', '', 'g')))` | QA-F9. H-26 "çoklu tahsis" derse yerine tahsis tablosu + toplam kontrolü |
+| `settlement_week` (kapanış) | `UNIQUE (week_id)` | çift kapanış |
+| `settlement_entry` | `UNIQUE (booking_id, week_id)` | haftada tek fark kaydı |
+| `statement_dispute` | `UNIQUE (dispute_ref)` | `ITZ-<hafta>-NNNN` |
+
+**İşlem ve eşzamanlılık:**
+- Kapanış ve mahsup yazımı `SERIALIZABLE` veya `pg_advisory_xact_lock(hashtext(week_id))` ile.
+- Kapanış sırası kuralı (ilk kapanış = en erken faaliyet haftası; sonra `next_week_id`) bir `BEFORE INSERT` tetikleyicisiyle de doğrulanır; uygulama tek savunma olmaz.
+- Kapanmış haftaya ait `settlement_entry`, `bank_receipt` ve `settlement_adjustment` satırları için `UPDATE`/`DELETE` reddeden tetikleyici (değişmezlik).
+
+**Yetki (RLS ve roller):**
+- Defter tablolarında `ENABLE` + `FORCE ROW LEVEL SECURITY`. Politika: `selling_party_id = current_setting('ag.party_id')` veya `supplier_id = current_setting('ag.party_id')`. Platform rolü ayrı ve 2FA'lı oturumla.
+- Uygulama rolü tablo sahibi olmaz; `BYPASSRLS` yok. Göç rolü ile çalışma rolü ayrı.
+- Mahsup, itiraz kararı, mükerrer temizleme ve kredi notu satırlarında `actor_id`, `actor_role`, `mfa_verified_at`, `reason` alanları `NOT NULL` (bugün Q21 probu bu alanların olmadığını gösteriyor).
+- Bunların kabul ölçütü mevcut `AG_TEST_PG=1` probları: Q01–Q35, Q21 ve "QA-F3 (DB)".
+
+### 9.2 Codex'e ilk Paket-02 görevi: QA-F10 · itiraz kararı ve mükerrer temizlemede 2FA
+
+**Önkoşul:** Paket-01c (PR1-N5, A4.13) ayrı commit olarak önce kapanır.
+
+**Kapsam (tek commit):**
+- `apps/api/src/service.ts`:
+  - `resolveDispute(actor, ref, input)` ve `clearDuplicate(actor, ref, input)` imzaları `actor` alır.
+  - İkisi de `#requireMfa(actor, ["admin", "finance_manager"])` çağırır.
+  - `reason` en az 5 karakter, `redactPii` uygulanır.
+  - Rezervasyona `disputeDecidedBy`, `disputeDecidedRole`, `disputeDecisionReason` (ve mükerrer için `duplicateClearedBy`, `duplicateClearedRole`, `duplicateClearReason`, `duplicateClearedAt`) yazılır; outbox olayına aktör kimliği eklenir.
+- `apps/api/src/http.ts` satır 184–187: iki uç da `actor`'ı geçirir. Statik anahtar `mfa: false` taşıdığı için yanıt 403 `mfa_required`. K17 fiyat onayı ve mahsupla aynı desen.
+- `packages/core/src/booking.ts`: yeni alanlar (isteğe bağlı, geriye uyumlu).
+
+**Kabul testleri:**
+- `qa-independent/a07-a08-a12-price-2fa.test.ts` A8.3 ve A8.5: `todo` kaldırılır, assertion değişmeden geçer.
+- A8.4 `todo` kalır (H-21: haklı itirazın mali etkisi kararı yok; bu görev mali sonucu değiştirmez).
+
+**Değişmesi gereken mevcut testler (açıkça bildirilmeli):**
+- `apps/api/src/api.test.ts` satır 460: statik anahtarla `clear-duplicate` → **200** bekliyor.
+- `apps/api/src/api.test.ts` satır 476: statik anahtarla `resolve-dispute` → **200** bekliyor.
+- Bu iki assertion bugünkü güvensiz davranışı kodluyor ve A8.3/A8.5 ile doğrudan çelişiyor. Gevşetme değil sıkılaştırma: beklenti **403 `mfa_required`** olur. Aynı testlerdeki sonraki adımlar (mükerrerin hesaba girmesi, itirazın çözülmesi) `MANAGER` aktörüyle servis çağrısına taşınır, böylece olumlu yol da test edilir.
+- `qa-independent/a04-weekly-close.test.ts` satır 72 ve A8.4'teki `resolveDispute(ref, …)` çağrıları yeni imzaya `MANAGER` ile güncellenir; assertion değişmez.
+- Commit mesajı bu dört çağrı değişikliğini tek tek listeler; inceleyici her birini ayrıca onaylar.
+
+**Beklenen durum:** 187 test; PR1-N5 + QA-F10 sonrası 170 geçti, 16 todo, 1 skip.
+
+**Kapsam dışı:** gerçek IdP / 2FA (SEL-332), kiracı kapsamı (QA-F3, sıradaki görev), haklı itirazın mali etkisi (H-21).
+
+### 9.3 Açık Owner kararları (Paket-02'yi etkileyen)
+
+| Karar | Etkilediği kalem | Karar gelene kadar uygulanacak (kesinleştirme değil) |
+| -- | -- | -- |
+| **H-25** · nakitsiz krediyi kim taşır | PKG-F04b | Kredi yalnız müşteri borcunu kapatır; taraflar arası para kaydı üretmez; komisyon tabanı gerçek nakit. |
+| **H-26** · bir makbuz birden çok rezervasyona tahsis edilebilir mi | QA-F9 | Varsayılan red (409). Tahsis modeli yazılmaz. |
+| H-21 · haklı itirazın mali etkisi | QA-F10 (A8.4) | A8.4 `todo` kalır. |
+| H-20 · 7 takvim günü sayımı | A4.11 | `todo` kalır. |
+| H-23 · küsurat dağıtımı | D-F02 | Algoritma değişmez. |
+
+### 9.4 Skill birleştirme planının doğrulanması
+
+- Org skill SHA-256 (bu tur yeniden hesaplandı): `agos-pricing-matrix` `86ef0045`, `agos-pool-finance` `9876d38a`. Değişmedi; hiçbir aktif skill dosyasına yazılmadı.
+- Üç yönlü birleştirme provası (geçici çalışma alanında): taban `451b53a` (`96ebf0a`'daki aday), bizim taraf repo adayı, karşı taraf V2.5 paketi. `git merge-file --diff3`: **4 çakışma**, önceki turla aynı. Repo'ya uygulanmadı.
+- Plan geçerli. Sıra:
+  1. PR1-N5 ve QA-F10 kapanır.
+  2. 4 çakışma elle çözülür; Paket-01 kuralları (§5.2) eklenir; tek commit.
+  3. Taban ölçümü (eski org skill) ve aday ölçümü (H-14 bütçesi).
+  4. Bağımsız inceleyici onayı.
+  5. Org kurulumu ayrı kapı; Owner GO.
