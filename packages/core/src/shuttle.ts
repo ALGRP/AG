@@ -150,6 +150,7 @@ export function parseShuttleTariff(raw: unknown): ShuttleTariffVersion {
   ) {
     fail("totalsMinor");
   }
+  if ((t.totalsMinor as number[]).length > 4) fail("K17: 5+ passengers require manual price approval; only 1–4 group totals may be automatic");
   if ((t.totalsMinor as number[]).length > (t.maxPassengers as number)) fail("totalsMinor longer than maxPassengers");
   // Eski "kişi başı ek ücret" alanı Owner kararıyla kaldırıldı; kalmış bir yapılandırma sessizce
   // fiyat üretmesin diye reddedilir.

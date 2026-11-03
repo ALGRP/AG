@@ -56,7 +56,7 @@ describe("A12 5+ passenger price bounds", () => {
     assert.equal((await approve(v2, ref, 9000)).body.error, "route_inactive");
   });
 
-  it("A12.5 [RULE] the historical '5 pax = 80 EUR' must never become active (tariff with a 5th total is refused)", { todo: "QA-F12 · Codex Paket-01" }, () => {
+  it("A12.5 [RULE] the historical '5 pax = 80 EUR' must never become active (tariff with a 5th total is refused)", () => {
     let parsed: unknown;
     let err = "";
     try {
