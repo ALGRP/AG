@@ -42,6 +42,26 @@ Yan etki: `qa-independent/` ve `apps/api/src/api.test.ts` içindeki tüm başar�
 | `qa-independent/harness.ts`, `apps/api/src/api.test.ts` | sahte doğrulayıcı ve otomatik `local:<alan adı>` belirteci (fikstür) |
 | `apps/sites` / SSG şablonu | Turnstile site anahtarı site başına; bu pakette yalnız yapılandırma alanı, gerçek anahtar yok |
 
+## 4a. Başlık saldırıları ve belirteç ayrıntıları (inceleme ek)
+
+Kod okuması (`apps/api/src/http.ts` satır ~93–125, `packages/core/src/site.ts` `resolveSite`):
+
+| Yüzey | Bugün | Kural |
+| -- | -- | -- |
+| `Origin` | Sitenin alan adlarından biri olmalı; tarayıcı dışında serbestçe yazılabilir | CORS için kalır; atıf kanıtı değildir |
+| `Host`, `X-Forwarded-Host`, `Referer` | Kullanılmıyor | Kullanılmaya **başlanmamalı**; A10.11 bunu korur |
+| `devOrigins` (`AG_DEV_ORIGINS`, varsayılan `http://localhost:4321`) | `resolveSite` bu kökenlerden **her** `siteId`'yi kabul ediyor | Yalnız `NODE_ENV=development/test`; başka modda boş liste. Yerelde de belirteç alan adı kontrolü geçerli |
+| `trustProxyHeader` | Ayarlıysa istemci IP'si bu başlıktan okunuyor | Yalnız güvenilir ters vekil arkasında. Aksi hâlde istemci IP'sini uydurup hız sınırını ve Turnstile `remoteip`'i atlatabilir |
+| Turnstile yanıtı | Yalnız `success` | `success === true` **ve** `hostname ∈ site.domains` **ve** `action === "booking"`. İsteğe bağlı: `cdata === siteId` |
+| siteverify ağ hatası veya zaman aşımı | `fetch` hatası işlenmemiş | **Kapalı başarısızlık:** 403 `human_check_failed`; kabul yok. Zaman aşımı ≤ 5 sn |
+| Belirteç tekrarı | Cloudflare belirteci tek kullanımlık doğrular | Ek olarak aynı belirtecin özeti 10 dakika saklanır; ikinci kullanım 403 (kendi tarafımızda da tekrar yok) |
+
+Ek kabul testleri (Paket-02'de yazılır; assertion bu metinle aynı):
+- **A10.11:** partner `Origin` + geçerli `local:www.partner.example` belirteci ile, `Host: www.rival.example`, `X-Forwarded-Host: www.rival.example`, `Referer: https://www.rival.example/` başlıkları gönderilse de rezervasyon `partner-site` olur; `Origin` rival iken ise 403.
+- **A10.12:** sahte doğrulayıcı ağ hatası fırlatırsa (veya zaman aşımı) → 403, rezervasyon yok.
+- **A10.13:** aynı belirteç ikinci istekte → 403, yalnız ilk rezervasyon var.
+- **A10.14:** `NODE_ENV` yerel değilken `devOrigins` boş; `http://localhost:4321` kökeni → 403 (`main.ts` üretim kapısı zaten kapalı; bu birim düzeyinde test edilir).
+
 ## 5. Kapsam dışı
 
 Gerçek Turnstile veya reklam hesapları, gclid/fbclid ile dönüşüm gönderimi, KVKK rıza akışı (H-15), reklam API'leri. Hepsi HOLD.

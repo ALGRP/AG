@@ -465,3 +465,25 @@ Sabitlenen sürüm `fe1485139a410797f807493a0c95dfc1c20c37b1`. `npm run check`: 
 Notlar (P3): makbuz kontrolü tüm rezervasyonları tarıyor (yerelde sorun değil); kalıcı garanti Paket-03'teki `collection_slip` benzersiz kısıtında. **H-26 açık**; tahsis modeli yazılmadı.
 
 **Sıradaki iş: QA-F11** · [`QA-F11-SATIS-KAYNAGI.md`](./QA-F11-SATIS-KAYNAGI.md). A10.2 `todo`; A10.8 yeni koruma testi (pazarlama alanları atıf değiştirmiyor; bugün geçiyor).
+
+### 14.1 QA-F9 ek kontroller (aynı sürüm, karar değişmedi: PASS)
+
+**`MemoryStore` / `AsyncLocalStorage` zamanlama probları** (geçici test; silindi):
+
+| Senaryo | Sonuç |
+| -- | -- |
+| İşlemden taşan beklenmeyen alt görev, başka işlem etkinken `transaction` çağırıyor | Sıraya giriyor (A, B-start, B-end, child) |
+| Etkin işlem içinde `setTimeout` geri çağrısından iç içe çağrı | Yeniden giriyor; kilitlenme yok |
+| İç içe yazımdan sonra dış işlem hata fırlatıyor | Tüm yazımlar geri alındı; kuyruk çalışmaya devam ediyor |
+| 50 eşzamanlı oku-değiştir-yaz | Sonuç 50 (tam sıralı) |
+
+Yeni yarış bulunmadı. Bu sonuçlar yalnız yerel depo içindir.
+
+**PostgreSQL için gerekenler (Paket-03; özet):**
+- `collection_slip (collector_party_id, reference_norm)` benzersiz; tahsilat olayı makbuza bağlı. H-26'ya göre `UNIQUE (slip_id)` ya da tahsis tablosu + toplam ≤ makbuz tutarı (QA-F9 §4a).
+- Tahsilat yazımı tek işlemde; benzersiz kısıt ihlali 409'a çevrilir. Uygulama taraması tek savunma olmaz.
+- `READ COMMITTED` altında da benzersiz indeks yarışı keser; tahsis toplamı kontrolü için `SELECT … FOR UPDATE` makbuz satırında veya `SERIALIZABLE`.
+- Olay tabloları ekleme-yalnız (mevcut tetikleyiciler); iade makbuzu serbest bırakmaz.
+- RLS: makbuz yalnız tahsil eden tarafa ve platforma görünür.
+
+**QA-F11 şartnamesine ek:** başlık saldırıları ve belirteç ayrıntıları ([§4a](./QA-F11-SATIS-KAYNAGI.md)).
