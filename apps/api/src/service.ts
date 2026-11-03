@@ -710,17 +710,21 @@ export class BookingService {
       purpose,
     };
     return this.#d.store.transaction(async (tx) => {
-      // PR1-N6: a suspiciously old, *unanchored* week cannot bootstrap a historical ledger.
-      // Late real remittances remain possible when an actual booking or closed statement anchors the week.
-      // This is a LOCAL_ONLY date sanity gate, not a production retention policy.
-      const ageMs = Date.parse(r.paid_at) - Date.parse(receiptWeek.end_utc);
-      if (ageMs > 28 * 86400_000 && !(await tx.getClosedWeek(weekId))) {
-        const active = (await tx.listBookings()).some((b) => {
+      // PR1-N6/N7: do not let an unanchored historical receipt bootstrap years of empty closes.
+      // A self-consistent 2020 paidAt/2020 week can still be a typo when the ledger begins in 2026.
+      // Late genuine receipts may be entered for an already closed week or one with booking activity.
+      // 28 days is a LOCAL_ONLY review threshold, not an approved accounting/retention rule.
+      const anchoredByClose = Boolean(await tx.getClosedWeek(weekId));
+      if (!anchoredByClose) {
+        const anchoredByBooking = (await tx.listBookings()).some((b) => {
           if (b.isTest) return false;
           return [b.createdAt, b.completedAt, b.cancelledAt, ...b.moneyEvents.map((e) => e.at)]
             .some((at) => at && settlementWeekId(at) === weekId);
         });
-        if (!active) return fail(422, "unverified_historical_receipt_week");
+        const maxAgeMs = Math.max(Date.parse(this.#now()), Date.parse(r.paid_at)) - Date.parse(receiptWeek.end_utc);
+        if (maxAgeMs > 28 * 86400_000 && !anchoredByBooking) {
+          return fail(422, "unverified_historical_receipt_week");
+        }
       }
       if ((await tx.listReceipts()).some((x) => normalizeBankReference(x.bank_reference) === normalizeBankReference(r.bank_reference) && x.payer_id === r.payer_id)) return fail(409, "duplicate_bank_reference");
       await tx.appendReceipt(r);

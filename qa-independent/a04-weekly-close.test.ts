@@ -209,7 +209,7 @@ describe("A4 statement disputes timing (T3)", () => {
     }
   });
 
-  it("A4.15 [RULE] an ancient but self-consistent receipt (old week, paid in that week) must not force an ancient first close", { todo: "PR1-N7 · Codex Paket-01e (768667a eksik kalan durum)" }, async () => {
+  it("A4.15 [RULE] an ancient but self-consistent receipt (old week, paid in that week) must not force an ancient first close", async () => {
     const h = harness();
     h.setNow("2026-11-04T10:00:00Z");
     await h.shuttleJob({}, "sup-a", 5000); // W45 activity
