@@ -534,3 +534,24 @@ Sabitlenen sürüm `f6d566241157cf7a7e7779df452196aa1f0b77fc`. `npm run check`: 
 **Commit kararı değişmedi: `f6d5662` NEEDS REVIEW** (tek neden PR2-N3 / A10.18; 5. madde operasyonel öneri). Ayrıca A10.6 (QA-L6, gelecekte tarihli "self-operation" doğrulaması) ayrı bir `todo`; QA-F11 kapsamında değil.
 
 **PKG-F04b sınırları (Owner talimatıyla teyit):** komisyon yalnız gerçek nakit tahsilattan; kredi yalnız müşteri borcunu kapatır; onaysız mahsup, otomatik ödeme ve taraflar arası finans kaydı yok; H-25 açık. Şartname: [`PKG-F04b-NAKITSIZ-KREDI.md`](./PKG-F04b-NAKITSIZ-KREDI.md); kabul testleri A14.1–A14.4.
+
+## 16. PR2-N3 ve PKG-F04b akran incelemesi (`4f04fb6` → `a1ca24a`)
+
+Sabitlenen sürüm `a1ca24ae15f935c5d980a067958e5acbb1f15f64`. `npm run check`: **220 test: 210 geçti, 0 kaldı, 9 todo, 1 skip** (Codex ile aynı). Test dosyalarında yalnız `todo` işaretleri kaldırılmış; assertion değişikliği yok. A14.5 Codex'in ek testi.
+
+| Commit | Karar | Kanıt |
+| -- | -- | -- |
+| aba1027 PR2-N3 | **NEEDS REVIEW** | A10.18 geçiyor: aynı anahtar + yeni belirteç → ilk rezervasyon dönüyor. İş alanı değişirse (yolcu 2 → 3) hâlâ 409. **Ama yeni açık PR2-N4:** önbellekteki yanıt site ve belirteç kontrolünden **önce** dönüyor. Daha önce yeniden oynatma, yalnız ilk istemcinin bildiği tek kullanımlık belirteci gerektiriyordu. Artık aynı anahtar ve gövdeyle belirteçsiz, `Origin`'siz veya rakip sitenin belirteciyle gelen istek 201 ve `lookupToken` alıyor (koşuldu). Saldırgan idempotency anahtarını ve gövdenin tamamını (müşteri bilgileri dahil) bilmeli; risk sınırlı ama gerçek. Kabul testi `A10.19` (`todo`). |
+| a1ca24a PKG-F04b | **PASS (yerel)** | A14.1–A14.5 ve "paket F04" geçiyor. Eşzamanlı iki istek, farklı rezervasyonlarda `krd 77` / `KRD77` → 1×201, 1×409. Kredi için `obligations` veya `adjustments` satırı yok. Komisyon gerçek nakitten: kredi sonrası kalan 20 € nakit ödenince pay 5000 → 1000/500/3500. Kapanmış hafta değişmiyor. İptal → 409. Statik anahtar ve site kimliği → 403. Kredi olayları zamana bağlı; önceki açık haftanın borcu geriye dönük azalmıyor. |
+
+**PR2-N4 için önerilen en küçük düzeltme:** Yeniden oynatmada önbellekteki yanıt dönmeden önce `resolveSite` (Origin) kontrolü yapılsın ve yeni bir doğrulanmış, sitenin alan adına bağlı belirteç istensin. Yeni belirteç harcanır; ikinci rezervasyon açılmaz. Alternatif: yeniden oynatma yanıtında `lookupToken` hiç dönmesin (müşteri e-postadaki bağlantıyı kullanır).
+
+**H-25'e eklenen açık sorular (kesinleştirilmedi):**
+- **H-25a:** Kredi teslim edilmemiş (onaylanmış ama tamamlanmamış) rezervasyona verilebilir mi? Bugün veriliyor (201). Hizmet kredisi tanımı gereği yalnız teslimden sonra mı olmalı?
+- **H-25b:** Kredi verildikten sonra müşteri kalanı yine nakit öderse (30 nakit + 20 kredi + 20 nakit) müşteri fiilen 20 € fazla ödemiş olur. Bugün istisna da iade alacağı da görünmüyor; komisyon 50 € nakit üzerinden. Fazla ödeme fiyata mı, fiyat − krediye mi göre hesaplanmalı? İade borcu kimde?
+- **H-25c:** Kredinin fatura ve vergi karşılığı (iskonto mu, iade faturası mı); mali müşavir sorusu (H-16).
+- **H-25d:** Kredi onayı için yerel `mfa: true` yeterli değil; gerçek imzalı oturum ve 2FA (SEL-332) gelmeden HTTP'de kapalı kalmalı (bugün öyle).
+
+**Sıradaki iş:**
+1. PR2-N4 (A10.19), küçük tek commit.
+2. QA-F4: DB defter kısıtları (35 negatif prob), ayrı paket. Atılabilir PostgreSQL 16 ile.
