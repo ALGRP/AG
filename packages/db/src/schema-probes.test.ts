@@ -14,13 +14,36 @@ import { after, before, describe, it } from "node:test";
 const ROOT = resolve(import.meta.dirname, "../../..");
 const MIGRATION = resolve(ROOT, "packages/db/migrations/0001_network_core.sql");
 const RLS_MIGRATION = resolve(ROOT, "packages/db/migrations/0002_tenant_rls.sql");
+const WEEK_MIGRATION = resolve(ROOT, "packages/db/migrations/0003_week_integrity.sql");
+const WEEK_PROBES: Readonly<Record<string, string>> = {
+  Q05: "AG_F4_CLOSED_WEEK_ENTRY",
+  Q06: "AG_F4_WEEK_NOT_FINISHED",
+  Q07: "AG_F4_WEEK_OUT_OF_ORDER",
+  Q08: "AG_F4_WEEK_PERIOD_MISMATCH",
+  Q09: "AG_F4_WEEK_INVALID",
+  Q14: "AG_F4_CLOSED_WEEK_MONEY_EVENT",
+  Q18: "AG_F4_CLOSED_WEEK_ADJUSTMENT",
+  Q20: "AG_F4_WEEK_INVALID",
+};
 const PROBES = resolve(ROOT, "packages/db/probes/0001_probes.sql");
 const QA_PROBES = resolve(ROOT, "qa-independent/sql/qa_probes.sql");
-const ENABLED = process.env.AG_TEST_PG === "1";
+const ENABLED = process.env.AG_TEST_PG === "1" && process.env.AG_TEST_PG_ISOLATED === "YES";
+const CONTAINER = process.env.AG_TEST_PG_CONTAINER; // disposable, network-none container only
 const LEDGER_TABLES = ["bank_receipt", "booking", "booking_money_event", "settlement_adjustment", "settlement_entry", "statement_dispute"];
 
-function psql(db: string, args: readonly string[]): { status: number | null; out: string } {
-  const r = spawnSync("psql", ["-X", "-q", "-d", db, ...args], { encoding: "utf8" });
+function psql(db: string, args: readonly string[], input?: string): { status: number | null; out: string } {
+  const cli = [...args];
+  const fileAt = cli.indexOf("-f");
+  // Docker cannot read the Mac's absolute paths; pass the unchanged original SQL via stdin.
+  if (CONTAINER && fileAt >= 0 && cli[fileAt + 1] !== "-") {
+    input = readFileSync(cli[fileAt + 1]!, "utf8");
+    cli[fileAt + 1] = "-";
+  }
+  const cmd = CONTAINER ? "docker" : "psql";
+  const argv = CONTAINER
+    ? ["exec", "-i", CONTAINER, "psql", "-U", "postgres", "-X", "-q", "-d", db, ...cli]
+    : ["-X", "-q", "-d", db, ...cli];
+  const r = spawnSync(cmd, argv, { encoding: "utf8", input, timeout: 30_000 });
   return { status: r.status, out: `${r.stdout ?? ""}${r.stderr ?? ""}` };
 }
 
@@ -48,6 +71,8 @@ const qIds = [...readFileSync(QA_PROBES, "utf8").matchAll(/^\\echo (Q\d+)\b/gm)]
 describe("DB şema adayı — negatif problar (PostgreSQL)", { skip: ENABLED ? false : "AG_TEST_PG=1 ve PGHOST/PGPORT/PGUSER gerekli (atlandı; geçti sayılmaz)" }, () => {
   const dbA = `ag_probe_${process.pid}_a`;
   const dbB = `ag_probe_${process.pid}_b`;
+  const dbW = `ag_probe_${process.pid}_w`;
+  const weekResults = new Map<string, { status: number | null; out: string }>();
   let p0001 = new Map<string, number>();
   let pQa = new Map<string, number>();
   let q21 = "";
@@ -55,12 +80,34 @@ describe("DB şema adayı — negatif problar (PostgreSQL)", { skip: ENABLED ? f
   let foreign = "";
 
   before(() => {
-    for (const db of [dbA, dbB]) {
+    for (const db of [dbA, dbB, dbW]) {
       const c = psql("postgres", ["-c", `DROP DATABASE IF EXISTS ${db}`, "-c", `CREATE DATABASE ${db}`]);
       assert.equal(c.status, 0, c.out);
       const m = psql(db, ["-v", "ON_ERROR_STOP=1", "-f", MIGRATION]);
       assert.equal(m.status, 0, `migration: ${m.out}`);
     }
+    // Keep the existing P1–P16, C01–C05 and non-W QA-F4 probes on the 0001 baseline.
+    // Run the unchanged W-group statements separately against 0001->0002->0003,
+    // so an unrelated legacy constraint cannot accidentally count as a W probe pass.
+    const sourceLines = readFileSync(QA_PROBES, "utf8").split("\n");
+    const setupEnd = sourceLines.findIndex((line) => line.trim() === "\\echo SETUP_DONE");
+    assert.ok(setupEnd >= 0, "QA source has no setup marker");
+    const seedSql = sourceLines.slice(0, setupEnd + 1).join("\n") + "\n";
+    const seeded = psql(dbW, ["-v", "ON_ERROR_STOP=1", "-f", "-"], seedSql);
+    assert.equal(seeded.status, 0, "W-group seed failed: " + seeded.out);
+    for (const path of [RLS_MIGRATION, WEEK_MIGRATION]) {
+      const migrated = psql(dbW, ["-v", "ON_ERROR_STOP=1", "-f", path]);
+      assert.equal(migrated.status, 0, path + ": " + migrated.out);
+    }
+    for (const id of Object.keys(WEEK_PROBES)) {
+      const start = sourceLines.findIndex((line) => line.startsWith("\\echo " + id + " "));
+      assert.ok(start > setupEnd, "missing probe " + id);
+      const stopIndex = sourceLines.findIndex((line, index) => index > start && line.startsWith("\\echo "));
+      const stop = stopIndex < 0 ? sourceLines.length : stopIndex;
+      const statement = "\\set VERBOSITY terse\n" + sourceLines.slice(start, stop).join("\n") + "\n";
+      weekResults.set(id, psql(dbW, ["-v", "ON_ERROR_STOP=1", "-f", "-"], statement));
+    }
+
     p0001 = errorsByMarker(PROBES, psql(dbA, ["-f", PROBES]).out, /^-- (P\d+|OK\d*)\b/);
     pQa = errorsByMarker(QA_PROBES, psql(dbB, ["-f", QA_PROBES]).out, /^\\echo (SETUP_DONE|SETUP|RLS_SETUP|END|Q\d+|C\d+|R\d+)\b/);
     q21 = psql(dbB, ["-At", "-c", "SELECT count(*) FROM information_schema.columns WHERE table_name = 'settlement_adjustment' AND column_name ~ '(mfa|actor|approved_by|decided_by|role)'"]).out.trim();
@@ -77,7 +124,7 @@ describe("DB şema adayı — negatif problar (PostgreSQL)", { skip: ENABLED ? f
   });
 
   after(() => {
-    for (const db of [dbA, dbB]) psql("postgres", ["-c", `DROP DATABASE IF EXISTS ${db}`]);
+    for (const db of [dbA, dbB, dbW]) psql("postgres", ["-c", `DROP DATABASE IF EXISTS ${db}`]);
   });
 
   it("0001 problar: P1–P16 reddedilir, OK blokları kabul edilir", () => {
@@ -93,9 +140,18 @@ describe("DB şema adayı — negatif problar (PostgreSQL)", { skip: ENABLED ? f
   });
 
   for (const id of qIds) {
-    it(`QA-F4 ${id}: ihlal reddedilmeli`, { todo: "QA-F4 · Paket-03 (DB defter kısıtları)" }, () => {
-      assert.ok((pQa.get(id) ?? 0) > 0, `${id} kabul edildi`);
-    });
+    if (Object.hasOwn(WEEK_PROBES, id)) {
+      it(`QA-F4 W ${id}: exact week-integrity rule rejects the original SQL probe`, () => {
+        const result = weekResults.get(id);
+        assert.ok(result, `W-group ${id} was not run`);
+        assert.notEqual(result.status, 0, `${id} unexpectedly accepted`);
+        assert.ok(result.out.includes(WEEK_PROBES[id]!), `${id} rejected for WRONG reason: ${result.out}`);
+      });
+    } else {
+      it(`QA-F4 ${id}: ihlal reddedilmeli`, { todo: "QA-F4 · Paket-03 (DB defter kısıtları)" }, () => {
+        assert.ok((pQa.get(id) ?? 0) > 0, `${id} kabul edildi`);
+      });
+    }
   }
 
   it("QA-F4 Q21: mahsup kaydında aktör / rol / 2FA alanı bulunmalı", { todo: "QA-F4 · Paket-03" }, () => {
