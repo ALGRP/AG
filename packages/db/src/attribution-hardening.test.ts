@@ -44,7 +44,7 @@ ${booking("a701", "AG-QQNN22", "p1", "sup-a")}`);
     assert.equal(seed.status, 0, seed.out);
     for (const n of ["0002_tenant_rls", "0003_week_integrity", "0004_entry_integrity", "0005_money_events",
       "0006_adjustments_audit", "0007_adjustment_hardening", "0008_attribution_integrity", "0009_attribution_freeze",
-      "0010_supplier_id_format"]) {
+      "0010_supplier_id_format", "0011_self_supply_history"]) {
       const m = psql(db, MIG(n));
       assert.equal(m.status, 0, `${n}: ${m.out}`);
     }
@@ -71,7 +71,7 @@ ${booking("a701", "AG-QQNN22", "p1", "sup-a")}`);
     assert.equal(r.status, 0, `app-valid supplier id rejected: ${r.out.trim()}`);
   });
 
-  it("PR3-N9 [RULE] revoking a site's self-operation verification does not lock its historical self-supplied bookings", { todo: "PR3-N9 · Codex Paket-03 (kendi aracı kontrolü yalnız tedarikçi atanırken)" }, () => {
+  it("PR3-N9 [RULE] revoking a site's self-operation verification does not lock its historical self-supplied bookings", () => {
     const setup = psql(db, `UPDATE site SET self_operation_verified_at = '2026-10-01' WHERE id = 'site-one';
 ${booking("a703", "AG-QQNN24", "p9", "p9").replace("1000,500,3500", "0,500,4500")}
 UPDATE site SET self_operation_verified_at = NULL WHERE id = 'site-one';`);
