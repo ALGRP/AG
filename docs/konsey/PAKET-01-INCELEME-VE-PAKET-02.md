@@ -642,3 +642,37 @@ Atılabilir PG16, 0001 → sentetik tohum → 0002 → 0003:
 **Aday göç gerçek CRS şemasına uygun varsayılmadı;** SEL-331 eşlemesi yapılmadı.
 
 **Sıradaki iş:** QA-F4 / E: [`QA-F4-E-PAY-KAYDI-GOREVLERI.md`](./QA-F4-E-PAY-KAYDI-GOREVLERI.md). H-23 açık.
+
+## 19. QA-F4/E akran incelemesi (`de60dea` → `3ce6ea5`)
+
+Sabitlenen sürüm `3ce6ea5d6646f6881a392494fb3bb4aa73ad3ec4`. `npm run check`: **221 test: 211 geçti, 0 kaldı, 9 todo, 1 skip**. Atılabilir PostgreSQL 16.15, tüm DB testleri: **53 test: 31 geçti, 0 kaldı, 22 todo** (21 QA-F4 probu + PR3-N2). Codex ile aynı.
+
+**Test değişiklikleri:** `split-parity.test.ts` (benim yazdığım kabul testi) yalnız `todo` kaldırılarak geçiyor; assertion aynı. `close-lifecycle.test.ts` 0004'ü de uyguluyor; beklentiler aynı. `schema-probes.test.ts` E problarını ayrı bir veritabanında (0001 → tohum → 0002 → 0003 → 0004) koşuyor ve **tam hata nedenini** doğruluyor; kapanmış hafta veya RLS reddi geçti sayılmıyor. `entry-lifecycle.test.ts` yeni (3 olumlu senaryo).
+
+| Kontrol | Sonuç |
+| -- | -- |
+| SQL = uygulama pay eşitliği (4 senaryo, 0..fiyat her kuruş) | **Geçti** (bağımsız koşum) |
+| Q01 / Q02 / Q03 / Q04 / Q10 / Q11 | Sırasıyla `AG_F4_ENTRY_BASE_MISMATCH` / `ENTRY_EXCEEDS_PRICE` / `ENTRY_SPLIT_MISMATCH` / `PRIVATE_AGOS_NONZERO` / `ENTRY_POLICY_INVALID` / `ENTRY_CURRENCY_MISMATCH`. E tetikleyicisi (`ag_f4_a_entry_rules`) ad sırasıyla 0003 korumasından önce çalışıyor; probların reddi finans nedeniyle. |
+| W probları, W44 olumlu kapanış, RLS | Geçiyor; PR3-N2 `todo` |
+| Kısmi tahsilat 30 € → 600/300/2100, kalan 20 € → 400/200/1400 | Geçiyor (`entry-lifecycle`) |
+| Eski farklı pay (550/350/2100) sonrası yeni tahsilat ve iptal ters kaydı | Geçiyor; ters kayıt **kayıtlı** payları sıfırlıyor (D-F06), yeni delta **beklenen** önceki paydan (D-F05) |
+| 1 kuruşluk ek tahsilatta AGOS −1 | Bugünkü davranış aynen; **H-23 açık** |
+| Rezervasyonun politikası dışında bir politika kimliği | `ENTRY_POLICY_INVALID` (shuttle'da `NEW.policy_id = booking.policy_id` zorunlu) |
+
+**Kod okuması:** pay fonksiyonu `numeric` ile taşmasız; shuttle'da `floor` + kalan AGOS'a; kendi aracı 0/10/90; private `floor(c × site / fiyat)`, AGOS 0. `previous_base` önceki kayıtların `collected_delta` toplamı (iptal sonrası 0'a dönebiliyor). `GRANT SELECT ON split_policy TO ag_platform` yalnız okuma.
+
+**Karar: `3ce6ea5` NEEDS REVIEW** (E kuralları doğru; tek neden aşağıdaki P2).
+
+**Yeni bulgu PR3-N3 (P2):**
+- Rezervasyon yalnız `policy_id`'yi donduruyor, oranları değil. 0004 her yeni pay satırını **güncel** `split_policy` satırına göre doğruluyor.
+- Onaylı satır tablo sahibi veya süper kullanıcı (göç rolü) tarafından değiştirilebiliyor. Koşuldu: `shuttle-split-v1` 7000/2000 → 6000/3000 yapılınca, bu politikayla dondurulmuş W44 rezervasyonunun meşru kapanışı (1000/500/3500) `AG_F4_ENTRY_SPLIT_MISMATCH` ile reddedildi. Ters yönde, yanlış oranlı satırlar kabul edilir.
+- Onaylı satır silinebiliyor da.
+- `ag_platform` değiştiremiyor (yalnız `SELECT`); risk göç ve yönetici yolunda.
+- Kabul testi: `packages/db/src/split-policy-immutability.test.ts` (`todo` × 2).
+- Öneri: `split_policy` için `BEFORE UPDATE OR DELETE` tetikleyicisi. `status = 'approved'` satırlar değişmez ve silinmez; yeni oranlar yeni kimlikle gelir (`shuttle-split-v2`). Uygulamadaki dondurulmuş politika kaydıyla (D-F05) aynı ilke.
+
+**Hâlâ açık:** PR3-N2 (SAVEPOINT), kapanış kilidi, CRS adaptörü ve SEL-331 eşlemesi, H-23. 0003/0004 staging veya canlıya uygulanmaz.
+
+**Sıradaki iş:**
+1. PR3-N3 (küçük; `0004` içine veya `0005` başına).
+2. QA-F4 M grubu (Q12, Q13, Q15, Q16: para hareketleri).
