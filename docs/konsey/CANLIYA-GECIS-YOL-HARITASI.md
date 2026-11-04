@@ -17,7 +17,9 @@ Mevcut Alanya Group siteleri bu süreçte kapatılmaz. Rezervasyon ve ödeme alm
 | Açık QA-F4 probları | Q22–Q32 arası 11 prob (L, P, R grupları) |
 | Owner kararı bekleyen | H-20, H-21, H-22/K17, H-23, H-25, H-26, K8, H-16 (mali/hukuk) |
 
-## Adım 1 · İki güvenlik hatası (Codex uygular, Claude test eder)
+## Adım 1 · İki güvenlik hatası (Codex uygular, Claude test eder) — **TAMAM (04.11.2026, `ff9899a`)**
+
+PR3-N7 (`86c8b0d`), PR3-N8 (`f247054`) ve incelemede çıkan PR3-N9 (`ff9899a`) akran incelemesinden PASS (aday) aldı. Ayrıntı: inceleme raporu §23–§24.
 
 | İş | Kabul testi (beklenti değişmeden geçmeli) |
 | -- | -- |

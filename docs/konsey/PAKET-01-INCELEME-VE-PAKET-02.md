@@ -803,3 +803,30 @@ Sabitlenen sürüm `f247054` (iki commit: `86c8b0d` PR3-N7, `f247054` PR3-N8). `
 - 0001–0008 değişmedi.
 
 **Sıradaki iş (yol haritası Adım 1 kapanışı):** PR3-N9 (küçük). Ardından Adım 2 SEL-331: gerçek CRS şeması gerekiyor (Owner veya altyapı). O gelene kadar yerelde: QA-F4/L (Q30), P (Q23–26, Q29, Q31), R (Q27–28; K8), PR3-N2.
+
+## 24. PR3-N9 akran incelemesi (`a97b43c` → `ff9899a`) · Yol haritası Adım 1 tamam
+
+Sabitlenen sürüm `ff9899a54ca186229dca9efb97ef267708a3a70e` (tek commit). `npm run check`: **222 test: 212 geçti, 0 kaldı, 9 todo, 1 skip**. Atılabilir PostgreSQL 16.15, tüm DB testleri: **91 test: 79 geçti, 0 kaldı, 12 todo** (Codex ile aynı). PR3-N9 testim assertion değişmeden geçiyor; PR3-N7 × 2 ve PR3-N8 de yeşil.
+
+**Karar: `ff9899a` PASS (aday; yalnız atılabilir küme).**
+
+- `0011_self_supply_history.sql` iki fonksiyonu değiştiriyor: `ag_f4_check_booking_attribution()` (0009) ve 0001'in `booking_settlement_guard()`'ı. İkincisi gerekli: eski tetikleyici de aynı kendi aracı kontrolünü yapıyordu.
+- 0001 fonksiyonunun özgün hâliyle satır satır karşılaştırması: yalnız iki değişiklik var, ikisi de amaçlanan.
+  - Kendi aracı kontrolü yalnız INSERT ve `NULL` → tedarikçi atamasında.
+  - Gelecek tarihli doğrulama da reddediliyor (sıkılaştırma).
+  - Pay, tahsilatçı, iade ve uzlaşmış rezervasyon dondurma kuralları aynı.
+- Saldırgan kontroller (doğrulanmamış site):
+  - Kendi aracıyla INSERT → `AG_F4_BOOKING_SELF_SUPPLY_UNVERIFIED`.
+  - Boş tedarikçi alanına kendini atama → aynı hata.
+  - `ag_app` rezervasyon güncelleyemiyor (yetki yok).
+- Doğrulama geri alındıktan sonra eski kendi araçlı rezervasyonda not güncellemesi kabul (PR3-N9). Atıf yine donuk (PR3-N7).
+
+**Adım 1 sonucu:** PR3-N7, PR3-N8 ve PR3-N9 PASS (aday). Yol haritasının 1. adımı kapandı.
+
+**Adım 2 (SEL-331) için gereken:** gerçek CRS şemasının dökümü (yalnız şema). O gelene kadar yerelde yapılabilecekler:
+- QA-F4/L (Q30): uzlaşmış ve teslim edilmiş iş iptale dönmez.
+- QA-F4/P: Q23–Q26, Q29, Q31.
+- QA-F4/R: Q27–Q28 (K8).
+- PR3-N2 (SAVEPOINT).
+
+H-22, H-23, H-25, H-26, K8 ve K17 açık. 0003–0011 staging veya canlıya uygulanmaz.
