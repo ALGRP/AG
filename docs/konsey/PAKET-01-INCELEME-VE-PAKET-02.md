@@ -889,3 +889,42 @@ Sabitlenen sürüm `ce61a043f6f74258f5ebdeda8a1126df72d94707` (tek commit, 3 dos
 **Karar: `ce61a04` — Q23–Q26, Q29, Q31 için PASS (aday); QA-F4/P grubu bütünüyle NEEDS REVIEW (PR3-N10 açık).** Bağımsız insan kabulü değildir. 0013 staging veya canlıya uygulanmaz.
 
 **Kalan DB todo'ları:** PR3-N10 (×3), PR3-N2, Q22/Q32 (H-22/K17), Q27/Q28 (K8). SEL-331 CRS şema dökümü bekleniyor.
+
+## 27. PR3-N10 akran incelemesi (`4c6c742` → `05e036d`)
+
+Sabitlenen sürüm `05e036d465e02a7361dd0262161825e8e6b4cdc9` (tek commit). Değişen dosyalar:
+- yeni `0014_manual_price_service_freeze.sql`;
+- yeni `price-approval-freeze.test.ts`;
+- `price-approval-binding.test.ts`: yalnız üç `todo` işareti kaldırıldı. Assertion, kurulum ve koruma testi aynı.
+
+0001–0013 ve `price-lifecycle.test.ts` değişmedi (SHA-256 `30a055bf…5dfd`).
+
+| Koşum (atılabilir PG16, yerel) | Test | Geçti | Kaldı | Todo | Skip |
+| -- | --: | --: | --: | --: | --: |
+| Tüm DB testleri | 132 | 127 | 0 | 5 | 0 |
+| `npm run check` | 353 | 338 | 0 | 14 | 1 |
+
+Sonuçlar Codex'in sayılarıyla aynı.
+
+**Seçilen yol:** onay kaydı varsa `passengers`, `route_code` ve `service_type` değişmez. Hizmet değişikliği iptal + yeni rezervasyon + yeni onay ile yapılır.
+
+**Bağımsız karşı-örnekler (0014 dahil tam aday, hepsi `AG_F4_MANUAL_PRICE_SERVICE_IMMUTABLE`):**
+- 6 → 16 yolcu (onaylı ve fiyatlı);
+- hat `AYT-ALN` → `AYT-KNY`;
+- `ag_platform` rolü ve `scope=platform` ile 6 → 7 yolcu;
+- iptal edildikten sonra yolcu değişikliği.
+
+Meşru alım noktası metni güncellemesi kabul ediliyor.
+
+**RLS değerlendirmesi:**
+- Kontrol, çağıranın yetkisiyle `EXISTS` sorgusu yapıyor.
+- Rezervasyonu güncelleyebilen tek veri rolü `ag_platform`.
+- Bu rolün `booking` ve `manual_price_approval` politikaları aynı (`scope=platform`). Bu yüzden görülebilen her rezervasyonun onay kaydı da görülüyor; görünmezlik yoluyla atlatma yok.
+
+**Karar: `05e036d` PASS (aday). PR3-N10 kapandı.** QA-F4/P grubu (Q23–Q26, Q29, Q31 + PR3-N10) PASS (aday).
+
+Açık kalanlar:
+- Tarife sırası P3 notu, H-22/K17 ve K8 açık.
+- Kalan DB todo'ları: PR3-N2, Q22/Q32, Q27/Q28.
+
+Bağımsız insan kabulü değildir. 0013/0014 staging veya canlıya uygulanmaz.
