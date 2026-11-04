@@ -7,7 +7,7 @@
 //  · QA-F3 (DB): defter tablolarında satır düzeyi güvenlik (todo)
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { after, before, describe, it } from "node:test";
 
@@ -18,12 +18,17 @@ const WEEK_MIGRATION = resolve(ROOT, "packages/db/migrations/0003_week_integrity
 const ENTRY_MIGRATION = resolve(ROOT, "packages/db/migrations/0004_entry_integrity.sql");
 const MONEY_MIGRATION = resolve(ROOT, "packages/db/migrations/0005_money_events.sql");
 const AUDIT_MIGRATION = resolve(ROOT, "packages/db/migrations/0006_adjustments_audit.sql");
-const HARDEN_MIGRATION = resolve(ROOT, "packages/db/migrations/0007_adjustment_hardening.sql");
-const ATTRIBUTION_MIGRATION = resolve(ROOT, "packages/db/migrations/0008_attribution_integrity.sql");
-const ATTRIBUTION_FREEZE_MIGRATION = resolve(ROOT, "packages/db/migrations/0009_attribution_freeze.sql");
-const SUPPLIER_ID_MIGRATION = resolve(ROOT, "packages/db/migrations/0010_supplier_id_format.sql");
-const SELF_SUPPLY_HISTORY_MIGRATION = resolve(ROOT, "packages/db/migrations/0011_self_supply_history.sql");
-const LIFECYCLE_MIGRATION = resolve(ROOT, "packages/db/migrations/0012_booking_lifecycle.sql");
+const CURRENT_MIGRATIONS = readdirSync(resolve(ROOT, "packages/db/migrations"))
+  .filter((name) => /^\d{4}_.*\.sql$/.test(name)).sort()
+  .map((name) => resolve(ROOT, "packages/db/migrations", name));
+const PRICING_PROBES: Readonly<Record<string, string>> = {
+  Q23: "AG_F4_SHUTTLE_AUTO_PRICE_PASSENGERS",
+  Q24: "AG_F4_MANUAL_PRICE_APPROVAL_REQUIRED",
+  Q25: "AG_F4_TARIFF_AUTO_TOTAL_COUNT",
+  Q26: "AG_F4_TARIFF_TOTAL_INVALID",
+  Q29: "AG_F4_BOOKING_PRICE_FROZEN",
+  Q31: "AG_F4_MANUAL_PRICE_BOOKING_INELIGIBLE",
+};
 const LIFECYCLE_PROBES: Readonly<Record<string, string>> = {
   Q30: "AG_F4_BOOKING_STATUS_TRANSITION_INVALID",
 };
@@ -112,12 +117,14 @@ describe("DB şema adayı — negatif problar (PostgreSQL)", { skip: ENABLED ? f
   const dbA6 = `ag_probe_${process.pid}_a6`;
   const dbT = `ag_probe_${process.pid}_t`;
   const dbL = `ag_probe_${process.pid}_l`;
+  const dbP = `ag_probe_${process.pid}_p`;
   const weekResults = new Map<string, { status: number | null; out: string }>();
   const entryResults = new Map<string, { status: number | null; out: string }>();
   const moneyResults = new Map<string, { status: number | null; out: string }>();
   const auditResults = new Map<string, { status: number | null; out: string }>();
   const attributionResults = new Map<string, { status: number | null; out: string }>();
   const lifecycleResults = new Map<string, { status: number | null; out: string }>();
+  const pricingResults = new Map<string, { status: number | null; out: string }>();
   let p0001 = new Map<string, number>();
   let pQa = new Map<string, number>();
   let q21 = "";
@@ -125,7 +132,7 @@ describe("DB şema adayı — negatif problar (PostgreSQL)", { skip: ENABLED ? f
   let foreign = "";
 
   before(() => {
-    for (const db of [dbA, dbB, dbW, dbE, dbM, dbA6, dbT, dbL]) {
+    for (const db of [dbA, dbB, dbW, dbE, dbM, dbA6, dbT, dbL, dbP]) {
       const c = psql("postgres", ["-c", `DROP DATABASE IF EXISTS ${db}`, "-c", `CREATE DATABASE ${db}`]);
       assert.equal(c.status, 0, c.out);
       const m = psql(db, ["-v", "ON_ERROR_STOP=1", "-f", MIGRATION]);
@@ -212,9 +219,7 @@ describe("DB şema adayı — negatif problar (PostgreSQL)", { skip: ENABLED ? f
     // synthetic database running all additive candidate migrations.
     const tSeed = psql(dbT, ["-v", "ON_ERROR_STOP=1", "-f", "-"], seedSql);
     assert.equal(tSeed.status, 0, "T-group seed failed: " + tSeed.out);
-    for (const path of [RLS_MIGRATION, WEEK_MIGRATION, ENTRY_MIGRATION, MONEY_MIGRATION,
-      AUDIT_MIGRATION, HARDEN_MIGRATION, ATTRIBUTION_MIGRATION, ATTRIBUTION_FREEZE_MIGRATION,
-      SUPPLIER_ID_MIGRATION, SELF_SUPPLY_HISTORY_MIGRATION, LIFECYCLE_MIGRATION]) {
+    for (const path of CURRENT_MIGRATIONS.slice(1)) {
       const migrated = psql(dbT, ["-v", "ON_ERROR_STOP=1", "-f", path]);
       assert.equal(migrated.status, 0, "T-group migration " + path + ": " + migrated.out);
     }
@@ -231,9 +236,7 @@ describe("DB şema adayı — negatif problar (PostgreSQL)", { skip: ENABLED ? f
     // guard's exact rejection counts, never an unrelated settlement/RLS failure.
     const lSeed = psql(dbL, ["-v", "ON_ERROR_STOP=1", "-f", "-"], seedSql);
     assert.equal(lSeed.status, 0, "L-group seed failed: " + lSeed.out);
-    for (const path of [RLS_MIGRATION, WEEK_MIGRATION, ENTRY_MIGRATION, MONEY_MIGRATION,
-      AUDIT_MIGRATION, HARDEN_MIGRATION, ATTRIBUTION_MIGRATION, ATTRIBUTION_FREEZE_MIGRATION,
-      SUPPLIER_ID_MIGRATION, SELF_SUPPLY_HISTORY_MIGRATION, LIFECYCLE_MIGRATION]) {
+    for (const path of CURRENT_MIGRATIONS.slice(1)) {
       const migrated = psql(dbL, ["-v", "ON_ERROR_STOP=1", "-f", path]);
       assert.equal(migrated.status, 0, "L-group migration " + path + ": " + migrated.out);
     }
@@ -244,6 +247,23 @@ describe("DB şema adayı — negatif problar (PostgreSQL)", { skip: ENABLED ? f
       const stop = stopIndex < 0 ? sourceLines.length : stopIndex;
       const statement = "\\set VERBOSITY terse\n" + sourceLines.slice(start, stop).join("\n") + "\n";
       lifecycleResults.set(id, psql(dbL, ["-v", "ON_ERROR_STOP=1", "-f", "-"], statement));
+    }
+
+    // P uses the unchanged original setup and statements, on the complete
+    // candidate. Only the specific pricing error counts as rejection.
+    const pSeed = psql(dbP, ["-v", "ON_ERROR_STOP=1", "-f", "-"], seedSql);
+    assert.equal(pSeed.status, 0, "P-group seed failed: " + pSeed.out);
+    for (const path of CURRENT_MIGRATIONS.slice(1)) {
+      const migrated = psql(dbP, ["-v", "ON_ERROR_STOP=1", "-f", path]);
+      assert.equal(migrated.status, 0, "P-group migration " + path + ": " + migrated.out);
+    }
+    for (const id of Object.keys(PRICING_PROBES)) {
+      const start = sourceLines.findIndex((line) => line.startsWith("\\echo " + id + " "));
+      assert.ok(start > setupEnd, "missing original P SQL probe " + id);
+      const stopIndex = sourceLines.findIndex((line, index) => index > start && line.startsWith("\\echo "));
+      const stop = stopIndex < 0 ? sourceLines.length : stopIndex;
+      const statement = "\\set VERBOSITY terse\n" + sourceLines.slice(start, stop).join("\n") + "\n";
+      pricingResults.set(id, psql(dbP, ["-v", "ON_ERROR_STOP=1", "-f", "-"], statement));
     }
 
     p0001 = errorsByMarker(PROBES, psql(dbA, ["-f", PROBES]).out, /^-- (P\d+|OK\d*)\b/);
@@ -262,7 +282,7 @@ describe("DB şema adayı — negatif problar (PostgreSQL)", { skip: ENABLED ? f
   });
 
   after(() => {
-    for (const db of [dbA, dbB, dbW, dbE, dbM, dbA6, dbT, dbL]) psql("postgres", ["-c", `DROP DATABASE IF EXISTS ${db}`]);
+    for (const db of [dbA, dbB, dbW, dbE, dbM, dbA6, dbT, dbL, dbP]) psql("postgres", ["-c", `DROP DATABASE IF EXISTS ${db}`]);
   });
 
   it("0001 problar: P1–P16 reddedilir, OK blokları kabul edilir", () => {
@@ -319,6 +339,14 @@ describe("DB şema adayı — negatif problar (PostgreSQL)", { skip: ENABLED ? f
         assert.ok(result, `L-group ${id} not run`);
         assert.notEqual(result.status, 0, `${id} unexpectedly accepted`);
         assert.ok(result.out.includes(LIFECYCLE_PROBES[id]!), `${id} WRONG rejection cause: ${result.out}`);
+        t.diagnostic(result.out.trim());
+      });
+    } else if (Object.hasOwn(PRICING_PROBES, id)) {
+      it(`QA-F4 P ${id}: original pricing violation rejected for exact rule`, (t) => {
+        const result = pricingResults.get(id);
+        assert.ok(result, `P-group ${id} not run`);
+        assert.notEqual(result.status, 0, `${id} unexpectedly accepted`);
+        assert.ok(result.out.includes(PRICING_PROBES[id]!), `${id} WRONG rejection cause: ${result.out}`);
         t.diagnostic(result.out.trim());
       });
     } else {
