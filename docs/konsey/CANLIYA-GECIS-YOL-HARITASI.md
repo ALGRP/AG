@@ -1,6 +1,6 @@
 # Canlıya geçiş yol haritası (5 adım, kapılı)
 
-**Tarih:** 04.11.2026 · **Hazırlayan:** Claude (Owner'ın 5 adımlık planına göre) · **Taban:** PR #9 `8c2a6e1`
+**Tarih:** 04.11.2026 (güncelleme 22:30 TRT) · **Hazırlayan:** Claude (Owner'ın 5 adımlık planına göre) · **Taban:** PR #9 `8c2a6e1`
 **Durum:** `LOCAL_ONLY · INDEPENDENT_HUMAN_ACCEPTED=NO · G0 HOLD · CANLIYA HAZIR DEĞİL`
 
 Kural: bir adımın **çıkış ölçütlerinin hepsi** sağlanmadan sonraki adıma geçilmez. Testlerin geçmesi Owner kararı veya insan kabulü yerine geçmez. Yeni özellik eklemek yerine yalnız bu yolu açan işler yapılır.
@@ -11,10 +11,10 @@ Mevcut Alanya Group siteleri bu süreçte kapatılmaz. Rezervasyon ve ödeme alm
 
 | Ölçü | Değer |
 | -- | -- |
-| Uygulama testleri | 221: 211 geçti, 9 todo, 1 skip, 0 kaldı |
-| PostgreSQL testleri (atılabilir PG16) | 75: 60 geçti, 15 todo, 0 kaldı |
-| Açık güvenlik/finans bulguları | PR3-N7 (P2), PR3-N8 (P3), PR3-N2 (P3) |
-| Açık QA-F4 probları | Q22–Q32 arası 11 prob (L, P, R grupları) |
+| `npm run check` (`f5de97c`) | 353: 338 geçti, 14 todo, 1 skip, 0 kaldı |
+| PostgreSQL testleri (atılabilir PG16) | 132: 127 geçti, 5 todo, 0 kaldı |
+| Açık güvenlik/finans bulguları | PR3-N2 (P3). PR3-N7/N8/N9/N10 kapandı |
+| Açık QA-F4 probları | Q22/Q32 (H-22/K17), Q27/Q28 (K8). L ve P grupları PASS (aday, 0012–0014) |
 | Owner kararı bekleyen | H-20, H-21, H-22/K17, H-23, H-25, H-26, K8, H-16 (mali/hukuk) |
 
 ## Adım 1 · İki güvenlik hatası (Codex uygular, Claude test eder) — **TAMAM (04.11.2026, `ff9899a`)**
@@ -39,7 +39,7 @@ PR3-N7 (`86c8b0d`), PR3-N8 (`f247054`) ve incelemede çıkan PR3-N9 (`ff9899a`) 
 | Gerçek CRS şemasının alınması (salt okunur şema dökümü, veri yok) | Owner / CRS sahibi | `pg_dump --schema-only` çıktısı veya eşdeğer belge repo dışı güvenli kanaldan |
 | Aday şema (0001–0008) ↔ CRS eşleme tablosu: her tablo/kolon için "aynı / dönüştür / yeni" | Codex, Claude inceler | Eşlemesiz kolon kalmaz; finans kolonlarının hepsi eşlenmiş |
 | CRS bağlantı katmanı (adaptör): doğrulanmış kimlikten `app.party_id` / `app.scope`, kapanışta `pg_advisory_xact_lock`, SAVEPOINT'siz kapanış (PR3-N2) | Codex | `close-lifecycle` PR3-N2 yeşil veya "SAVEPOINT yok" kuralı adaptör testinde |
-| Kalan QA-F4 probları: L (Q30), P (Q23–26, Q29, Q31), R (Q27–28) | Codex, Claude inceler | Tam nedenle red; Q22/Q32 H-22 kararıyla |
+| Kalan QA-F4 probları: ~~L (Q30)~~ PASS `6b15f09`; ~~P (Q23–26, Q29, Q31)~~ PASS `ce61a04` + PR3-N10 `05e036d`; R (Q27–28) K8 bekliyor | Codex, Claude inceler | Tam nedenle red; Q22/Q32 H-22 kararıyla |
 | Mevcut kayıtlar için geri doldurma (backfill) ve çakışma temizliği: 0006 `NOT NULL` kolonları, 0007 normalize tekil indeks, 0008 atıf kontrolü | Codex + Owner onayı | Kuru koşu raporu: kaç satır etkilenir, hangileri elle karar ister |
 | Yedek ve geri dönüş: göç öncesi tam yedek, geri yükleme provası, her göç için geri alma betiği | Owner / altyapı | Atılabilir kopyada geri yükleme provası belgeli |
 
