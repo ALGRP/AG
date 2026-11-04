@@ -695,3 +695,35 @@ Sabitlenen sürüm `3ce6ea5d6646f6881a392494fb3bb4aa73ad3ec4`. `npm run check`: 
 **Commit kararı değişmedi: `3ce6ea5` NEEDS REVIEW** (tek neden PR3-N3).
 
 **M grubu şartnamesi** hazırlandı: [`QA-F4-M-PARA-HAREKETLERI.md`](./QA-F4-M-PARA-HAREKETLERI.md). Koruma testleri `packages/db/src/money-lifecycle.test.ts` bugün 3/3 geçiyor. Önkoşul PR3-N3.
+
+## 20. PR3-N3 ve QA-F4/M akran incelemesi (`4121cbc` → `b504683`)
+
+Sabitlenen sürüm `b504683e67e32dd74b6963557d2d65ea0c311deb`. `npm run check`: **221 test: 211 geçti, 0 kaldı, 9 todo, 1 skip**. Atılabilir PostgreSQL 16.15, tüm DB testleri: **61 test: 43 geçti, 0 kaldı, 18 todo** (Owner'ın bildirdiği sonuçla aynı). Benim yazdığım koruma testleri (`money-lifecycle` M-GUARD × 3) ve PR3-N3 testleri **assertion değişmeden** geçiyor; Codex M-RACE, M-CACHE ve M-RLS testlerini ekledi.
+
+| Commit | Konu | Karar | Kanıt |
+| -- | -- | -- | -- |
+| f72b89b | PR3-N3 onaylı politika | **PASS** | Onaylı satır `UPDATE`, `DELETE` ve `TRUNCATE` → `AG_F4_APPROVED_POLICY_IMMUTABLE`. Ayrıca denendi: önerilen (`proposed`) politika onaylanabiliyor, onaylandıktan sonra oranı değişmiyor. Süper kullanıcı tetikleyiciyi kapatabilir; güven sınırı dışı (göçte açıkça yazılı). |
+| b504683 | QA-F4/M para hareketleri | **PASS (aday)** | Q12 `REFUND_EXCEEDS_COLLECTED`, Q13 `SHUTTLE_COLLECTOR_NOT_SUPPLIER`, Q15 `COLLECTED_AMOUNT_DRIFT`, Q16 `RECEIPT_DUPLICATE`: tam neden doğrulanıyor. Eşzamanlı iki iadede rezervasyon satırı `FOR UPDATE` ile kilitleniyor; iki ayrı bağlantıdan yalnız biri geçiyor (M-RACE). Private'ta site tahsilatı ve farklı ödeyenden aynı dekont kabul ediliyor. `ag_app` sahte kapsamla yazamıyor (M-RLS). |
+
+**Yeni bulgu PR3-N4 (P3):**
+- Tahsilat önbelleği kontrolü yalnız `UPDATE OF collected_amount, refunded_amount` üzerinde. `INSERT` yolu korunmuyor.
+- Koşuldu: hiçbir para hareketi olmadan `collected_amount = 4000` ile rezervasyon eklendi.
+- Uygulama yeni rezervasyonu 0 ile açıyor; risk göç, içe aktarma ve CRS eşlemesinde.
+- Kabul testi: `money-lifecycle.test.ts` "PR3-N4" (`todo`).
+- Öneri: aynı tetikleyici `BEFORE INSERT` için de çalışsın (yeni rezervasyonda olay olmadığı için toplam 0 olmalı).
+
+### Kalan 18 PostgreSQL `todo`'su için öncelik önerisi
+
+| Sıra | Grup | Problar | Neden önce | Karar bağımlılığı |
+| -- | -- | -- | -- | -- |
+| 1 | **A · Mahsup, itiraz, denetim** | Q17, Q19, Q21 | Para hareketi doğuran yetki ve kanıt (boş yazılı onay, reddedilen itirazda para, aktör/2FA kolonu yok) | Yok (gerçek 2FA zamanı SEL-332) |
+| 2 | **T · Atıf ve taraf** | Q33, Q34, Q35 | Komisyon yanlış tarafa yazılıyor (site sahibi dışı taraf, doğrulanmamış kendi aracı, private hak ediş > fiyat) | Yok |
+| 3 | **L · Yaşam döngüsü** | Q30 | Uzlaşmış ve teslim edilmiş işin iptale dönmesi | Yok |
+| 4 | **P · Fiyat ve tarife** | Q23, Q24, Q25, Q26, Q29, Q31 | Fiyat dondurma ve 5+ kuralları | K17 |
+| 5 | P (karar bekleyen) | Q22, Q32 | 5+ alt sınır | **H-22** gelene kadar sayısal minimum yazılmaz |
+| 6 | **R · Hat** | Q27, Q28 | Yasak ve pasif hat | **K8** kapsamı; yalnız bugünkü kayıt |
+| — | Ayrı | PR3-N2 (SAVEPOINT), PR3-N4 (INSERT önbelleği) | Küçük; CRS adaptörüyle veya bir sonraki göçte | Yok |
+
+Toplam: 17 QA-F4 probu + PR3-N2 = 18; PR3-N4 eklendi → 19 `todo`.
+
+**Açık kalan Owner kararları:** H-22, H-23, H-25, H-26, K8, K17. Testlerin geçmesi bu kararların verildiği anlamına gelmez. Gerçek CRS (SEL-331), üretim kimlik doğrulaması (SEL-332) ve insan bağımsız kabulü tamamlanmadı. 0003–0005 staging veya canlıya uygulanmaz.
