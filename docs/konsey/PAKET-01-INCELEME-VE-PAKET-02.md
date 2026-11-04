@@ -850,3 +850,42 @@ Sabitlenen sürüm `6b15f0946237cb4ed0ccd5e6f0cecbcebae2923a` (tek commit). `npm
 **Not (P3, karar gerektirmez):** kural yalnız UPDATE'te. Bir rezervasyon doğrudan `delivered` veya `cancelled` durumuyla INSERT edilebilir. Uygulama her zaman `request` ile açıyor; risk yalnız geri doldurma ve içe aktarmada. CRS eşlemesinde (SEL-331) içe aktarma kuralı olarak ele alınmalı.
 
 **Kalan DB todo'ları:** P (Q23–Q26, Q29, Q31), P (Q22, Q32; H-22), R (Q27–Q28; K8), PR3-N2. Adım 2 için gerçek CRS şeması bekleniyor.
+
+## 26. QA-F4/P (Q23–Q26, Q29, Q31) akran incelemesi (`5277d2b` → `ce61a04`)
+
+Sabitlenen sürüm `ce61a043f6f74258f5ebdeda8a1126df72d94707` (tek commit, 3 dosya: `0013_pricing_integrity.sql`, `pricing-integrity.test.ts`, `schema-probes.test.ts`). Atılabilir PostgreSQL 16, yerel koşum (Codex ile aynı):
+
+| Koşum | Test | Geçti | Kaldı | Todo | Skip |
+| -- | --: | --: | --: | --: | --: |
+| Tüm DB testleri (`ce61a04`) | 119 | 114 | 0 | 5 | 0 |
+| `npm run check` (`ce61a04`) | 340 | 325 | 0 | 14 | 1 |
+| Tüm DB testleri (+ PR3-N10 testleri) | 123 | 115 | 0 | 8 | 0 |
+| `npm run check` (+ PR3-N10 testleri) | 344 | 326 | 0 | 17 | 1 |
+
+**Doğrulananlar:**
+- 0001–0012, `qa-independent/sql/qa_probes.sql` ve `price-lifecycle.test.ts` değişmedi; `price-lifecycle.test.ts` SHA-256 `30a055bf…5dfd`, 3/3 geçiyor.
+- Özgün probların tam red nedenleri: Q23 `AG_F4_SHUTTLE_AUTO_PRICE_PASSENGERS`, Q24 `AG_F4_MANUAL_PRICE_APPROVAL_REQUIRED`, Q25 `AG_F4_TARIFF_AUTO_TOTAL_COUNT`, Q26 `AG_F4_TARIFF_TOTAL_INVALID`, Q29 `AG_F4_BOOKING_PRICE_FROZEN`, Q31 `AG_F4_MANUAL_PRICE_BOOKING_INELIGIBLE`.
+- Prob düzeneği özgün SQL metnini değiştirmeden çalıştırıyor. T ve L grupları artık 0013 dahil tüm aday üzerinde koşuyor (daha sıkı); Q30, Q33–Q35 hâlâ doğru nedenle red.
+- Ek karşı-örnekler (hepsi doğru nedenle red):
+  - tarife alt sınırı `[0:3]` ve 2 boyutlu dizi;
+  - 4 kişilik `FIXED_SHUTTLE` rezervasyonu 5 kişiye çıkarmak;
+  - onaylı rezervasyonu `request`'e geri çekmek (0012).
+- `ag_platform` rolüyle onay → fiyatlama akışı çalışıyor (yenileme tetikleyicisi RLS'e takılmıyor).
+
+**Yeni bulgu PR3-N10 (P2, finans): manuel fiyat onayı yalnız tutarı bağlıyor, fiyatlanan hizmeti bağlamıyor.**
+- `manual_price_approval` satırında yolcu sayısı, hat ve hizmet türü yok. 0013 yalnız tutarı karşılaştırıyor.
+- Karşı-örnek (yerelde kabul edildi):
+  1. 6 kişilik talep;
+  2. 2FA onayı 9000 ("6 kisi Sprinter onayi");
+  3. 9000 + `SHUTTLE_MANUAL_APPROVED`;
+  4. `passengers = 16` → **kabul**, fiyat 9000.
+- Aynı durum hat değişikliğinde de var (`AYT-ALN` → `AYT-KNY`), ve onay ile fiyatlama arasındaki yolcu değişikliğinde de.
+- Onay tablosu append-only ve birincil anahtarı `booking_id`. Bu yüzden ikinci bir onayla yeniden fiyatlama da mümkün değil.
+- Regresyon testi: `packages/db/src/price-approval-binding.test.ts` (PR3-N10a/b/c, `todo`) ve aynı yolcu/hatla meşru güncellemenin kabul edildiğini gösteren bir koruma testi.
+- Düzeltme önerisi (Codex): 0013 aday olduğu için yeni additive göç. Örneğin onay satırına `passengers` / `route_code` / `service_type` anlık görüntüsü eklenir ve fiyatlamada ve sonraki güncellemelerde eşleşmesi zorunlu olur; ya da onay varken bu üç alan değişmez (değişiklik = iptal ve yeni rezervasyon). Hangi yolun seçileceği iş kuralıdır; H-22/K17 sayısal sınırlarından bağımsızdır.
+
+**Not (P3, Owner kararı, kesinleştirilmedi):** tarife toplamlarının kişi sayısıyla artması zorunlu değil (`{7000,5000}` kabul). Q25/Q26 kapsamı dışında; H-22/K17 ile birlikte değerlendirilmeli. Otomatik fiyatın tarife değeriyle eşleşmesi de DB'de değil, uygulamada denetleniyor.
+
+**Karar: `ce61a04` — Q23–Q26, Q29, Q31 için PASS (aday); QA-F4/P grubu bütünüyle NEEDS REVIEW (PR3-N10 açık).** Bağımsız insan kabulü değildir. 0013 staging veya canlıya uygulanmaz.
+
+**Kalan DB todo'ları:** PR3-N10 (×3), PR3-N2, Q22/Q32 (H-22/K17), Q27/Q28 (K8). SEL-331 CRS şema dökümü bekleniyor.
