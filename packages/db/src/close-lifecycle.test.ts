@@ -100,3 +100,31 @@ COMMIT;`);
     assert.equal(psql(db, "SELECT count(*) FROM settlement_entry WHERE week_id = '2026-W44';").out.trim(), "1");
   });
 });
+
+// PR3-N2: same legitimate W44 close, but the week row is inserted inside a SAVEPOINT. Then the row's xmin is the
+// subtransaction XID, while txid_current() returns the top-level XID, so the same-transaction check fails.
+// Drivers/ORMs that wrap statements in savepoints, and plpgsql EXCEPTION blocks, produce exactly this shape.
+describe("QA-F4 W — close inside a savepoint (disposable PG16 only)", {
+  skip: RUN ? false : "AG_TEST_PG=1 + AG_TEST_PG_ISOLATED=YES required (NOT RUN)",
+}, () => {
+  const db = `ag_f4_sp_${process.pid}`;
+  before(() => {
+    if (!RUN) return;
+    assert.equal(psql("postgres", `CREATE DATABASE ${db};`).status, 0);
+    assert.equal(psql(db, M0001).status, 0, "0001");
+    assert.equal(psql(db, BOOKING).status, 0, "seed");
+    for (const sql of [M0002, M0003]) assert.equal(psql(db, sql).status, 0);
+  });
+  after(() => {
+    if (RUN) psql("postgres", `DROP DATABASE IF EXISTS ${db};`);
+  });
+
+  it("PR3-N2 [RULE] a close whose week insert runs inside a SAVEPOINT is still accepted", { todo: "PR3-N2 · Codex Paket-03 (xmin = alt işlem XID; txid_current üst işlem XID)" }, () => {
+    const r = psql(db, CLOSE_W44.replace("INSERT INTO settlement_week", "SAVEPOINT week_row;\nINSERT INTO settlement_week").replace(
+      "INSERT INTO settlement_entry",
+      "RELEASE SAVEPOINT week_row;\nINSERT INTO settlement_entry",
+    ));
+    assert.equal(r.status, 0, `savepoint close rejected: ${r.out.trim()}`);
+    assert.equal(psql(db, "SELECT count(*) FROM settlement_entry WHERE week_id = '2026-W44';").out.trim(), "1");
+  });
+});
