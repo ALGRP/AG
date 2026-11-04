@@ -566,3 +566,28 @@ Partner ve rakip sitenin rezervasyonlarına ayrı krediler verildikten sonra par
 Kararlar: `aba1027` **NEEDS REVIEW** (PR2-N4, A10.19); `a1ca24a` **PASS (yerel)**.
 
 **Sıradaki iş:** PR2-N4, sonra QA-F4: [`QA-F4-DB-KISITLARI-PLANI.md`](./QA-F4-DB-KISITLARI-PLANI.md).
+
+## 17. PR2-N4 ve QA-F4/W akran incelemesi (`33ed0c0` → `7d6f022`)
+
+Sabitlenen sürüm `7d6f0229cdbec2bb064060cf0a2978cdc614fa3b`. `npm run check`: **221 test: 211 geçti, 0 kaldı, 9 todo, 1 skip** (Codex ile aynı). PostgreSQL 16.15 atılabilir küme: `schema-probes` + `tenant-rls` **42 test: 15 geçti, 0 kaldı, 27 todo** (Codex'in "38 test: 11 geçti" sayısı yalnız `schema-probes` içindir; RLS'nin 4 testi eklenince 42 / 15).
+
+| Commit | Karar | Kanıt |
+| -- | -- | -- |
+| 0547ff7 PR2-N4 | **PASS** | A10.19 geçiyor. Yeniden oynatmada önbellek dönmeden önce gövde doğrulama, `resolveSite` (Origin) ve sitenin alan adına bağlı yeni belirteç doğrulaması yapılıyor (`#verifyBookingProof`, yeni oluşturmayla aynı yol). Belirteçsiz, Origin'siz, rakip site belirteçli veya harcanmış belirteçli tekrar `lookupToken` almıyor. Doğru yeniden deneme (yeni belirteç) hâlâ ilk rezervasyonu döndürüyor (A10.18). A5.1 fikstür değişikliği: her eşzamanlı istek kendi belirtecini gönderiyor; rezervasyon ve assertion beklentileri değişmemiş. |
+| 7d6f022 QA-F4/W (0003) | **FAIL (göç adayı olarak)** | Negatif taraf doğru: Q05, Q06, Q07, Q08, Q09, Q14, Q18, Q20 kendi `AG_F4_*` nedenleriyle reddediliyor; P1–P16, C01–C05 ve RLS yeşil. **Ama tek meşru kapanış yolu kapanıyor (PR3-N1).** 0001'de `settlement_entry.week_id`, `settlement_week`'e ertelenemez FK ile bağlı; pay satırı ancak hafta satırı varken yazılabilir. 0003 ise hafta satırı varken gelen her pay satırını `AG_F4_CLOSED_WEEK_ENTRY` ile reddediyor. Koşuldu: biten W44 için hafta + pay satırı tek işlemde → yalnız 0001'de geçiyor, 0003 ile `AG_F4_CLOSED_WEEK_ENTRY`. Codex bu engeli kendisi de belirtti; negatif probların geçmesi olumlu yaşam döngüsünü kanıtlamıyor. |
+
+**Yeni kabul testi PR3-N1:** `packages/db/src/close-lifecycle.test.ts` (`todo`; `AG_TEST_PG=1 AG_TEST_PG_ISOLATED=YES`). Atılabilir kümede 0001 → 0003 → sentetik W44 rezervasyonu → tek işlemde hafta + pay satırı. 0003'süz koşumda geçtiği ayrıca doğrulandı (test kendisi doğru; kırmızılık 0003'ten).
+
+**Önerilen düzeltme yönü (karar değil):**
+- (a) Kapanış tetikleyicisi, **aynı işlemde** oluşturulan hafta satırına pay yazımına izin versin (ör. `settlement_week.xmin = txid_current()` karşılaştırması ya da işlem başına `SET LOCAL ag.closing_week = '<week_id>'` bayrağı; bayrak yalnız platform rolünden ve kapanış fonksiyonundan ayarlanır). **veya**
+- (b) Hafta için açık/kapalı durumu: `settlement_week.status ('open','closed')`, pay satırları açıkken yazılır, kapanış tek `UPDATE … SET status='closed'` ile ve sonrasında yazım reddedilir. Bu, 0001'deki `closed_at NOT NULL DEFAULT now()` tasarımını değiştirir; SEL-331 CRS şeması uzlaşması gerektirir.
+- (a) 0001'e dokunmadan daha küçük; (b) daha açık bir model. Seçim CRS adaptörü tasarımına bağlı.
+
+**Notlar:**
+- SQL'deki ilk kapanış kuralı yalnız rezervasyon ve para hareketini sayıyor; uygulama dekont ve düzeltmeleri de sayıyor (PR1-N6/N7). Küçük tutarsızlık; birleştirilmeli (P3).
+- İstanbul'da 2016'dan beri yaz saati yok; `AT TIME ZONE 'Europe/Istanbul'` hafta sınırları sabit +03. 2026-W53 → 2027-W01 geçişi `IYYY-"W"IW` ile doğru; 2027-W53 reddediliyor (Q09).
+- 0003 tetikleyicileri `SECURITY INVOKER`; FORCE RLS altında yalnız platform kapsamında yazım yapılabildiği için kapsam dışı oturumun tetikleyiciyi "boş tabloyla" kandırma yolu yok (yazım zaten RLS'de reddediliyor).
+
+**Durum:** Codex'in önerisine katılıyorum. E grubu (pay hesabı) PR3-N1 çözülmeden ve H-23 açıkça sabitlenmeden başlamamalı. 0003 hiçbir paylaşılan staging veya canlı CRS'e uygulanmaz.
+
+**Sıradaki iş:** PR3-N1 (`close-lifecycle.test.ts` yeşile; Q05/Q18 yine reddedilmeli).
