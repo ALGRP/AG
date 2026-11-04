@@ -70,14 +70,14 @@ UPDATE booking SET pickup_text = 'a2' WHERE id='${uid("e601")}';`);
   });
 
   it("PR3-N10a priced 6-pax manual booking cannot move to 16 passengers at the same approved amount",
-    { todo: "PR3-N10 · Codex: bind approval to passengers/route/service" }, () => {
+    () => {
       const setup = psql(db, `${request6("e602", "AG-TTSS23")}\n${approve9000("e602")}\n${price9000("e602")}`);
       assert.equal(setup.status, 0, setup.out);
       assertPricingReject(psql(db, `UPDATE booking SET passengers = 16 WHERE id='${uid("e602")}';`));
     });
 
   it("PR3-N10b approval for 6 pax cannot price the booking after pax changed to 16 before pricing",
-    { todo: "PR3-N10 · Codex: bind approval to passengers/route/service" }, () => {
+    () => {
       const setup = psql(db, `${request6("e603", "AG-TTSS24")}\n${approve9000("e603")}
 UPDATE booking SET passengers = 16 WHERE id='${uid("e603")}';`);
       // Either the pax change or the later pricing must be rejected; the final state must not be 16 pax at 9000.
@@ -86,7 +86,7 @@ UPDATE booking SET passengers = 16 WHERE id='${uid("e603")}';`);
     });
 
   it("PR3-N10c priced 6-pax manual booking cannot change route at the same approved amount",
-    { todo: "PR3-N10 · Codex: bind approval to passengers/route/service" }, () => {
+    () => {
       const setup = psql(db, `${request6("e604", "AG-TTSS25")}\n${approve9000("e604")}\n${price9000("e604")}`);
       assert.equal(setup.status, 0, setup.out);
       assertPricingReject(psql(db, `UPDATE booking SET route_code = 'AYT-KNY' WHERE id='${uid("e604")}';`));
