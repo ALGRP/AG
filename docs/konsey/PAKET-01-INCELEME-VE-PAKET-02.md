@@ -676,3 +676,22 @@ Sabitlenen sürüm `3ce6ea5d6646f6881a392494fb3bb4aa73ad3ec4`. `npm run check`: 
 **Sıradaki iş:**
 1. PR3-N3 (küçük; `0004` içine veya `0005` başına).
 2. QA-F4 M grubu (Q12, Q13, Q15, Q16: para hareketleri).
+
+### 19.1 Owner sorusu: QA-F4/E madde bazında karar (aynı sürüm `3ce6ea5`)
+
+| Konu | Karar | Kanıt |
+| -- | -- | -- |
+| Altı E probu (Q01, Q02, Q03, Q04, Q10, Q11) | **PASS** | Her biri kendi `AG_F4_ENTRY_*` nedeniyle; E tetikleyicisi 0003 korumasından önce |
+| Dört kuruş-kuruş pay eşitliği | **PASS** | Bağımsız koşum; her kuruşta SQL = uygulama |
+| Üç olumlu yaşam döngüsü (`entry-lifecycle`) | **PASS** | 30 + 20 kısmi tahsilat; eski farklı pay + iptal; 4 → 5 kuruş |
+| Eski farklı pay kayıtları (D-F05) | **PASS** | Yeni delta beklenen önceki paydan |
+| İptal ters kaydı (D-F06) | **PASS** | Kayıtlı paylar tam ters çevriliyor |
+| AGOS −1 kuruş | **PASS (bugünkü davranış)** | H-23 açık; değiştirilmedi |
+| Politika doğrulaması | **NEEDS REVIEW** | Kimlik doğrulanıyor; ama onaylı oranlar değiştirilebiliyor ve silinebiliyor (PR3-N3, P2, `split-policy-immutability.test.ts` `todo`) |
+| Para birimi doğrulaması | **PASS** | `AG_F4_ENTRY_CURRENCY_MISMATCH` |
+| Tenant RLS | **PASS** | `tenant-rls` 4/4; E tetikleyicisi platform kapsamında çalışıyor, site rolü yazamıyor |
+| PR3-N2 SAVEPOINT | **Açık (P3)** | `close-lifecycle` PR3-N2 `todo`; 0004 bunu değiştirmiyor |
+
+**Commit kararı değişmedi: `3ce6ea5` NEEDS REVIEW** (tek neden PR3-N3).
+
+**M grubu şartnamesi** hazırlandı: [`QA-F4-M-PARA-HAREKETLERI.md`](./QA-F4-M-PARA-HAREKETLERI.md). Koruma testleri `packages/db/src/money-lifecycle.test.ts` bugün 3/3 geçiyor. Önkoşul PR3-N3.
