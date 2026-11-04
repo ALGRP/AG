@@ -753,3 +753,30 @@ Sabitlenen sürüm `41b73e627158d960b665fdbb6b105fcd244c9655` (tek commit). `npm
 **Önemli ayrım (Codex'in notuyla aynı):** veritabanı artık aktör, rol ve 2FA zamanını **zorunlu tutuyor**; bu, 2FA'nın **gerçekten yapıldığını kanıtlamaz**. `actor_id` serbest metin ve oturum kimliğine bağlı değil. Gerçek kanıt SEL-332 kimlik sağlayıcısından ve işlem bağlamasından gelmeli. Süper kullanıcı tetikleyicileri kapatabilir. 0006'daki `NOT NULL` kolonlar, gerçek CRS'te mevcut satırlar için onaylı bir geri doldurma planı gerektirir.
 
 **Kalan DB todo'ları:** T (Q33–35) → L (Q30) → P (Q23–26, Q29, Q31) → P (Q22, Q32; H-22) → R (Q27, Q28; K8); ayrıca PR3-N2, PR3-N5, PR3-N6. H-22, H-23, H-25, H-26, K8 ve K17 açık. 0003–0006 staging veya canlıya uygulanmaz.
+
+## 22. PR3-N5/N6 ve QA-F4/T akran incelemesi (`7dcbae3` → `6e166a6`)
+
+Sabitlenen sürüm `6e166a66dd6d957f42da5dc98ef82c0de4c44f83`. `npm run check`: **221 test: 211 geçti, 0 kaldı, 9 todo, 1 skip**. Atılabilir PostgreSQL 16.15, tüm DB testleri: **72 test: 60 geçti, 0 kaldı, 12 todo** (Codex ile aynı). Bu turda eklenen testlerle: 75 test, 60 geçti, 15 todo.
+
+| Commit | Karar | Kanıt |
+| -- | -- | -- |
+| a452807 PR3-N5/N6 (0007) | **PASS (aday)** | Benim iki testim assertion değişmeden geçiyor. Normalize (`upper` + boşluksuz) benzersiz indeks eşzamanlı yazımda da kesin. 2FA zamanı en fazla 15 dakika önce, gelecek değil. 15 dakika yerel aday; onaylı güvenlik politikası değil, 2FA kanıtı değil. Gerçek CRS'te benzersiz indeks mevcut çakışan satırlarla kurulamaz; ön temizlik gerekir. |
+| 6e166a6 QA-F4/T (0008) | **NEEDS REVIEW** | Q33 `BOOKING_SELLING_PARTY_MISMATCH`, Q34 `SUPPLIER_ID_NOT_CANONICAL` / `SELF_SUPPLY_UNVERIFIED`, Q35 `PRIVATE_SUPPLIER_EXCEEDS_PRICE`: tam neden. Yetki site kaydından; `site` okuma yalnız `ag_platform`'a verildi. **Ama** aşağıdaki P2. |
+
+**Yeni bulgu PR3-N7 (P2):**
+- Atıf tetikleyicisi her `UPDATE`'te çalışıyor ve rezervasyonu sitenin **o anki** sahibiyle karşılaştırıyor.
+- Koşuldu, site-one p1'den p9'a devredildikten sonra:
+  - **(a)** eski rezervasyonda basit bir not güncellemesi bile `AG_F4_BOOKING_SELLING_PARTY_MISMATCH` ile reddediliyor. Tamamlama, tahsilat önbelleği gibi işlemler de aynı şekilde kilitlenir.
+  - **(b)** eski rezervasyonun `selling_party_id` değeri **yeni sahibe (p9) yeniden yazılabiliyor**. Geçmiş komisyon yeni partnere yönlendirilebilir.
+- Öneri: INSERT'te bugünkü kontrol kalsın. UPDATE'te sahiplik yeniden kontrol edilmesin; bunun yerine `selling_site_id`, `selling_party_id` ve `supplier_id` değişimi reddedilsin (atıf rezervasyon anında donar). Tedarikçi atama akışı (`supplier_id` NULL → değer) ayrıca izinli bırakılmalı.
+
+**Yeni bulgu PR3-N8 (P3):**
+- Veritabanı tedarikçi kimliği biçimi `^[a-z0-9-]{2,64}$`; uygulamanınki `/^[a-z0-9_-]{1,64}$/`.
+- Uygulamada geçerli `sup_a` veritabanında reddediliyor (koşuldu).
+- İki biçim aynı kaynaktan hizalanmalı.
+
+Kabul testleri: `packages/db/src/attribution-hardening.test.ts` (`todo` × 3; PR3-N7 × 2, PR3-N8 × 1).
+
+**Diğer kontroller:** önceki W, E, M, A ve RLS testleri yeşil. Geleceğe tarihli kendi aracı doğrulaması reddediliyor (Codex testi). `ag_app` sahte kapsamla rezervasyon yazamıyor.
+
+**Sıradaki iş:** PR3-N7 (önce) ve PR3-N8 → QA-F4/L (Q30) → P → P (H-22) → R (K8). PR3-N2 açık. H-22, H-23, H-25, H-26, K8 ve K17 açık. 0003–0008 staging veya canlıya uygulanmaz.
