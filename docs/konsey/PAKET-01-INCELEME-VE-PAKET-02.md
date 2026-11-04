@@ -780,3 +780,26 @@ Kabul testleri: `packages/db/src/attribution-hardening.test.ts` (`todo` × 3; PR
 **Diğer kontroller:** önceki W, E, M, A ve RLS testleri yeşil. Geleceğe tarihli kendi aracı doğrulaması reddediliyor (Codex testi). `ag_app` sahte kapsamla rezervasyon yazamıyor.
 
 **Sıradaki iş:** PR3-N7 (önce) ve PR3-N8 → QA-F4/L (Q30) → P → P (H-22) → R (K8). PR3-N2 açık. H-22, H-23, H-25, H-26, K8 ve K17 açık. 0003–0008 staging veya canlıya uygulanmaz.
+
+## 23. PR3-N7 ve PR3-N8 akran incelemesi (`b187c9d` → `f247054`)
+
+Sabitlenen sürüm `f247054` (iki commit: `86c8b0d` PR3-N7, `f247054` PR3-N8). `npm run check`: **222 test: 212 geçti, 0 kaldı, 9 todo, 1 skip** (yeni `id-format.test.ts` dahil). Atılabilir PostgreSQL 16.15, tüm DB testleri: **90 test: 78 geçti, 0 kaldı, 12 todo**.
+
+**Test değişiklikleri:** benim üç kabul testim (`attribution-hardening.test.ts`) yalnız `todo` kaldırılarak ve göç listesi uzatılarak geçiyor; assertion aynı. Codex `attribution-integrity.test.ts`'e 14 ek test ekledi (site, taraf ve tedarikçi değiştirme reddi; ilk tedarikçi ataması; ID sınırları).
+
+| Commit | Karar | Kanıt |
+| -- | -- | -- |
+| 86c8b0d PR3-N7 (0009) | **PASS (aday)** | INSERT'te sahiplik kontrolü aynı. UPDATE'te `selling_site_id`, `selling_party_id` değişimi ve atanmış `supplier_id` değişimi/silinmesi → `AG_F4_BOOKING_ATTRIBUTION_IMMUTABLE`. Yalnız `NULL` → tedarikçi ataması izinli (biçim ve kendi aracı kontrolüyle). Site devrinden sonra eski rezervasyon güncellenebiliyor; atfı yeni sahibe yazılamıyor. Q33–Q35 yine tam nedenle. |
+| f247054 PR3-N8 (0010) | **PASS (aday)** | Tek kaynak `packages/core/src/party-id.ts` (`^[a-z0-9_-]{1,64}$`). SQL göçü bu kaynaktan üretiliyor; `id-format.test.ts` sapmayı yakalıyor. `isPartyId` JS'teki `$`'ın sondaki satır sonunu kabul etmesine karşı tam eşleşme istiyor. Uygulamadaki tüm taraf kimliği kontrolleri bu fonksiyona taşındı. `sup_a`, tek karakterli ve 64 karakterli kimlikler kabul; büyük harf (Q34) yine red. |
+
+**Yeni bulgu PR3-N9 (P3, PR3-N7 ile aynı sınıf):**
+- 0009 UPDATE yolunda kendi aracı kontrolünü, tedarikçi değişmese de sitenin **o anki** doğrulamasına göre yeniden yapıyor.
+- Koşuldu: site doğrulanmışken kendi aracıyla alınmış rezervasyon, doğrulama geri alındıktan sonra not güncellemesinde `AG_F4_BOOKING_SELF_SUPPLY_UNVERIFIED` ile reddediliyor.
+- Kabul testi: `attribution-hardening.test.ts` PR3-N9 (`todo`).
+- Öneri: kendi aracı kontrolü yalnız INSERT'te ve `supplier_id` `NULL` → değer atamasında yapılsın.
+
+**Diğer:**
+- `npm test` artık `--test-concurrency=1` (DB testleri için deterministik). Süre uzar, sonuç değişmez.
+- 0001–0008 değişmedi.
+
+**Sıradaki iş (yol haritası Adım 1 kapanışı):** PR3-N9 (küçük). Ardından Adım 2 SEL-331: gerçek CRS şeması gerekiyor (Owner veya altyapı). O gelene kadar yerelde: QA-F4/L (Q30), P (Q23–26, Q29, Q31), R (Q27–28; K8), PR3-N2.
