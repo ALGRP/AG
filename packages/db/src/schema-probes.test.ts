@@ -22,6 +22,11 @@ const HARDEN_MIGRATION = resolve(ROOT, "packages/db/migrations/0007_adjustment_h
 const ATTRIBUTION_MIGRATION = resolve(ROOT, "packages/db/migrations/0008_attribution_integrity.sql");
 const ATTRIBUTION_FREEZE_MIGRATION = resolve(ROOT, "packages/db/migrations/0009_attribution_freeze.sql");
 const SUPPLIER_ID_MIGRATION = resolve(ROOT, "packages/db/migrations/0010_supplier_id_format.sql");
+const SELF_SUPPLY_HISTORY_MIGRATION = resolve(ROOT, "packages/db/migrations/0011_self_supply_history.sql");
+const LIFECYCLE_MIGRATION = resolve(ROOT, "packages/db/migrations/0012_booking_lifecycle.sql");
+const LIFECYCLE_PROBES: Readonly<Record<string, string>> = {
+  Q30: "AG_F4_BOOKING_STATUS_TRANSITION_INVALID",
+};
 const ATTRIBUTION_PROBES: Readonly<Record<string, string>> = {
   Q33: "AG_F4_BOOKING_SELLING_PARTY_MISMATCH",
   Q34: "AG_F4_BOOKING_SUPPLIER_ID_NOT_CANONICAL",
@@ -106,11 +111,13 @@ describe("DB şema adayı — negatif problar (PostgreSQL)", { skip: ENABLED ? f
   const dbM = `ag_probe_${process.pid}_m`;
   const dbA6 = `ag_probe_${process.pid}_a6`;
   const dbT = `ag_probe_${process.pid}_t`;
+  const dbL = `ag_probe_${process.pid}_l`;
   const weekResults = new Map<string, { status: number | null; out: string }>();
   const entryResults = new Map<string, { status: number | null; out: string }>();
   const moneyResults = new Map<string, { status: number | null; out: string }>();
   const auditResults = new Map<string, { status: number | null; out: string }>();
   const attributionResults = new Map<string, { status: number | null; out: string }>();
+  const lifecycleResults = new Map<string, { status: number | null; out: string }>();
   let p0001 = new Map<string, number>();
   let pQa = new Map<string, number>();
   let q21 = "";
@@ -118,7 +125,7 @@ describe("DB şema adayı — negatif problar (PostgreSQL)", { skip: ENABLED ? f
   let foreign = "";
 
   before(() => {
-    for (const db of [dbA, dbB, dbW, dbE, dbM, dbA6, dbT]) {
+    for (const db of [dbA, dbB, dbW, dbE, dbM, dbA6, dbT, dbL]) {
       const c = psql("postgres", ["-c", `DROP DATABASE IF EXISTS ${db}`, "-c", `CREATE DATABASE ${db}`]);
       assert.equal(c.status, 0, c.out);
       const m = psql(db, ["-v", "ON_ERROR_STOP=1", "-f", MIGRATION]);
@@ -206,7 +213,8 @@ describe("DB şema adayı — negatif problar (PostgreSQL)", { skip: ENABLED ? f
     const tSeed = psql(dbT, ["-v", "ON_ERROR_STOP=1", "-f", "-"], seedSql);
     assert.equal(tSeed.status, 0, "T-group seed failed: " + tSeed.out);
     for (const path of [RLS_MIGRATION, WEEK_MIGRATION, ENTRY_MIGRATION, MONEY_MIGRATION,
-      AUDIT_MIGRATION, HARDEN_MIGRATION, ATTRIBUTION_MIGRATION, ATTRIBUTION_FREEZE_MIGRATION, SUPPLIER_ID_MIGRATION]) {
+      AUDIT_MIGRATION, HARDEN_MIGRATION, ATTRIBUTION_MIGRATION, ATTRIBUTION_FREEZE_MIGRATION,
+      SUPPLIER_ID_MIGRATION, SELF_SUPPLY_HISTORY_MIGRATION, LIFECYCLE_MIGRATION]) {
       const migrated = psql(dbT, ["-v", "ON_ERROR_STOP=1", "-f", path]);
       assert.equal(migrated.status, 0, "T-group migration " + path + ": " + migrated.out);
     }
@@ -217,6 +225,25 @@ describe("DB şema adayı — negatif problar (PostgreSQL)", { skip: ENABLED ? f
       const stop = stopIndex < 0 ? sourceLines.length : stopIndex;
       const statement = "\\set VERBOSITY terse\n" + sourceLines.slice(start, stop).join("\n") + "\n";
       attributionResults.set(id, psql(dbT, ["-v", "ON_ERROR_STOP=1", "-f", "-"], statement));
+    }
+
+    // Q30 runs verbatim in its own fully migrated database. Only the lifecycle
+    // guard's exact rejection counts, never an unrelated settlement/RLS failure.
+    const lSeed = psql(dbL, ["-v", "ON_ERROR_STOP=1", "-f", "-"], seedSql);
+    assert.equal(lSeed.status, 0, "L-group seed failed: " + lSeed.out);
+    for (const path of [RLS_MIGRATION, WEEK_MIGRATION, ENTRY_MIGRATION, MONEY_MIGRATION,
+      AUDIT_MIGRATION, HARDEN_MIGRATION, ATTRIBUTION_MIGRATION, ATTRIBUTION_FREEZE_MIGRATION,
+      SUPPLIER_ID_MIGRATION, SELF_SUPPLY_HISTORY_MIGRATION, LIFECYCLE_MIGRATION]) {
+      const migrated = psql(dbL, ["-v", "ON_ERROR_STOP=1", "-f", path]);
+      assert.equal(migrated.status, 0, "L-group migration " + path + ": " + migrated.out);
+    }
+    for (const id of Object.keys(LIFECYCLE_PROBES)) {
+      const start = sourceLines.findIndex((line) => line.startsWith("\\echo " + id + " "));
+      assert.ok(start > setupEnd, "missing original L SQL probe " + id);
+      const stopIndex = sourceLines.findIndex((line, index) => index > start && line.startsWith("\\echo "));
+      const stop = stopIndex < 0 ? sourceLines.length : stopIndex;
+      const statement = "\\set VERBOSITY terse\n" + sourceLines.slice(start, stop).join("\n") + "\n";
+      lifecycleResults.set(id, psql(dbL, ["-v", "ON_ERROR_STOP=1", "-f", "-"], statement));
     }
 
     p0001 = errorsByMarker(PROBES, psql(dbA, ["-f", PROBES]).out, /^-- (P\d+|OK\d*)\b/);
@@ -235,7 +262,7 @@ describe("DB şema adayı — negatif problar (PostgreSQL)", { skip: ENABLED ? f
   });
 
   after(() => {
-    for (const db of [dbA, dbB, dbW, dbE, dbM, dbA6, dbT]) psql("postgres", ["-c", `DROP DATABASE IF EXISTS ${db}`]);
+    for (const db of [dbA, dbB, dbW, dbE, dbM, dbA6, dbT, dbL]) psql("postgres", ["-c", `DROP DATABASE IF EXISTS ${db}`]);
   });
 
   it("0001 problar: P1–P16 reddedilir, OK blokları kabul edilir", () => {
@@ -285,6 +312,14 @@ describe("DB şema adayı — negatif problar (PostgreSQL)", { skip: ENABLED ? f
         assert.ok(result, `T-group ${id} not run`);
         assert.notEqual(result.status, 0, `${id} unexpectedly accepted`);
         assert.ok(result.out.includes(ATTRIBUTION_PROBES[id]!), `${id} WRONG rejection cause: ${result.out}`);
+      });
+    } else if (Object.hasOwn(LIFECYCLE_PROBES, id)) {
+      it(`QA-F4 L ${id}: original lifecycle violation rejected for exact transition rule`, (t) => {
+        const result = lifecycleResults.get(id);
+        assert.ok(result, `L-group ${id} not run`);
+        assert.notEqual(result.status, 0, `${id} unexpectedly accepted`);
+        assert.ok(result.out.includes(LIFECYCLE_PROBES[id]!), `${id} WRONG rejection cause: ${result.out}`);
+        t.diagnostic(result.out.trim());
       });
     } else {
       it(`QA-F4 ${id}: ihlal reddedilmeli`, { todo: "QA-F4 · Paket-03 (DB defter kısıtları)" }, () => {
