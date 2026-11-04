@@ -727,3 +727,29 @@ Sabitlenen sürüm `b504683e67e32dd74b6963557d2d65ea0c311deb`. `npm run check`: 
 Toplam: 17 QA-F4 probu + PR3-N2 = 18; PR3-N4 eklendi → 19 `todo`.
 
 **Açık kalan Owner kararları:** H-22, H-23, H-25, H-26, K8, K17. Testlerin geçmesi bu kararların verildiği anlamına gelmez. Gerçek CRS (SEL-331), üretim kimlik doğrulaması (SEL-332) ve insan bağımsız kabulü tamamlanmadı. 0003–0005 staging veya canlıya uygulanmaz.
+
+## 21. QA-F4/A ve PR3-N4 akran incelemesi (`c9599a7` → `41b73e6`)
+
+Sabitlenen sürüm `41b73e627158d960b665fdbb6b105fcd244c9655` (tek commit). `npm run check`: **221 test: 211 geçti, 0 kaldı, 9 todo, 1 skip**. Atılabilir PostgreSQL 16.15, tüm DB testleri (`--test-concurrency=1`): **67 test: 52 geçti, 0 kaldı, 15 todo** (Codex ile aynı).
+
+**Test değişiklikleri:** PR3-N4 testim assertion değişmeden geçiyor. Q21 kontrolü daha sıkı hâle gelmiş: "en az bir kolon" yerine "üç kolon da `NOT NULL`", ve tam göçe karşı. Gevşetme yok.
+
+**Karar: `41b73e6` PASS (aday; yalnız atılabilir küme).**
+
+| Kontrol | Sonuç |
+| -- | -- |
+| Q17 boş yazılı onay | `AG_F4_OFFSET_APPROVAL_REQUIRED` (tam neden). Yalnız boşluktan oluşan onay da reddediliyor (ayrıca denendi). |
+| Q19 reddedilmiş itirazdan para | `AG_F4_DISPUTE_NOT_ACCEPTED`. İtiraz `accepted` olmalı ve özgün hafta eşleşmeli. |
+| Q21 aktör / rol / 2FA kolonları | Üçü de `NOT NULL`. Rol yalnız `admin` / `finance_manager`. Gerekçe ≥ 5 karakter. Gelecek tarihli 2FA zamanı reddediliyor. |
+| PR3-N4 | Para hareketi olmadan tahsil edilmiş görünen rezervasyon INSERT'i → `AG_F4_COLLECTED_AMOUNT_DRIFT`. 0/0 yeni rezervasyon kabul. |
+| Olumlu yol | Geçerli mahsup (onay referansı büyük harfe çevrilip saklanıyor) ve kabul edilmiş itiraz düzeltmesi yazılıyor. `ag_app` sahte platform kapsamıyla yazamıyor (`adjustment-audit` 4/4). |
+| Eski gruplar | W, E, M, RLS ve PR3-N1/N3 testleri yeşil. |
+
+**Yeni bulgular (P3, savunma derinliği):**
+- **PR3-N5:** `adjustment_reference` `UNIQUE` ama büyük/küçük harfe duyarlı. Koşuldu: `OFS-2026-W45-ONAY-1` ve `ofs-2026-w45-onay-1` iki ayrı mahsup olarak yazıldı. Uygulama bunu PR1-N2'den beri engelliyor; veritabanı yedek savunması yok. Öneri: `UNIQUE (upper(adjustment_reference))` veya tetikleyicide normalize etme (`written_approval_reference` için zaten yapılıyor).
+- **PR3-N6:** `mfa_verified_at` için yalnız üst sınır var. 2019 tarihli 2FA kanıtı kabul edildi. Öneri: ör. "en fazla 15 dakika önce" penceresi. Bu da gerçek 2FA kanıtı değil, yalnız bayat kaydı engeller.
+- Kabul testleri: `packages/db/src/adjustment-hardening.test.ts` (`todo` × 2).
+
+**Önemli ayrım (Codex'in notuyla aynı):** veritabanı artık aktör, rol ve 2FA zamanını **zorunlu tutuyor**; bu, 2FA'nın **gerçekten yapıldığını kanıtlamaz**. `actor_id` serbest metin ve oturum kimliğine bağlı değil. Gerçek kanıt SEL-332 kimlik sağlayıcısından ve işlem bağlamasından gelmeli. Süper kullanıcı tetikleyicileri kapatabilir. 0006'daki `NOT NULL` kolonlar, gerçek CRS'te mevcut satırlar için onaylı bir geri doldurma planı gerektirir.
+
+**Kalan DB todo'ları:** T (Q33–35) → L (Q30) → P (Q23–26, Q29, Q31) → P (Q22, Q32; H-22) → R (Q27, Q28; K8); ayrıca PR3-N2, PR3-N5, PR3-N6. H-22, H-23, H-25, H-26, K8 ve K17 açık. 0003–0006 staging veya canlıya uygulanmaz.
