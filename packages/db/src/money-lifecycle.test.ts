@@ -11,7 +11,7 @@ import { after, before, describe, it } from "node:test";
 const RUN = process.env.AG_TEST_PG === "1" && process.env.AG_TEST_PG_ISOLATED === "YES";
 const CONTAINER = process.env.AG_TEST_PG_CONTAINER;
 const ROOT = resolve(import.meta.dirname, "../../..");
-const MIG = ["0001_network_core", "0002_tenant_rls", "0003_week_integrity", "0004_entry_integrity", "0005_money_events"]
+const MIG = ["0001_network_core", "0002_tenant_rls", "0003_week_integrity", "0004_entry_integrity", "0005_money_events", "0006_adjustments_audit"]
   .map((n) => resolve(ROOT, `packages/db/migrations/${n}.sql`))
   .filter((p) => existsSync(p));
 
@@ -140,7 +140,18 @@ COMMIT;`);
     assert.equal(r.status, 0, r.out);
   });
 
-  it("PR3-N4 [RULE] a booking cannot be INSERTED with cash totals that no money event supports (cache drift via INSERT)", { todo: "PR3-N4 · Codex Paket-03 (0005 yalnız UPDATE'i koruyor)" }, () => {
+  it("PR3-N4 positive: a new booking starts at zero cash until a real money event is recorded", () => {
+    const result = psql(db, `INSERT INTO booking (${COLS}) VALUES
+      ('00000000-0000-4000-8000-00000000f0d2','site-one','p1','sup-a','shuttle',5000,'EUR',
+       'AG-QQMM25','AYT-ALN','a','b','2026-10-28 10:00',2,'n','e@x.test','+90','tr',
+       ARRAY['cash']::collection_method[],'h','fmd2','confirmed','shuttle-split-v1',
+       1000,500,3500,'FIXED_SHUTTLE','2026-10-27 09:00+03');`);
+    assert.equal(result.status, 0, result.out);
+    assert.equal(psql(db, `SELECT collected_amount::text||':'||refunded_amount::text
+      FROM booking WHERE ref='AG-QQMM25';`).out.trim(), "0:0");
+  });
+
+  it("PR3-N4 [RULE] a booking cannot be INSERTED with cash totals that no money event supports (cache drift via INSERT)", () => {
     const r = psql(db, `INSERT INTO booking (${COLS}, collected_amount, collection_method, collected_at) VALUES
       ('00000000-0000-4000-8000-00000000f0d1','site-one','p1','sup-a','shuttle',5000,'EUR','AG-QQMM24','AYT-ALN','a','b','2026-10-28 10:00',2,'n','e@x.test','+90','tr',ARRAY['cash']::collection_method[],'h','fmd1','confirmed','shuttle-split-v1',1000,500,3500,'FIXED_SHUTTLE','2026-10-27 09:00+03',4000,'cash','2026-10-28 10:00+03');`);
     assert.notEqual(r.status, 0, "booking inserted with collected_amount 4000 and no collection event");

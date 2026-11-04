@@ -17,6 +17,11 @@ const RLS_MIGRATION = resolve(ROOT, "packages/db/migrations/0002_tenant_rls.sql"
 const WEEK_MIGRATION = resolve(ROOT, "packages/db/migrations/0003_week_integrity.sql");
 const ENTRY_MIGRATION = resolve(ROOT, "packages/db/migrations/0004_entry_integrity.sql");
 const MONEY_MIGRATION = resolve(ROOT, "packages/db/migrations/0005_money_events.sql");
+const AUDIT_MIGRATION = resolve(ROOT, "packages/db/migrations/0006_adjustments_audit.sql");
+const AUDIT_PROBES: Readonly<Record<string, string>> = {
+  Q17: "AG_F4_OFFSET_APPROVAL_REQUIRED",
+  Q19: "AG_F4_DISPUTE_NOT_ACCEPTED",
+};
 const MONEY_PROBES: Readonly<Record<string, string>> = {
   Q12: "AG_F4_REFUND_EXCEEDS_COLLECTED",
   Q13: "AG_F4_SHUTTLE_COLLECTOR_NOT_SUPPLIER",
@@ -90,9 +95,11 @@ describe("DB şema adayı — negatif problar (PostgreSQL)", { skip: ENABLED ? f
   const dbW = `ag_probe_${process.pid}_w`;
   const dbE = `ag_probe_${process.pid}_e`;
   const dbM = `ag_probe_${process.pid}_m`;
+  const dbA6 = `ag_probe_${process.pid}_a6`;
   const weekResults = new Map<string, { status: number | null; out: string }>();
   const entryResults = new Map<string, { status: number | null; out: string }>();
   const moneyResults = new Map<string, { status: number | null; out: string }>();
+  const auditResults = new Map<string, { status: number | null; out: string }>();
   let p0001 = new Map<string, number>();
   let pQa = new Map<string, number>();
   let q21 = "";
@@ -100,7 +107,7 @@ describe("DB şema adayı — negatif problar (PostgreSQL)", { skip: ENABLED ? f
   let foreign = "";
 
   before(() => {
-    for (const db of [dbA, dbB, dbW, dbE, dbM]) {
+    for (const db of [dbA, dbB, dbW, dbE, dbM, dbA6]) {
       const c = psql("postgres", ["-c", `DROP DATABASE IF EXISTS ${db}`, "-c", `CREATE DATABASE ${db}`]);
       assert.equal(c.status, 0, c.out);
       const m = psql(db, ["-v", "ON_ERROR_STOP=1", "-f", MIGRATION]);
@@ -163,9 +170,28 @@ describe("DB şema adayı — negatif problar (PostgreSQL)", { skip: ENABLED ? f
       moneyResults.set(id, psql(dbM, ["-v", "ON_ERROR_STOP=1", "-f", "-"], statement));
     }
 
+    // QA-F4/A exact-original probes: audit controls take priority over 0003's
+    // closed-week guard and 0006's NOT NULL evidence columns.
+    const auditSeed = psql(dbA6, ["-v", "ON_ERROR_STOP=1", "-f", "-"], seedSql);
+    assert.equal(auditSeed.status, 0, "A-group seed failed: " + auditSeed.out);
+    for (const path of [RLS_MIGRATION, WEEK_MIGRATION, ENTRY_MIGRATION, MONEY_MIGRATION, AUDIT_MIGRATION]) {
+      const migrated = psql(dbA6, ["-v", "ON_ERROR_STOP=1", "-f", path]);
+      assert.equal(migrated.status, 0, "A-group migration " + path + ": " + migrated.out);
+    }
+    for (const id of Object.keys(AUDIT_PROBES)) {
+      const start = sourceLines.findIndex((line) => line.startsWith("\\echo " + id + " "));
+      assert.ok(start > setupEnd, "missing original A SQL probe " + id);
+      const stopIndex = sourceLines.findIndex((line, index) => index > start && line.startsWith("\\echo "));
+      const stop = stopIndex < 0 ? sourceLines.length : stopIndex;
+      const statement = "\\set VERBOSITY terse\n" + sourceLines.slice(start, stop).join("\n") + "\n";
+      auditResults.set(id, psql(dbA6, ["-v", "ON_ERROR_STOP=1", "-f", "-"], statement));
+    }
+    q21 = psql(dbA6, ["-At", "-c",
+      "SELECT count(*) FROM information_schema.columns WHERE table_name='settlement_adjustment' AND column_name IN ('actor_id','actor_role','mfa_verified_at') AND is_nullable='NO'"]).out.trim();
+
     p0001 = errorsByMarker(PROBES, psql(dbA, ["-f", PROBES]).out, /^-- (P\d+|OK\d*)\b/);
     pQa = errorsByMarker(QA_PROBES, psql(dbB, ["-f", QA_PROBES]).out, /^\\echo (SETUP_DONE|SETUP|RLS_SETUP|END|Q\d+|C\d+|R\d+)\b/);
-    q21 = psql(dbB, ["-At", "-c", "SELECT count(*) FROM information_schema.columns WHERE table_name = 'settlement_adjustment' AND column_name ~ '(mfa|actor|approved_by|decided_by|role)'"]).out.trim();
+    // q21 is checked against the fully migrated QA-F4/A candidate, not baseline 0001.
     // The independent 0001 financial-rule probes must run first against the baseline.
     // After those are recorded, the isolated dbB is migrated to candidate 0002 for QA-F3 RLS checks.
     const m2 = psql(dbB, ["-v", "ON_ERROR_STOP=1", "-f", RLS_MIGRATION]);
@@ -179,7 +205,7 @@ describe("DB şema adayı — negatif problar (PostgreSQL)", { skip: ENABLED ? f
   });
 
   after(() => {
-    for (const db of [dbA, dbB, dbW, dbE, dbM]) psql("postgres", ["-c", `DROP DATABASE IF EXISTS ${db}`]);
+    for (const db of [dbA, dbB, dbW, dbE, dbM, dbA6]) psql("postgres", ["-c", `DROP DATABASE IF EXISTS ${db}`]);
   });
 
   it("0001 problar: P1–P16 reddedilir, OK blokları kabul edilir", () => {
@@ -216,6 +242,13 @@ describe("DB şema adayı — negatif problar (PostgreSQL)", { skip: ENABLED ? f
         assert.notEqual(result.status, 0, `${id} unexpectedly accepted`);
         assert.ok(result.out.includes(MONEY_PROBES[id]!), `${id} WRONG rejection cause: ${result.out}`);
       });
+    } else if (Object.hasOwn(AUDIT_PROBES, id)) {
+      it(`QA-F4 A ${id}: original adjustment violation denied for exact audit/decision rule`, () => {
+        const result = auditResults.get(id);
+        assert.ok(result, `A-group ${id} was not executed`);
+        assert.notEqual(result.status, 0, `${id} unexpectedly accepted`);
+        assert.ok(result.out.includes(AUDIT_PROBES[id]!), `${id} WRONG rejection cause: ${result.out}`);
+      });
     } else {
       it(`QA-F4 ${id}: ihlal reddedilmeli`, { todo: "QA-F4 · Paket-03 (DB defter kısıtları)" }, () => {
         assert.ok((pQa.get(id) ?? 0) > 0, `${id} kabul edildi`);
@@ -223,8 +256,8 @@ describe("DB şema adayı — negatif problar (PostgreSQL)", { skip: ENABLED ? f
     }
   }
 
-  it("QA-F4 Q21: mahsup kaydında aktör / rol / 2FA alanı bulunmalı", { todo: "QA-F4 · Paket-03" }, () => {
-    assert.ok(Number(q21) > 0, `bulunan sütun: ${q21}`);
+  it("QA-F4 A Q21: actor/role/2FA timestamp are all NOT NULL in adjustment audit", () => {
+    assert.equal(q21, "3", `required non-null audit columns: ${q21}`);
   });
 
   it("QA-F3 (DB): p1 oturumu p2'nin para hareketini ve dekontunu göremez; defter tablolarında RLS açık ve zorunlu", () => {
