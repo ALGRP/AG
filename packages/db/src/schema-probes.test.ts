@@ -18,6 +18,13 @@ const WEEK_MIGRATION = resolve(ROOT, "packages/db/migrations/0003_week_integrity
 const ENTRY_MIGRATION = resolve(ROOT, "packages/db/migrations/0004_entry_integrity.sql");
 const MONEY_MIGRATION = resolve(ROOT, "packages/db/migrations/0005_money_events.sql");
 const AUDIT_MIGRATION = resolve(ROOT, "packages/db/migrations/0006_adjustments_audit.sql");
+const HARDEN_MIGRATION = resolve(ROOT, "packages/db/migrations/0007_adjustment_hardening.sql");
+const ATTRIBUTION_MIGRATION = resolve(ROOT, "packages/db/migrations/0008_attribution_integrity.sql");
+const ATTRIBUTION_PROBES: Readonly<Record<string, string>> = {
+  Q33: "AG_F4_BOOKING_SELLING_PARTY_MISMATCH",
+  Q34: "AG_F4_BOOKING_SUPPLIER_ID_NOT_CANONICAL",
+  Q35: "AG_F4_PRIVATE_SUPPLIER_EXCEEDS_PRICE",
+};
 const AUDIT_PROBES: Readonly<Record<string, string>> = {
   Q17: "AG_F4_OFFSET_APPROVAL_REQUIRED",
   Q19: "AG_F4_DISPUTE_NOT_ACCEPTED",
@@ -96,10 +103,12 @@ describe("DB şema adayı — negatif problar (PostgreSQL)", { skip: ENABLED ? f
   const dbE = `ag_probe_${process.pid}_e`;
   const dbM = `ag_probe_${process.pid}_m`;
   const dbA6 = `ag_probe_${process.pid}_a6`;
+  const dbT = `ag_probe_${process.pid}_t`;
   const weekResults = new Map<string, { status: number | null; out: string }>();
   const entryResults = new Map<string, { status: number | null; out: string }>();
   const moneyResults = new Map<string, { status: number | null; out: string }>();
   const auditResults = new Map<string, { status: number | null; out: string }>();
+  const attributionResults = new Map<string, { status: number | null; out: string }>();
   let p0001 = new Map<string, number>();
   let pQa = new Map<string, number>();
   let q21 = "";
@@ -107,7 +116,7 @@ describe("DB şema adayı — negatif problar (PostgreSQL)", { skip: ENABLED ? f
   let foreign = "";
 
   before(() => {
-    for (const db of [dbA, dbB, dbW, dbE, dbM, dbA6]) {
+    for (const db of [dbA, dbB, dbW, dbE, dbM, dbA6, dbT]) {
       const c = psql("postgres", ["-c", `DROP DATABASE IF EXISTS ${db}`, "-c", `CREATE DATABASE ${db}`]);
       assert.equal(c.status, 0, c.out);
       const m = psql(db, ["-v", "ON_ERROR_STOP=1", "-f", MIGRATION]);
@@ -189,6 +198,25 @@ describe("DB şema adayı — negatif problar (PostgreSQL)", { skip: ENABLED ? f
     q21 = psql(dbA6, ["-At", "-c",
       "SELECT count(*) FROM information_schema.columns WHERE table_name='settlement_adjustment' AND column_name IN ('actor_id','actor_role','mfa_verified_at') AND is_nullable='NO'"]).out.trim();
 
+    // Q33-Q35: preserve the original SQL from qa_probes.sql and require a
+    // specific ownership, supplier identity or private price error in a fresh
+    // synthetic database running all additive candidate migrations.
+    const tSeed = psql(dbT, ["-v", "ON_ERROR_STOP=1", "-f", "-"], seedSql);
+    assert.equal(tSeed.status, 0, "T-group seed failed: " + tSeed.out);
+    for (const path of [RLS_MIGRATION, WEEK_MIGRATION, ENTRY_MIGRATION, MONEY_MIGRATION,
+      AUDIT_MIGRATION, HARDEN_MIGRATION, ATTRIBUTION_MIGRATION]) {
+      const migrated = psql(dbT, ["-v", "ON_ERROR_STOP=1", "-f", path]);
+      assert.equal(migrated.status, 0, "T-group migration " + path + ": " + migrated.out);
+    }
+    for (const id of Object.keys(ATTRIBUTION_PROBES)) {
+      const start = sourceLines.findIndex((line) => line.startsWith("\\echo " + id + " "));
+      assert.ok(start > setupEnd, "missing original T SQL probe " + id);
+      const stopIndex = sourceLines.findIndex((line, index) => index > start && line.startsWith("\\echo "));
+      const stop = stopIndex < 0 ? sourceLines.length : stopIndex;
+      const statement = "\\set VERBOSITY terse\n" + sourceLines.slice(start, stop).join("\n") + "\n";
+      attributionResults.set(id, psql(dbT, ["-v", "ON_ERROR_STOP=1", "-f", "-"], statement));
+    }
+
     p0001 = errorsByMarker(PROBES, psql(dbA, ["-f", PROBES]).out, /^-- (P\d+|OK\d*)\b/);
     pQa = errorsByMarker(QA_PROBES, psql(dbB, ["-f", QA_PROBES]).out, /^\\echo (SETUP_DONE|SETUP|RLS_SETUP|END|Q\d+|C\d+|R\d+)\b/);
     // q21 is checked against the fully migrated QA-F4/A candidate, not baseline 0001.
@@ -205,7 +233,7 @@ describe("DB şema adayı — negatif problar (PostgreSQL)", { skip: ENABLED ? f
   });
 
   after(() => {
-    for (const db of [dbA, dbB, dbW, dbE, dbM, dbA6]) psql("postgres", ["-c", `DROP DATABASE IF EXISTS ${db}`]);
+    for (const db of [dbA, dbB, dbW, dbE, dbM, dbA6, dbT]) psql("postgres", ["-c", `DROP DATABASE IF EXISTS ${db}`]);
   });
 
   it("0001 problar: P1–P16 reddedilir, OK blokları kabul edilir", () => {
@@ -248,6 +276,13 @@ describe("DB şema adayı — negatif problar (PostgreSQL)", { skip: ENABLED ? f
         assert.ok(result, `A-group ${id} was not executed`);
         assert.notEqual(result.status, 0, `${id} unexpectedly accepted`);
         assert.ok(result.out.includes(AUDIT_PROBES[id]!), `${id} WRONG rejection cause: ${result.out}`);
+      });
+    } else if (Object.hasOwn(ATTRIBUTION_PROBES, id)) {
+      it(`QA-F4 T ${id}: original attribution violation rejected for exact rule`, () => {
+        const result = attributionResults.get(id);
+        assert.ok(result, `T-group ${id} not run`);
+        assert.notEqual(result.status, 0, `${id} unexpectedly accepted`);
+        assert.ok(result.out.includes(ATTRIBUTION_PROBES[id]!), `${id} WRONG rejection cause: ${result.out}`);
       });
     } else {
       it(`QA-F4 ${id}: ihlal reddedilmeli`, { todo: "QA-F4 · Paket-03 (DB defter kısıtları)" }, () => {
