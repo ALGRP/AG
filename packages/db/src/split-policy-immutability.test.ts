@@ -35,13 +35,13 @@ describe("PR3-N3 approved split policy is immutable (disposable PG16 only)", {
     if (RUN) psql("postgres", `DROP DATABASE IF EXISTS ${db};`);
   });
 
-  it("PR3-N3 [RULE] the bps of an approved policy cannot be changed, even by the table owner / migration role", { todo: "PR3-N3 · Codex Paket-03 (split_policy ekleme-yalnız)" }, () => {
+  it("PR3-N3 [RULE] the bps of an approved policy cannot be changed, even by the table owner / migration role", () => {
     const r = psql(db, "UPDATE split_policy SET carrier_bps = 6000, partner_bps = 3000 WHERE id = 'shuttle-split-v1';");
     assert.notEqual(r.status, 0, "approved shuttle-split-v1 was re-priced in place");
     assert.equal(psql(db, "SELECT carrier_bps||'/'||partner_bps||'/'||platform_bps FROM split_policy WHERE id = 'shuttle-split-v1';").out.trim(), "7000/2000/1000");
   });
 
-  it("PR3-N3 [RULE] an approved policy cannot be deleted", { todo: "PR3-N3 · Codex Paket-03 (split_policy ekleme-yalnız)" }, () => {
+  it("PR3-N3 [RULE] an approved policy cannot be deleted", () => {
     const r = psql(db, "DELETE FROM split_policy WHERE id = 'shuttle-split-v1';");
     assert.notEqual(r.status, 0, "approved policy deleted");
   });

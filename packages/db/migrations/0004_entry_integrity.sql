@@ -150,4 +150,31 @@ CREATE TRIGGER ag_f4_a_entry_rules
 BEFORE INSERT ON settlement_entry FOR EACH ROW
 EXECUTE FUNCTION ag_f4_validate_entry_split();
 
+-- PR3-N3: once approved, the policy ID and its basis-point terms are immutable.
+-- Future commercial changes require a NEW id; never mutate a frozen reference.
+-- This is a trigger defense against accidental UPDATE/DELETE by the schema owner.
+-- A PostgreSQL superuser can disable triggers and is OUTSIDE this trust boundary.
+CREATE FUNCTION ag_f4_freeze_approved_policy() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    IF OLD.status = 'approved' THEN
+      RAISE EXCEPTION 'AG_F4_APPROVED_POLICY_IMMUTABLE: %', OLD.id USING ERRCODE = '23514';
+    END IF;
+    RETURN OLD;
+  END IF;
+  IF OLD.status = 'approved' THEN
+    RAISE EXCEPTION 'AG_F4_APPROVED_POLICY_IMMUTABLE: %', OLD.id USING ERRCODE = '23514';
+  END IF;
+  RETURN NEW;
+END $$;
+CREATE TRIGGER ag_f4_policy_freeze BEFORE UPDATE OR DELETE ON split_policy
+FOR EACH ROW EXECUTE FUNCTION ag_f4_freeze_approved_policy();
+
+CREATE FUNCTION ag_f4_policy_no_truncate() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  RAISE EXCEPTION 'AG_F4_APPROVED_POLICY_IMMUTABLE: bulk split policy removal forbidden' USING ERRCODE = '23514';
+END $$;
+CREATE TRIGGER ag_f4_policy_truncate BEFORE TRUNCATE ON split_policy
+FOR EACH STATEMENT EXECUTE FUNCTION ag_f4_policy_no_truncate();
+
 COMMIT;
