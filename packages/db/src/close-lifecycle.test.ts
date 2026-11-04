@@ -13,6 +13,7 @@ const RUN = process.env.AG_TEST_PG === "1" && process.env.AG_TEST_PG_ISOLATED ==
 const CONTAINER = process.env.AG_TEST_PG_CONTAINER;
 const ROOT = resolve(import.meta.dirname, "../../..");
 const M0001 = readFileSync(resolve(ROOT, "packages/db/migrations/0001_network_core.sql"), "utf8");
+const M0002 = readFileSync(resolve(ROOT, "packages/db/migrations/0002_tenant_rls.sql"), "utf8");
 const M0003 = readFileSync(resolve(ROOT, "packages/db/migrations/0003_week_integrity.sql"), "utf8");
 
 function psql(db: string, sql: string): { status: number | null; out: string } {
@@ -32,6 +33,9 @@ VALUES ('00000000-0000-4000-8000-00000000c044','site-one','p1','sup-a','shuttle'
 INSERT INTO booking_money_event VALUES ('00000000-0000-4000-8000-00000000d044','00000000-0000-4000-8000-00000000c044','collection',5000,'cash','supplier','SLIP-LIFE-44','2026-10-28 10:00+03');`;
 
 const CLOSE_W44 = `BEGIN;
+-- The local platform role must be explicitly scoped by a trusted transaction adapter.
+SET LOCAL ROLE ag_platform;
+SET LOCAL app.scope = 'platform';
 INSERT INTO settlement_week (week_id, period_start, period_end, payment_due, report_snapshot)
 SELECT '2026-W44', s, s + interval '7 days', s + interval '8 days 18 hours', '{}'::jsonb
 FROM (SELECT ('2026-10-26 00:00'::timestamp AT TIME ZONE 'Europe/Istanbul') AS s) x;
@@ -47,18 +51,52 @@ describe("QA-F4 W — legitimate close lifecycle (disposable PG16 only)", {
     if (!RUN) return;
     assert.equal(psql("postgres", `CREATE DATABASE ${db};`).status, 0);
     assert.equal(psql(db, M0001).status, 0, "0001");
-    const m3 = psql(db, M0003);
-    assert.equal(m3.status, 0, m3.out);
+    // Load the synthetic fixture before 0002/0003, since 0002 closes all
+    // arbitrary writes under FORCE RLS and the normal platform closer is separate.
     const seed = psql(db, BOOKING);
     assert.equal(seed.status, 0, seed.out);
+    for (const [name, sql] of [["0002", M0002], ["0003", M0003]] as const) {
+      const migration = psql(db, sql);
+      assert.equal(migration.status, 0, name + ": " + migration.out);
+    }
   });
   after(() => {
     if (RUN) psql("postgres", `DROP DATABASE IF EXISTS ${db};`);
   });
 
-  it("PR3-N1 [RULE] closing a finished week writes the week row and its entries in one transaction", { todo: "PR3-N1 · Codex Paket-03 (0003 açık/kapalı hafta modeli; SEL-331)" }, () => {
+  it("PR3-N1 [RULE] closing a finished week writes the week row and its entries in one transaction", () => {
     const r = psql(db, CLOSE_W44);
     assert.equal(r.status, 0, `legitimate close rejected: ${r.out.trim()}`);
+    assert.equal(psql(db, "SELECT count(*) FROM settlement_entry WHERE week_id = '2026-W44';").out.trim(), "1");
+  });
+
+  it("cannot add a second settlement entry for an already committed week, even as platform", () => {
+    const later = psql(db, `BEGIN;
+SET LOCAL ROLE ag_platform;
+SET LOCAL app.scope = 'platform';
+INSERT INTO settlement_entry (id, week_id, booking_id, kind, base_before, base_after,
+  collected_delta, site_delta, agos_delta, supplier_delta, currency, policy_id)
+VALUES ('00000000-0000-4000-8000-00000000e045','2026-W44',
+  '00000000-0000-4000-8000-00000000c044','collection',0,5000,5000,
+  1000,500,3500,'EUR','shuttle-split-v1');
+COMMIT;`);
+    assert.notEqual(later.status, 0, "the platform wrote an entry after W44 was committed");
+    assert.match(later.out, /AG_F4_CLOSED_WEEK_ENTRY/);
+    assert.equal(psql(db, "SELECT count(*) FROM settlement_entry WHERE week_id = '2026-W44';").out.trim(), "1");
+  });
+
+  it("cannot add an entry inside a closing transaction as the unprivileged app role", () => {
+    const attempt = psql(db, `BEGIN;
+SET LOCAL ROLE ag_app;
+SET LOCAL app.scope = 'site';
+SET LOCAL app.party_id = 'p1';
+INSERT INTO settlement_entry (id, week_id, booking_id, kind, base_before, base_after,
+  collected_delta, site_delta, agos_delta, supplier_delta, currency, policy_id)
+VALUES ('00000000-0000-4000-8000-00000000e046','2026-W44',
+  '00000000-0000-4000-8000-00000000c044','collection',0,5000,5000,
+  1000,500,3500,'EUR','shuttle-split-v1');
+COMMIT;`);
+    assert.notEqual(attempt.status, 0, "an untrusted site role inserted a week entry");
     assert.equal(psql(db, "SELECT count(*) FROM settlement_entry WHERE week_id = '2026-W44';").out.trim(), "1");
   });
 });

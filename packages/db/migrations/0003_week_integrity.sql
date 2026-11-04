@@ -1,7 +1,9 @@
 -- QA-F4 / W group: week chronology and closed-ledger immutability.
 -- LOCAL_ONLY migration candidate; do not run on production or shared staging CRS.
--- Existing 0001 design has NOT NULL settlement_week.closed_at (weeks start closed);
--- legitimate entry-writing during close requires separate CRS schema/reconciliation (SEL-331).
+-- Existing 0001 writes the week row and statement entries in one closing transaction.
+-- A scoped platform closer may write entries while its week row was created in the
+-- SAME transaction; a later transaction must not modify an already closed week.
+-- This is an isolated candidate, NOT a production-ready CRS release (SEL-331).
 BEGIN;
 
 CREATE FUNCTION ag_f4_week_start(p_week text) RETURNS timestamptz
@@ -76,13 +78,25 @@ END $$;
 CREATE TRIGGER ag_f4_week_guard BEFORE INSERT ON settlement_week
 FOR EACH ROW EXECUTE FUNCTION ag_f4_validate_closed_week();
 
--- A closed week's immutable financial snapshot cannot gain new entries.
--- Caveat: settlement_week.closed_at is NOT NULL in 0001; the production DB adapter
--- needs an explicit OPEN -> CLOSED transaction model before applying this trigger.
+-- The 0001 model has NO separate open-week row. A valid close writes the week
+-- and its settlement entries in ONE atomic transaction. A row that already
+-- existed before the caller's transaction is *always closed* and immutable.
+-- Only the platform role, with a transaction-local platform scope, may insert
+-- entries against a week created by that exact transaction.
+-- xmin is a 32-bit XID. Compare with current 64-bit transaction ID's low 32
+-- bits. This compatibility guard is only for the disposable candidate.
 CREATE FUNCTION ag_f4_entry_closed_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+  same_transaction boolean;
 BEGIN
   PERFORM ag_f4_week_start(NEW.week_id);
-  IF EXISTS (SELECT 1 FROM settlement_week WHERE week_id = NEW.week_id) THEN
+  SELECT (w.xmin::text::bigint = (txid_current() % 4294967296))
+    INTO same_transaction
+    FROM settlement_week w WHERE w.week_id = NEW.week_id;
+
+  IF NOT COALESCE(same_transaction, false)
+     OR current_user <> 'ag_platform'
+     OR current_setting('app.scope', true) IS DISTINCT FROM 'platform' THEN
     RAISE EXCEPTION 'AG_F4_CLOSED_WEEK_ENTRY: %', NEW.week_id USING ERRCODE = '23514';
   END IF;
   RETURN NEW;
