@@ -3,7 +3,7 @@
 // case variant) are added. They pass today; after 0005 they must still pass with unchanged assertions.
 // Disposable PostgreSQL 16 only: AG_TEST_PG=1 AG_TEST_PG_ISOLATED=YES (optional AG_TEST_PG_CONTAINER).
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { after, before, describe, it } from "node:test";
@@ -21,6 +21,22 @@ function psql(db: string, sql: string): { status: number | null; out: string } {
     : ["-X", "-q", "-At", "-d", db, "-v", "ON_ERROR_STOP=1", "-f", "-"];
   const r = spawnSync(CONTAINER ? "docker" : "psql", args, { input: sql, encoding: "utf8", timeout: 30_000 });
   return { status: r.status, out: (r.stdout ?? "") + (r.stderr ?? "") };
+}
+
+async function concurrentPsql(db: string, sql: string): Promise<{ status: number | null; out: string }> {
+  const cmd = CONTAINER ? "docker" : "psql";
+  const args = CONTAINER
+    ? ["exec", "-i", CONTAINER, "psql", "-U", "postgres", "-X", "-q", "-At", "-d", db, "-v", "ON_ERROR_STOP=1", "-f", "-"]
+    : ["-X", "-q", "-At", "-d", db, "-v", "ON_ERROR_STOP=1", "-f", "-"];
+  return new Promise((resolveRun, reject) => {
+    const child = spawn(cmd, args);
+    let out = "";
+    child.stdout.on("data", (b) => { out += String(b); });
+    child.stderr.on("data", (b) => { out += String(b); });
+    child.on("error", reject);
+    child.on("close", (status) => resolveRun({ status, out }));
+    child.stdin.end(sql);
+  });
 }
 
 const COLS = "id, selling_site_id, selling_party_id, supplier_id, service_type, final_booking_price, currency, ref, route_code, pickup_text, dropoff_text, pickup_at, passengers, customer_name, customer_email, customer_phone, customer_locale, allowed_collection_methods, lookup_token_hash, fingerprint, status, policy_id, site_commission_amount, agos_fee_amount, supplier_entitlement, price_mode, created_at";
@@ -61,6 +77,60 @@ describe("QA-F4 M — legitimate money movements stay accepted (disposable PG16 
   it("M-GUARD private: the SITE may collect (shuttle-only restriction must not leak to private)", () => {
     const r = psql(db, EV("ff003", "f002", "collection", 8000, "site", "SLIP-M-2"));
     assert.equal(r.status, 0, r.out);
+  });
+
+  it("M-RACE: concurrent 20 EUR refunds after an earlier 20 EUR refund permit only one, even from two SQL connections", async () => {
+    // The regular positive test already inserted 50 EUR collection and 20 EUR
+    // refund for booking f001. Two further 20 EUR refunds would total 60 EUR.
+    // The first transaction keeps the row lock briefly to provoke contention.
+    const script = (id: string, ref: string) => `BEGIN;
+INSERT INTO booking_money_event VALUES
+('00000000-0000-4000-8000-0000000${id}',
+ '00000000-0000-4000-8000-00000000f001',
+ 'refund',2000,'cash','supplier','${ref}','2026-10-28 12:00+03');
+SELECT pg_sleep(0.25);
+COMMIT;`;
+    const [first, second] = await Promise.all([
+      concurrentPsql(db, script("ff004", "RF-M-RACE-A")),
+      concurrentPsql(db, script("ff005", "RF-M-RACE-B")),
+    ]);
+    const results = [first, second];
+    assert.equal(results.filter((x) => x.status === 0).length, 1, JSON.stringify(results));
+    assert.equal(results.filter((x) => x.out.includes("AG_F4_REFUND_EXCEEDS_COLLECTED")).length, 1, JSON.stringify(results));
+    const total = psql(db, "SELECT count(*)||':'||sum(amount) FROM booking_money_event WHERE kind='refund' AND booking_id='00000000-0000-4000-8000-00000000f001';");
+    assert.equal(total.status, 0, total.out);
+    assert.equal(total.out.trim(), "2:4000");
+  });
+
+  it("M-CACHE: money totals can be synchronized to recorded events but manual drift is rejected", () => {
+    // Earlier guard inserted 80 EUR as a private/site collection for booking f002.
+    const accurate = psql(db, "UPDATE booking SET collected_amount=8000 WHERE id='00000000-0000-4000-8000-00000000f002';");
+    assert.equal(accurate.status, 0, accurate.out);
+    const drift = psql(db, "UPDATE booking SET collected_amount=7000 WHERE id='00000000-0000-4000-8000-00000000f002';");
+    assert.notEqual(drift.status, 0);
+    assert.match(drift.out, /AG_F4_COLLECTED_AMOUNT_DRIFT/);
+    assert.equal(psql(db, "SELECT collected_amount FROM booking WHERE id='00000000-0000-4000-8000-00000000f002';").out.trim(), "8000");
+  });
+
+  it("M-RLS: platform-scoped INSERT is allowed; ag_app cannot escalate with a forged scope GUC", () => {
+    const accepted = psql(db, `BEGIN;
+SET LOCAL ROLE ag_platform;
+SET LOCAL app.scope='platform';
+INSERT INTO booking_money_event VALUES
+('00000000-0000-4000-8000-0000000ff010',
+ '00000000-0000-4000-8000-00000000f002',
+ 'collection',100,'cash','site','SLIP-M-ROLE','2026-10-29 13:00+03');
+COMMIT;`);
+    assert.equal(accepted.status, 0, accepted.out);
+    const denied = psql(db, `BEGIN;
+SET SESSION AUTHORIZATION ag_app;
+SET LOCAL app.scope='platform';
+INSERT INTO booking_money_event VALUES
+('00000000-0000-4000-8000-0000000ff011',
+ '00000000-0000-4000-8000-00000000f002',
+ 'collection',100,'cash','site','SLIP-M-FAKE','2026-10-29 13:00+03');
+COMMIT;`);
+    assert.notEqual(denied.status, 0, "untrusted app connection inserted a collection by spoofing scope");
   });
 
   it("M-GUARD receipts: the same bank reference from a DIFFERENT payer is a different receipt", () => {

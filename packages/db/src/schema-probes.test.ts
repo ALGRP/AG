@@ -16,6 +16,13 @@ const MIGRATION = resolve(ROOT, "packages/db/migrations/0001_network_core.sql");
 const RLS_MIGRATION = resolve(ROOT, "packages/db/migrations/0002_tenant_rls.sql");
 const WEEK_MIGRATION = resolve(ROOT, "packages/db/migrations/0003_week_integrity.sql");
 const ENTRY_MIGRATION = resolve(ROOT, "packages/db/migrations/0004_entry_integrity.sql");
+const MONEY_MIGRATION = resolve(ROOT, "packages/db/migrations/0005_money_events.sql");
+const MONEY_PROBES: Readonly<Record<string, string>> = {
+  Q12: "AG_F4_REFUND_EXCEEDS_COLLECTED",
+  Q13: "AG_F4_SHUTTLE_COLLECTOR_NOT_SUPPLIER",
+  Q15: "AG_F4_COLLECTED_AMOUNT_DRIFT",
+  Q16: "AG_F4_RECEIPT_DUPLICATE",
+};
 const ENTRY_PROBES: Readonly<Record<string, string>> = {
   Q01: "AG_F4_ENTRY_BASE_MISMATCH",
   Q02: "AG_F4_ENTRY_EXCEEDS_PRICE",
@@ -82,8 +89,10 @@ describe("DB şema adayı — negatif problar (PostgreSQL)", { skip: ENABLED ? f
   const dbB = `ag_probe_${process.pid}_b`;
   const dbW = `ag_probe_${process.pid}_w`;
   const dbE = `ag_probe_${process.pid}_e`;
+  const dbM = `ag_probe_${process.pid}_m`;
   const weekResults = new Map<string, { status: number | null; out: string }>();
   const entryResults = new Map<string, { status: number | null; out: string }>();
+  const moneyResults = new Map<string, { status: number | null; out: string }>();
   let p0001 = new Map<string, number>();
   let pQa = new Map<string, number>();
   let q21 = "";
@@ -91,7 +100,7 @@ describe("DB şema adayı — negatif problar (PostgreSQL)", { skip: ENABLED ? f
   let foreign = "";
 
   before(() => {
-    for (const db of [dbA, dbB, dbW, dbE]) {
+    for (const db of [dbA, dbB, dbW, dbE, dbM]) {
       const c = psql("postgres", ["-c", `DROP DATABASE IF EXISTS ${db}`, "-c", `CREATE DATABASE ${db}`]);
       assert.equal(c.status, 0, c.out);
       const m = psql(db, ["-v", "ON_ERROR_STOP=1", "-f", MIGRATION]);
@@ -137,6 +146,23 @@ describe("DB şema adayı — negatif problar (PostgreSQL)", { skip: ENABLED ? f
       entryResults.set(id, psql(dbE, ["-v", "ON_ERROR_STOP=1", "-f", "-"], statement));
     }
 
+    // QA-F4 M: repeat the unmodified Q12/Q13/Q15/Q16 probes on the
+    // complete isolated 0001..0005 candidate and inspect the exact error.
+    const moneySeed = psql(dbM, ["-v", "ON_ERROR_STOP=1", "-f", "-"], seedSql);
+    assert.equal(moneySeed.status, 0, "M-group seed failed: " + moneySeed.out);
+    for (const path of [RLS_MIGRATION, WEEK_MIGRATION, ENTRY_MIGRATION, MONEY_MIGRATION]) {
+      const migrated = psql(dbM, ["-v", "ON_ERROR_STOP=1", "-f", path]);
+      assert.equal(migrated.status, 0, "M-group migration " + path + ": " + migrated.out);
+    }
+    for (const id of Object.keys(MONEY_PROBES)) {
+      const start = sourceLines.findIndex((line) => line.startsWith("\\echo " + id + " "));
+      assert.ok(start > setupEnd, "missing original SQL probe " + id);
+      const stopIndex = sourceLines.findIndex((line, index) => index > start && line.startsWith("\\echo "));
+      const stop = stopIndex < 0 ? sourceLines.length : stopIndex;
+      const statement = "\\set VERBOSITY terse\n" + sourceLines.slice(start, stop).join("\n") + "\n";
+      moneyResults.set(id, psql(dbM, ["-v", "ON_ERROR_STOP=1", "-f", "-"], statement));
+    }
+
     p0001 = errorsByMarker(PROBES, psql(dbA, ["-f", PROBES]).out, /^-- (P\d+|OK\d*)\b/);
     pQa = errorsByMarker(QA_PROBES, psql(dbB, ["-f", QA_PROBES]).out, /^\\echo (SETUP_DONE|SETUP|RLS_SETUP|END|Q\d+|C\d+|R\d+)\b/);
     q21 = psql(dbB, ["-At", "-c", "SELECT count(*) FROM information_schema.columns WHERE table_name = 'settlement_adjustment' AND column_name ~ '(mfa|actor|approved_by|decided_by|role)'"]).out.trim();
@@ -153,7 +179,7 @@ describe("DB şema adayı — negatif problar (PostgreSQL)", { skip: ENABLED ? f
   });
 
   after(() => {
-    for (const db of [dbA, dbB, dbW, dbE]) psql("postgres", ["-c", `DROP DATABASE IF EXISTS ${db}`]);
+    for (const db of [dbA, dbB, dbW, dbE, dbM]) psql("postgres", ["-c", `DROP DATABASE IF EXISTS ${db}`]);
   });
 
   it("0001 problar: P1–P16 reddedilir, OK blokları kabul edilir", () => {
@@ -182,6 +208,13 @@ describe("DB şema adayı — negatif problar (PostgreSQL)", { skip: ENABLED ? f
         assert.ok(result, `E-group ${id} not executed`);
         assert.notEqual(result.status, 0, `${id} unexpectedly accepted`);
         assert.ok(result.out.includes(ENTRY_PROBES[id]!), `${id} WRONG rejection cause: ${result.out}`);
+      });
+    } else if (Object.hasOwn(MONEY_PROBES, id)) {
+      it(`QA-F4 M ${id}: original money violation rejected for exact financial invariant`, () => {
+        const result = moneyResults.get(id);
+        assert.ok(result, `M-group ${id} not executed`);
+        assert.notEqual(result.status, 0, `${id} unexpectedly accepted`);
+        assert.ok(result.out.includes(MONEY_PROBES[id]!), `${id} WRONG rejection cause: ${result.out}`);
       });
     } else {
       it(`QA-F4 ${id}: ihlal reddedilmeli`, { todo: "QA-F4 · Paket-03 (DB defter kısıtları)" }, () => {

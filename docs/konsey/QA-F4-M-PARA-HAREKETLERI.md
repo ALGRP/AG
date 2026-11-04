@@ -36,3 +36,26 @@ Ayrıca (prob yok, aynı göçte önerilir): `booking_money_event` için tahsil 
 ## Kapsam dışı
 
 H-23, H-25, H-26 kararları; CRS adaptörü; PR3-N2.
+
+## 04.11.2026 Codex yerel uygulama ve doğrulama
+
+**Durum:** LOCAL_ONLY / CODE_TEST_PASS / CLAUDE_PEER_REVIEW_PENDING / HUMAN_INDEPENDENT_ACCEPTED=NO / LIVE_HOLD.
+
+İki ayrı commit: önce PR3-N3 (0004'te onaylı split_policy oranlarının UPDATE/DELETE/TRUNCATE yoluyla değiştirilmesi engellendi; gelecekte yeni oran için yeni politika kimliği gerekir), ardından QA-F4/M 0005 adayı.
+
+**0005_money_events.sql** eski 0001–0004 göçlerine dokunmadan M grubunu ekler:
+- Q12: refund toplamı collection toplamını geçemez. Rezervasyon satırına FOR UPDATE kilidi koyularak eşzamanlı iki iadenin aynı tahsilatı iki kere tüketmesi önlenir.
+- Q13: shuttle müşterisinden yalnız supplier tahsil eder; private/VIP site tahsilatı serbest.
+- Q15: booking üzerindeki collected_amount ve refunded_amount önbelleği, append-only money event toplamından bağımsız elle değiştirilemez. Doğru toplam güncellemesi korunur.
+- Q16: bank receipt referansı payer_id + büyük harf/boşluksuz normalizasyonla benzersiz. Unique index eşzamanlı koruma, INSERT trigger'ı AG_F4_RECEIPT_DUPLICATE hata kodu verir.
+
+Özgün Q12/Q13/Q15/Q16 SQL probları değiştirilmedi; yalnız şemayı adım adım kuran izole test yardımcısı her probu ayrı çalıştırır ve doğru AG_F4_* hata nedenini arar. Kapalı hafta veya kiracı yetkisi gibi ilgisiz bir ret PASS sayılmaz.
+
+**Atılabilir PostgreSQL 16, network none, test sonuçları:**
+- PR3-N3 politika değişmezliği 2/2 PASS; önceki SQL-vs-TS pay paritesi 4/4 PASS.
+- M orijinal negatif problar 4/4 doğru nedenlerle PASS; eski 8 W ve 6 E negatif probun koruması yerinde.
+- M olumlu koruma ve ek senaryolar 6/6 PASS: 50 EUR tedarikçi tahsilatı + 20 EUR iade, private site tahsilatı, başka payer aynı numara, eşzamanlı iki iade (yalnız biri), doğru nakit önbelleği güncellemesi / yanlış güncellemenin reddi, ag_platform scoped yazım vs ag_app yetki yükseltme reddi.
+- Tüm PG16 testleri: **61 test; 43 PASS / 18 TODO / 0 FAIL**. Bu 18 TODO halen mevcut QA-F4 diğer gruplar ve PR3-N2 gibi bağımsız açıklardır. SQL 38 negatif testinin **21'i PASS / 17'si TODO**.
+- Nihai npm run check, sentetik W45 ve SSG sonuçları PR #9 yorumunda yer alacak.
+
+**Kapsam sınırları:** H-23/H-25/H-26 açık. M göçündeki banka dekontu eşsizliği, müşterinin tahsilat makbuzları için H-26 kapsamında gereken kalıcı collection_slip tahsis/registry tasarımının yerine geçmez. Site ve tedarikçi tahsilat referanslarının PostgreSQL'de global eşsizliği sonraki CRS entegrasyon kontrolüdür; uygulamanın yerel QA-F9 koruması canlı DB garantisi değildir. Production/table-owner/superuser threat model ve kalıcı IdP/CRS adapter hala doğrulanmadı. Göç gerçek CRS veya staging'e uygulanmadı.
