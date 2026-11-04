@@ -555,3 +555,14 @@ Sabitlenen sürüm `a1ca24ae15f935c5d980a067958e5acbb1f15f64`. `npm run check`: 
 **Sıradaki iş:**
 1. PR2-N4 (A10.19), küçük tek commit.
 2. QA-F4: DB defter kısıtları (35 negatif prob), ayrı paket. Atılabilir PostgreSQL 16 ile.
+
+### 16.1 Ek kontrol: kredi verisi izolasyonu (aynı sürüm, kararlar değişmedi)
+
+Partner ve rakip sitenin rezervasyonlarına ayrı krediler verildikten sonra partner-site kimliğiyle denendi:
+- Yönetim listesinde kendi kredisi görünüyor; rakibin kredi referansı ve gerekçesi görünmüyor.
+- Ekstrede rakip rezervasyon veya kredi yok.
+- Site kimliğiyle kendi rezervasyonuna ve rakibe kredi verme → ikisi de 403 `scope_forbidden`.
+
+Kararlar: `aba1027` **NEEDS REVIEW** (PR2-N4, A10.19); `a1ca24a` **PASS (yerel)**.
+
+**Sıradaki iş:** PR2-N4, sonra QA-F4: [`QA-F4-DB-KISITLARI-PLANI.md`](./QA-F4-DB-KISITLARI-PLANI.md).
