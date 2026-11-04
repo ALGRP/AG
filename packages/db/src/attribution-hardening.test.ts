@@ -43,7 +43,7 @@ VALUES ('site-one','partner','p1','o@x.test','+905550000001','p1',NULL);
 ${booking("a701", "AG-QQNN22", "p1", "sup-a")}`);
     assert.equal(seed.status, 0, seed.out);
     for (const n of ["0002_tenant_rls", "0003_week_integrity", "0004_entry_integrity", "0005_money_events",
-      "0006_adjustments_audit", "0007_adjustment_hardening", "0008_attribution_integrity"]) {
+      "0006_adjustments_audit", "0007_adjustment_hardening", "0008_attribution_integrity", "0009_attribution_freeze"]) {
       const m = psql(db, MIG(n));
       assert.equal(m.status, 0, `${n}: ${m.out}`);
     }
@@ -52,7 +52,7 @@ ${booking("a701", "AG-QQNN22", "p1", "sup-a")}`);
     if (RUN) psql("postgres", `DROP DATABASE IF EXISTS ${db};`);
   });
 
-  it("PR3-N7 [RULE] after a site transfer, a historical booking stays updatable and keeps its original attribution", { todo: "PR3-N7 · Codex Paket-03 (UPDATE'te yalnız atıf alanı değişimi denetlenmeli)" }, () => {
+  it("PR3-N7 [RULE] after a site transfer, a historical booking stays updatable and keeps its original attribution", () => {
     const transfer = psql(db, "UPDATE site SET partner_id = 'p9', owner_party_id = 'p9' WHERE id = 'site-one';");
     assert.equal(transfer.status, 0, transfer.out);
     const r = psql(db, "UPDATE booking SET notes = 'ops note after transfer' WHERE id = '00000000-0000-4000-8000-00000000a701';");
@@ -60,7 +60,7 @@ ${booking("a701", "AG-QQNN22", "p1", "sup-a")}`);
     assert.equal(psql(db, "SELECT selling_party_id FROM booking WHERE id = '00000000-0000-4000-8000-00000000a701';").out.trim(), "p1");
   });
 
-  it("PR3-N7 [RULE] the attribution of an existing booking cannot be rewritten to the new site owner after a transfer", { todo: "PR3-N7 · Codex Paket-03 (geçmiş komisyon yeni sahibe yönlendirilebiliyor)" }, () => {
+  it("PR3-N7 [RULE] the attribution of an existing booking cannot be rewritten to the new site owner after a transfer", () => {
     const r = psql(db, "UPDATE booking SET selling_party_id = 'p9' WHERE id = '00000000-0000-4000-8000-00000000a701';");
     assert.notEqual(r.status, 0, "attribution of an existing booking was rewritten");
   });

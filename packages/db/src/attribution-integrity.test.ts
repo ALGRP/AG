@@ -22,13 +22,13 @@ function psql(db: string, sql: string): { status: number | null; out: string } {
 }
 
 const columns = "id,selling_site_id,selling_party_id,supplier_id,service_type,final_booking_price,currency,ref,route_code,pickup_text,dropoff_text,pickup_at,passengers,customer_name,customer_email,customer_phone,customer_locale,allowed_collection_methods,lookup_token_hash,fingerprint,status,policy_id,site_commission_amount,agos_fee_amount,supplier_entitlement,price_mode";
-function booking(id: string, ref: string, site: string, party: string, supplier: string, type: string,
+function booking(id: string, ref: string, site: string, party: string, supplier: string | null, type: string,
   amount: number, siteFee: number, platformFee: number, carrierFee: number): string {
   const route = type === "shuttle" ? "'AYT-ALN'" : "NULL";
   const policy = type === "shuttle" ? "'shuttle-split-v1'" : "NULL";
   const mode = type === "shuttle" ? "'FIXED_SHUTTLE'" : "'SITE_PRICE'";
   return "INSERT INTO booking (" + columns + ") VALUES ('" + id + "','" + site + "','" + party +
-    "','" + supplier + "','" + type + "'," + amount + ",'EUR','" + ref + "'," + route +
+    "'," + (supplier === null ? "NULL" : "'" + supplier + "'") + ",'" + type + "'," + amount + ",'EUR','" + ref + "'," + route +
     ",'AYT','Alanya','2026-11-04 14:00',2,'QA Test','qa@example.test','+90','tr'," +
     "ARRAY['cash']::collection_method[],'lookhash','f" + ref + "','confirmed'," + policy +
     "," + siteFee + "," + platformFee + "," + carrierFee + "," + mode + ");";
@@ -47,7 +47,8 @@ describe("QA-F4 T valid ownership, self-supply and private economics — disposa
     const seeded = psql(db, setup);
     assert.equal(seeded.status, 0, seeded.out);
     for (const name of ["0002_tenant_rls.sql", "0003_week_integrity.sql", "0004_entry_integrity.sql",
-      "0005_money_events.sql", "0006_adjustments_audit.sql", "0007_adjustment_hardening.sql", "0008_attribution_integrity.sql"]) {
+      "0005_money_events.sql", "0006_adjustments_audit.sql", "0007_adjustment_hardening.sql", "0008_attribution_integrity.sql",
+      "0009_attribution_freeze.sql"]) {
       const m = psql(db, readMigration(name));
       assert.equal(m.status, 0, name + " => " + m.out);
     }
@@ -85,5 +86,60 @@ describe("QA-F4 T valid ownership, self-supply and private economics — disposa
     const result = psql(db, "BEGIN;\nSET SESSION AUTHORIZATION ag_app;\nSET LOCAL app.scope='platform';\n" + query + "\nCOMMIT;");
     assert.notEqual(result.status, 0);
     assert.equal(psql(db, "SELECT count(*) FROM booking WHERE ref='AG-QTTT26';").out.trim(), "0");
+  });
+
+  const fixtureId = "00000000-0000-4000-8000-00000000f4c1";
+  const fixture = (supplier: string | null) => booking(fixtureId, "AG-QTTT27", "site-one", "p1",
+    supplier, "shuttle", 5000, 1000, 500, 3500);
+  const rollback = (sql: string) => "BEGIN;\nSET LOCAL ROLE ag_platform;\nSET LOCAL app.scope='platform';\n" + sql + "\nROLLBACK;";
+
+  for (const [name, change] of [
+    ["selling site", "selling_site_id='site-two'"],
+    ["selling party", "selling_party_id='p2'"],
+    ["assigned supplier", "supplier_id='sup-b'"],
+    ["cleared supplier", "supplier_id=NULL"],
+  ]) {
+    it(`PR3-N7 rejects changing the ${name} before settlement`, () => {
+      const r = psql(db, rollback(fixture("sup-a") + `UPDATE booking SET ${change} WHERE id='${fixtureId}';`));
+      assert.notEqual(r.status, 0, r.out);
+      assert.match(r.out, /AG_F4_BOOKING_ATTRIBUTION_IMMUTABLE/);
+    });
+  }
+
+  it("PR3-N7 permits an unassigned update and the first supplier assignment, including after a site transfer", () => {
+    const r = psql(db, `BEGIN;
+${fixture(null)}
+UPDATE site SET partner_id='p2', owner_party_id='p2' WHERE id='site-one';
+SET LOCAL ROLE ag_platform;
+SET LOCAL app.scope='platform';
+UPDATE booking SET notes='still pending', supplier_id=NULL WHERE id='${fixtureId}';
+UPDATE booking SET supplier_id='sup-a' WHERE id='${fixtureId}';
+UPDATE booking SET notes='assigned', supplier_id='sup-a' WHERE id='${fixtureId}';
+SELECT selling_site_id || ':' || selling_party_id || ':' || supplier_id FROM booking WHERE id='${fixtureId}';
+ROLLBACK;`);
+    assert.equal(r.status, 0, r.out);
+    assert.equal(r.out.trim(), "site-one:p1:sup-a");
+  });
+
+  for (const [supplier, reason] of [
+    ["P1", "AG_F4_BOOKING_SUPPLIER_ID_NOT_CANONICAL"],
+    ["p1", "AG_F4_BOOKING_SELF_SUPPLY_UNVERIFIED"],
+  ]) {
+    it(`PR3-N7 first supplier assignment preserves ${reason}`, () => {
+      const r = psql(db, rollback(fixture(null) + `UPDATE booking SET supplier_id='${supplier}' WHERE id='${fixtureId}';`));
+      assert.notEqual(r.status, 0, r.out);
+      assert.ok(r.out.includes(reason!), r.out);
+    });
+  }
+
+  it("PR3-N7 INSERT still requires the current site owner after transfer", () => {
+    const r = psql(db, `BEGIN;
+UPDATE site SET partner_id='p2', owner_party_id='p2' WHERE id='site-one';
+SET LOCAL ROLE ag_platform;
+SET LOCAL app.scope='platform';
+${fixture("sup-a")}
+ROLLBACK;`);
+    assert.notEqual(r.status, 0, r.out);
+    assert.match(r.out, /AG_F4_BOOKING_SELLING_PARTY_MISMATCH/);
   });
 });
