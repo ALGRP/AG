@@ -269,3 +269,28 @@ describe("A10 QA-F11 idempotent retry after a lost response", () => {
   });
 });
 
+describe("A10 PR2-N4 idempotent replay must not bypass site and challenge checks", () => {
+  it("A10.19 [RULE] a replay without a challenge or without the site's Origin must not return the cached booking secret", { todo: "PR2-N4 · Codex Paket-02 (aba1027 sonrası)" }, async () => {
+    const h = harness();
+    await h.start();
+    try {
+      h.setNow("2026-11-04T08:00:00Z");
+      const key = "qa-replay-key-00000019";
+      const body = { siteId: "partner-site", product: "shuttle", routeCode: "AYT-ALN", pickup: "AYT", dropoff: "Alanya", pickupAt: "2026-12-22T10:00", passengers: 2, customer: { name: "Replay Guest", email: "replay19@example.com", phone: "+49 151 1919191", locale: "de" }, consent: true };
+      const first = await h.httpPost("/v1/public/bookings", { ...body, humanToken: localHumanToken("www.partner.example", "replayNonce19a") }, { origin: ORIGIN["partner-site"]!, "idempotency-key": key });
+      assert.equal(first.status, 201);
+      const noChallenge = await h.httpPost("/v1/public/bookings", body, { origin: ORIGIN["partner-site"]!, "idempotency-key": key });
+      const noOrigin = await h.httpPost("/v1/public/bookings", body, { "idempotency-key": key });
+      const rivalChallenge = await h.httpPost("/v1/public/bookings", { ...body, humanToken: localHumanToken("www.rival.example", "replayNonce19b") }, { origin: ORIGIN["partner-site"]!, "idempotency-key": key });
+      const leaked = (r: { body: any }) => typeof r.body?.lookupToken === "string";
+      assert.deepEqual(
+        { noChallenge: leaked(noChallenge), noOrigin: leaked(noOrigin), rivalChallenge: leaked(rivalChallenge) },
+        { noChallenge: false, noOrigin: false, rivalChallenge: false },
+        "the cached 201 (with lookupToken) is returned without a verified site challenge or without the site's Origin",
+      );
+    } finally {
+      await h.stop();
+    }
+  });
+});
+
