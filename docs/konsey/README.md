@@ -75,6 +75,7 @@
 | F, G | [Geliştirme sırası ve SEL-442 yol haritası](./F-G-gelistirme-sirasi-ve-yol-haritasi.md) | — |
 | H | [Açık Owner kararları ve önerilerim](./H-owner-kararlari.md) | — |
 | **Kanonik** | [Tek karar / skill / test eşlemesi](./TEK-KARAR-SKILL-ESLEMESI.md) | [`config/policy-decisions.json`](../../config/policy-decisions.json) (karar kaydı aynası) |
+| **Canlıya geçiş** | [5 adımlık kapılı yol haritası](./CANLIYA-GECIS-YOL-HARITASI.md) | — |
 | QA-F4 | [PostgreSQL defter kısıtları: uygulama planı](./QA-F4-DB-KISITLARI-PLANI.md) | `qa-independent/sql/qa_probes.sql` Q01–Q35 |
 | PKG-F04b | [Onaylı nakitsiz müşteri kredisi (H-25 açık)](./PKG-F04b-NAKITSIZ-KREDI.md) | `qa-independent/a14-credit-note.test.ts` (`todo`) |
 | QA-F11 | [Satış kaynağı doğrulaması](./QA-F11-SATIS-KAYNAGI.md) | `qa-independent/` A10.2 (`todo`), A10.8 (koruma) |
