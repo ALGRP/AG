@@ -15,6 +15,15 @@ const ROOT = resolve(import.meta.dirname, "../../..");
 const MIGRATION = resolve(ROOT, "packages/db/migrations/0001_network_core.sql");
 const RLS_MIGRATION = resolve(ROOT, "packages/db/migrations/0002_tenant_rls.sql");
 const WEEK_MIGRATION = resolve(ROOT, "packages/db/migrations/0003_week_integrity.sql");
+const ENTRY_MIGRATION = resolve(ROOT, "packages/db/migrations/0004_entry_integrity.sql");
+const ENTRY_PROBES: Readonly<Record<string, string>> = {
+  Q01: "AG_F4_ENTRY_BASE_MISMATCH",
+  Q02: "AG_F4_ENTRY_EXCEEDS_PRICE",
+  Q03: "AG_F4_ENTRY_SPLIT_MISMATCH",
+  Q04: "AG_F4_PRIVATE_AGOS_NONZERO",
+  Q10: "AG_F4_ENTRY_POLICY_INVALID",
+  Q11: "AG_F4_ENTRY_CURRENCY_MISMATCH",
+};
 const WEEK_PROBES: Readonly<Record<string, string>> = {
   Q05: "AG_F4_CLOSED_WEEK_ENTRY",
   Q06: "AG_F4_WEEK_NOT_FINISHED",
@@ -72,7 +81,9 @@ describe("DB şema adayı — negatif problar (PostgreSQL)", { skip: ENABLED ? f
   const dbA = `ag_probe_${process.pid}_a`;
   const dbB = `ag_probe_${process.pid}_b`;
   const dbW = `ag_probe_${process.pid}_w`;
+  const dbE = `ag_probe_${process.pid}_e`;
   const weekResults = new Map<string, { status: number | null; out: string }>();
+  const entryResults = new Map<string, { status: number | null; out: string }>();
   let p0001 = new Map<string, number>();
   let pQa = new Map<string, number>();
   let q21 = "";
@@ -80,7 +91,7 @@ describe("DB şema adayı — negatif problar (PostgreSQL)", { skip: ENABLED ? f
   let foreign = "";
 
   before(() => {
-    for (const db of [dbA, dbB, dbW]) {
+    for (const db of [dbA, dbB, dbW, dbE]) {
       const c = psql("postgres", ["-c", `DROP DATABASE IF EXISTS ${db}`, "-c", `CREATE DATABASE ${db}`]);
       assert.equal(c.status, 0, c.out);
       const m = psql(db, ["-v", "ON_ERROR_STOP=1", "-f", MIGRATION]);
@@ -108,6 +119,24 @@ describe("DB şema adayı — negatif problar (PostgreSQL)", { skip: ENABLED ? f
       weekResults.set(id, psql(dbW, ["-v", "ON_ERROR_STOP=1", "-f", "-"], statement));
     }
 
+    // QA-F4 E original SQL probes are run separately against the FULL 0001-0004
+    // candidate. Assert the exact entry-integrity error, never count an unrelated
+    // closed-week or RLS denial as success.
+    const eSeed = psql(dbE, ["-v", "ON_ERROR_STOP=1", "-f", "-"], seedSql);
+    assert.equal(eSeed.status, 0, "E-group seed failed: " + eSeed.out);
+    for (const path of [RLS_MIGRATION, WEEK_MIGRATION, ENTRY_MIGRATION]) {
+      const migrated = psql(dbE, ["-v", "ON_ERROR_STOP=1", "-f", path]);
+      assert.equal(migrated.status, 0, "E-group migration " + path + ": " + migrated.out);
+    }
+    for (const id of Object.keys(ENTRY_PROBES)) {
+      const start = sourceLines.findIndex((line) => line.startsWith("\\echo " + id + " "));
+      assert.ok(start > setupEnd, "missing original SQL probe " + id);
+      const stopIndex = sourceLines.findIndex((line, index) => index > start && line.startsWith("\\echo "));
+      const stop = stopIndex < 0 ? sourceLines.length : stopIndex;
+      const statement = "\\set VERBOSITY terse\n" + sourceLines.slice(start, stop).join("\n") + "\n";
+      entryResults.set(id, psql(dbE, ["-v", "ON_ERROR_STOP=1", "-f", "-"], statement));
+    }
+
     p0001 = errorsByMarker(PROBES, psql(dbA, ["-f", PROBES]).out, /^-- (P\d+|OK\d*)\b/);
     pQa = errorsByMarker(QA_PROBES, psql(dbB, ["-f", QA_PROBES]).out, /^\\echo (SETUP_DONE|SETUP|RLS_SETUP|END|Q\d+|C\d+|R\d+)\b/);
     q21 = psql(dbB, ["-At", "-c", "SELECT count(*) FROM information_schema.columns WHERE table_name = 'settlement_adjustment' AND column_name ~ '(mfa|actor|approved_by|decided_by|role)'"]).out.trim();
@@ -124,7 +153,7 @@ describe("DB şema adayı — negatif problar (PostgreSQL)", { skip: ENABLED ? f
   });
 
   after(() => {
-    for (const db of [dbA, dbB, dbW]) psql("postgres", ["-c", `DROP DATABASE IF EXISTS ${db}`]);
+    for (const db of [dbA, dbB, dbW, dbE]) psql("postgres", ["-c", `DROP DATABASE IF EXISTS ${db}`]);
   });
 
   it("0001 problar: P1–P16 reddedilir, OK blokları kabul edilir", () => {
@@ -146,6 +175,13 @@ describe("DB şema adayı — negatif problar (PostgreSQL)", { skip: ENABLED ? f
         assert.ok(result, `W-group ${id} was not run`);
         assert.notEqual(result.status, 0, `${id} unexpectedly accepted`);
         assert.ok(result.out.includes(WEEK_PROBES[id]!), `${id} rejected for WRONG reason: ${result.out}`);
+      });
+    } else if (Object.hasOwn(ENTRY_PROBES, id)) {
+      it(`QA-F4 E ${id}: original entry violation rejected for exact financial invariant`, () => {
+        const result = entryResults.get(id);
+        assert.ok(result, `E-group ${id} not executed`);
+        assert.notEqual(result.status, 0, `${id} unexpectedly accepted`);
+        assert.ok(result.out.includes(ENTRY_PROBES[id]!), `${id} WRONG rejection cause: ${result.out}`);
       });
     } else {
       it(`QA-F4 ${id}: ihlal reddedilmeli`, { todo: "QA-F4 · Paket-03 (DB defter kısıtları)" }, () => {

@@ -37,3 +37,21 @@ Kural: `todo` kaldırılır, assertion değişmeden geçer. W probları, RLS tes
 ## Kapsam dışı
 
 H-23 kararı; canlı veya staging göçü; CRS adaptörü; PR3-N2 (SAVEPOINT; isteğe bağlı).
+
+## 04.11.2026 Codex yerel uygulama kanıtı — 0004 aday
+
+**Durum:** LOCAL_ONLY / CODE_TEST_PASS / CLAUDE_PEER_REVIEW_PENDING / HUMAN_INDEPENDENT_ACCEPTED=NO / LIVE_HOLD. H-23 (küsurat) **karara bağlanmadı**.
+
+Geliştirilen packages/db/migrations/0004_entry_integrity.sql yalnız mevcut E kurallarını uygular. 0001/0002/0003 değiştirilmedi. ag_f4_split_on_collected mevcut uygulamadaki splitOnCollected için tam eşit taban/politika hesabıdır. Shuttle: tedarikçi/site payı aşağı yuvarlanır, kalan AGOS'a; kendi araçlı shuttle: site sıfır, taşıyıcı kendi payına site payını da ekler; private: site payı = floor(tahsilat × site_commission / toplam fiyat), AGOS sıfır. SQL fonksiyonunda private türü için verilen shuttle politika parametresi uygulamada olduğu gibi göz ardı edilir; kaydın izinli özel politika adı tetikleyicide ayrıca doğrulanır.
+
+Yeni kayıt kısıtları: base_before önceki collected_delta toplamıyla eşleşmeli, base_after satış fiyatını aşmamalı, booking para birimi/politika eşleşmeli, private AGOS farkı sıfır, tahsilat farkının üç taraf payı uygulama formülüne uymalı. **D-F05 / PKG-F05b:** önceki gerçek kayıttaki farklı pay, yeni tahsilat farkını reddettirmez; yeni fark, beklenen eski/son taban üzerinden hesaplanır. **D-F06:** iptal, daha önce kaydedilmiş payların *gerçek toplamını* ters çevirir. settlement_entry ekleme-yalnız ve 0003 kapanmış hafta sınırı korunur.
+
+**Gerçekten koşulanlar — atılabilir PostgreSQL 16, network none:**
+- SQL-uygulama pay eşitliği: 4/4 PASS; dört fiyat/kapsam senaryosunda her kuruş (0–10.000).
+- Orijinal SQL Q01/Q02/Q03/Q04/Q10/Q11: 6/6 PASS, her biri beklenen AG_F4_* finans hata nedeni ile. Düz olmayan W kapısı hatası başarı sayılmadı.
+- Olumlu finans döngüsü: 3/3 PASS. Geçmişte bitmiş iki ardışık haftada 30 €→6/3/21 ve 20 €→4/2/14; eski farklı paylı kayıttan sonra tahsilat ve iptal ters hareketi; 1 kuruş sonraki tahsilatta AGOS −1 kuruş farkı.
+- Teklik, kapanış sırası ve kiracı RLS: mevcut W pozitif yaşam döngüsü ve diğer veritabanı testlerinde PASS. Toplam PG16: **53 test, 31 PASS, 22 TODO, 0 FAIL**. Bu 22'nin 21'i eski QA-F4, 1'i isteğe bağlı PR3-N2 SAVEPOINT testidir.
+
+**Kalan blokajlar:** gerçek CRS şeması/rol/transaction adapter ve eşzamanlılık kabulü (SEL-331/332), PR3-N2 alt işlem XID false reject, ileride H-23 kararının politika değişikliği gerektirmesi, eski pay kayıtları için gerçek veri geçişi, bağımsız insan QA. 0004 canlı/staging CRS'ye uygulanmadı, gerçek ödeme/rezervasyon yapılmadı.
+
+**Sonraki iş:** Claude exact-HEAD akran incelemesinde E eşitliği/pozitif/negatif davranışları ve RLS/rol/PR3-N2 ayrımını doğrular. Daha sonraki QA-F4/M para hareketleri göçü ayrı commit ve ayrı kabul kapısıdır.

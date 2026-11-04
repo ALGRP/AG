@@ -51,7 +51,7 @@ describe("QA-F4 E — SQL share function equals the application algorithm (dispo
   });
 
   for (const c of CASES) {
-    it(`E-PARITY [RULE] ${c.name}: every collected amount 0..price gives identical site/AGOS/supplier`, { todo: "QA-F4/E · Codex Paket-03 (0004; H-23 açık — bugünkü algoritma kopyalanır)" }, () => {
+    it(`E-PARITY [RULE] ${c.name}: every collected amount 0..price gives identical site/AGOS/supplier`, () => {
       assert.ok(ready, "0004_entry_integrity.sql missing or failed to apply");
       const sql = `SELECT g || ':' || s.site || ':' || s.agos || ':' || s.supplier
         FROM generate_series(0, ${c.final}) g,

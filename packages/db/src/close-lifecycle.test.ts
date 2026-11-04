@@ -15,6 +15,7 @@ const ROOT = resolve(import.meta.dirname, "../../..");
 const M0001 = readFileSync(resolve(ROOT, "packages/db/migrations/0001_network_core.sql"), "utf8");
 const M0002 = readFileSync(resolve(ROOT, "packages/db/migrations/0002_tenant_rls.sql"), "utf8");
 const M0003 = readFileSync(resolve(ROOT, "packages/db/migrations/0003_week_integrity.sql"), "utf8");
+const M0004 = readFileSync(resolve(ROOT, "packages/db/migrations/0004_entry_integrity.sql"), "utf8");
 
 function psql(db: string, sql: string): { status: number | null; out: string } {
   const args = CONTAINER
@@ -55,7 +56,7 @@ describe("QA-F4 W — legitimate close lifecycle (disposable PG16 only)", {
     // arbitrary writes under FORCE RLS and the normal platform closer is separate.
     const seed = psql(db, BOOKING);
     assert.equal(seed.status, 0, seed.out);
-    for (const [name, sql] of [["0002", M0002], ["0003", M0003]] as const) {
+    for (const [name, sql] of [["0002", M0002], ["0003", M0003], ["0004", M0004]] as const) {
       const migration = psql(db, sql);
       assert.equal(migration.status, 0, name + ": " + migration.out);
     }
@@ -113,7 +114,7 @@ describe("QA-F4 W — close inside a savepoint (disposable PG16 only)", {
     assert.equal(psql("postgres", `CREATE DATABASE ${db};`).status, 0);
     assert.equal(psql(db, M0001).status, 0, "0001");
     assert.equal(psql(db, BOOKING).status, 0, "seed");
-    for (const sql of [M0002, M0003]) assert.equal(psql(db, sql).status, 0);
+    for (const sql of [M0002, M0003, M0004]) assert.equal(psql(db, sql).status, 0);
   });
   after(() => {
     if (RUN) psql("postgres", `DROP DATABASE IF EXISTS ${db};`);
