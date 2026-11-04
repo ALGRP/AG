@@ -21,6 +21,7 @@ const AUDIT_MIGRATION = resolve(ROOT, "packages/db/migrations/0006_adjustments_a
 const HARDEN_MIGRATION = resolve(ROOT, "packages/db/migrations/0007_adjustment_hardening.sql");
 const ATTRIBUTION_MIGRATION = resolve(ROOT, "packages/db/migrations/0008_attribution_integrity.sql");
 const ATTRIBUTION_FREEZE_MIGRATION = resolve(ROOT, "packages/db/migrations/0009_attribution_freeze.sql");
+const SUPPLIER_ID_MIGRATION = resolve(ROOT, "packages/db/migrations/0010_supplier_id_format.sql");
 const ATTRIBUTION_PROBES: Readonly<Record<string, string>> = {
   Q33: "AG_F4_BOOKING_SELLING_PARTY_MISMATCH",
   Q34: "AG_F4_BOOKING_SUPPLIER_ID_NOT_CANONICAL",
@@ -205,7 +206,7 @@ describe("DB şema adayı — negatif problar (PostgreSQL)", { skip: ENABLED ? f
     const tSeed = psql(dbT, ["-v", "ON_ERROR_STOP=1", "-f", "-"], seedSql);
     assert.equal(tSeed.status, 0, "T-group seed failed: " + tSeed.out);
     for (const path of [RLS_MIGRATION, WEEK_MIGRATION, ENTRY_MIGRATION, MONEY_MIGRATION,
-      AUDIT_MIGRATION, HARDEN_MIGRATION, ATTRIBUTION_MIGRATION, ATTRIBUTION_FREEZE_MIGRATION]) {
+      AUDIT_MIGRATION, HARDEN_MIGRATION, ATTRIBUTION_MIGRATION, ATTRIBUTION_FREEZE_MIGRATION, SUPPLIER_ID_MIGRATION]) {
       const migrated = psql(dbT, ["-v", "ON_ERROR_STOP=1", "-f", path]);
       assert.equal(migrated.status, 0, "T-group migration " + path + ": " + migrated.out);
     }

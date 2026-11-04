@@ -43,7 +43,8 @@ VALUES ('site-one','partner','p1','o@x.test','+905550000001','p1',NULL);
 ${booking("a701", "AG-QQNN22", "p1", "sup-a")}`);
     assert.equal(seed.status, 0, seed.out);
     for (const n of ["0002_tenant_rls", "0003_week_integrity", "0004_entry_integrity", "0005_money_events",
-      "0006_adjustments_audit", "0007_adjustment_hardening", "0008_attribution_integrity", "0009_attribution_freeze"]) {
+      "0006_adjustments_audit", "0007_adjustment_hardening", "0008_attribution_integrity", "0009_attribution_freeze",
+      "0010_supplier_id_format"]) {
       const m = psql(db, MIG(n));
       assert.equal(m.status, 0, `${n}: ${m.out}`);
     }
@@ -65,7 +66,7 @@ ${booking("a701", "AG-QQNN22", "p1", "sup-a")}`);
     assert.notEqual(r.status, 0, "attribution of an existing booking was rewritten");
   });
 
-  it("PR3-N8 [RULE] a supplier id valid for the application (lower case with underscore) is accepted", { todo: "PR3-N8 · Codex Paket-03 (DB ve uygulama ID biçimi hizalanmalı)" }, () => {
+  it("PR3-N8 [RULE] a supplier id valid for the application (lower case with underscore) is accepted", () => {
     const r = psql(db, booking("a702", "AG-QQNN23", "p9", "sup_a"));
     assert.equal(r.status, 0, `app-valid supplier id rejected: ${r.out.trim()}`);
   });

@@ -6,6 +6,7 @@ import {
   checkManualPrice,
   collectionSummary,
   duplicateFingerprintInput,
+  isPartyId,
   money,
   nextWeekId,
   placeInPool,
@@ -82,8 +83,6 @@ export interface ApiError {
 }
 
 const sha256 = (s: string) => createHash("sha256").update(s).digest("hex");
-/** Taraf kimlikleri küçük harf (büyük/küçük harf farkıyla kural atlatılamaz). */
-const ID = /^[a-z0-9_-]{1,64}$/;
 
 /** İtiraz notunda e-posta ve telefon numarası saklanmaz (kişisel veri). */
 function redactPii(text: string): string {
@@ -501,13 +500,13 @@ export class BookingService {
   }
 
   #checkSupplier(site: SiteRecord | undefined, supplierId: unknown): ServiceResult<never> | null {
-    if (typeof supplierId !== "string" || !ID.test(supplierId)) return fail(422, "supplierId_invalid");
+    if (typeof supplierId !== "string" || !isPartyId(supplierId)) return fail(422, "supplierId_invalid");
     if (site && supplierId === site.ownerPartyId && !site.selfOperationVerifiedAt) return fail(409, "self_operation_not_verified");
     return null;
   }
 
   async assignRun(runId: string, supplierId: unknown): Promise<ServiceResult<unknown>> {
-    if (typeof supplierId !== "string" || !ID.test(supplierId)) return fail(422, "supplierId_invalid");
+    if (typeof supplierId !== "string" || !isPartyId(supplierId)) return fail(422, "supplierId_invalid");
     return this.#d.store.transaction(async (tx) => {
       const run = await tx.getRun(runId);
       if (!run) return fail(404, "not_found");
@@ -793,7 +792,7 @@ export class BookingService {
     } catch {
       return fail(422, "weekId_invalid");
     }
-    if (typeof payerId !== "string" || !ID.test(payerId) || typeof payeeId !== "string" || !ID.test(payeeId)) return fail(422, "party_invalid");
+    if (typeof payerId !== "string" || !isPartyId(payerId) || typeof payeeId !== "string" || !isPartyId(payeeId)) return fail(422, "party_invalid");
     if (!Number.isSafeInteger(amountMinor) || (amountMinor as number) <= 0) return fail(422, "amountMinor_invalid");
     if (currency !== this.#d.shuttleTariff.currency) return fail(422, "currency_invalid");
     if (typeof bankReference !== "string" || !/^[A-Za-z0-9./_ -]{3,96}$/.test(bankReference) || !/^[A-Z0-9./_-]{3,64}$/.test(normalizeBankReference(bankReference))) return fail(422, "bankReference_invalid");
@@ -845,7 +844,7 @@ export class BookingService {
   /** Ekstrenin tarafa iletildiği an (itiraz süresi buradan başlar; ilk kayıt geçerlidir). */
   async recordStatementSent(weekId: string, input: Record<string, unknown>): Promise<ServiceResult<unknown>> {
     const { partyId } = input;
-    if (typeof partyId !== "string" || !ID.test(partyId)) return fail(422, "party_invalid");
+    if (typeof partyId !== "string" || !isPartyId(partyId)) return fail(422, "party_invalid");
     if (!(await this.#d.store.getClosedWeek(weekId))) return fail(409, "week_not_closed");
     const at = await this.#d.store.recordStatementSent(weekId, partyId, this.#now());
     return ok({ weekId, partyId, sentAt: at }, 201);
@@ -854,7 +853,7 @@ export class BookingService {
   /** T3: kapanmış haftaya itiraz kaydı (kayıt numarası, taraf, gerekçe). Süre dışı itiraz otomatik reddedilmez. */
   async raiseStatementDispute(weekId: string, input: Record<string, unknown>): Promise<ServiceResult<unknown>> {
     const { raisedBy, reason, category } = input;
-    if (typeof raisedBy !== "string" || !ID.test(raisedBy)) return fail(422, "raisedBy_invalid");
+    if (typeof raisedBy !== "string" || !isPartyId(raisedBy)) return fail(422, "raisedBy_invalid");
     if (typeof reason !== "string" || reason.trim().length < 5) return fail(422, "reason_required");
     if (category !== "calculation_error" && category !== "legal_right" && category !== "fraud_suspicion" && category !== "other") return fail(422, "category_invalid");
     return this.#d.store.transaction(async (tx) => {
@@ -897,7 +896,7 @@ export class BookingService {
       const adjIds: string[] = [];
       if (decision === "accepted" && adjustment !== undefined) {
         const a = adjustment as Record<string, unknown>;
-        if (typeof a.debtorId !== "string" || !ID.test(a.debtorId) || typeof a.creditorId !== "string" || !ID.test(a.creditorId) || !Number.isSafeInteger(a.amountMinor) || a.amountMinor === 0) {
+        if (typeof a.debtorId !== "string" || !isPartyId(a.debtorId) || typeof a.creditorId !== "string" || !isPartyId(a.creditorId) || !Number.isSafeInteger(a.amountMinor) || a.amountMinor === 0) {
           return fail(422, "adjustment_invalid");
         }
         const adj: Adjustment = {
@@ -941,7 +940,7 @@ export class BookingService {
     if (denied) return denied;
     const { fromWeekId, debtorId, creditorId, amountMinor, writtenApprovalReference, reason } = input;
     if (typeof writtenApprovalReference !== "string" || !/^[A-Za-z0-9./_-]{3,64}$/.test(writtenApprovalReference)) return fail(422, "written_approval_required");
-    if (typeof fromWeekId !== "string" || typeof debtorId !== "string" || !ID.test(debtorId) || typeof creditorId !== "string" || !ID.test(creditorId)) return fail(422, "party_invalid");
+    if (typeof fromWeekId !== "string" || typeof debtorId !== "string" || !isPartyId(debtorId) || typeof creditorId !== "string" || !isPartyId(creditorId)) return fail(422, "party_invalid");
     if (!Number.isSafeInteger(amountMinor) || amountMinor === 0) return fail(422, "amountMinor_invalid");
     if (typeof reason !== "string" || reason.trim().length < 5) return fail(422, "reason_required");
     // Bind the financial operation to one case-insensitive canonical approval reference.

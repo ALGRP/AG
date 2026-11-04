@@ -4,6 +4,7 @@ import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { after, before, describe, it } from "node:test";
+import { isPartyId } from "../../core/src/party-id.ts";
 
 const RUN = process.env.AG_TEST_PG === "1" && process.env.AG_TEST_PG_ISOLATED === "YES";
 const CONTAINER = process.env.AG_TEST_PG_CONTAINER;
@@ -48,7 +49,7 @@ describe("QA-F4 T valid ownership, self-supply and private economics — disposa
     assert.equal(seeded.status, 0, seeded.out);
     for (const name of ["0002_tenant_rls.sql", "0003_week_integrity.sql", "0004_entry_integrity.sql",
       "0005_money_events.sql", "0006_adjustments_audit.sql", "0007_adjustment_hardening.sql", "0008_attribution_integrity.sql",
-      "0009_attribution_freeze.sql"]) {
+      "0009_attribution_freeze.sql", "0010_supplier_id_format.sql"]) {
       const m = psql(db, readMigration(name));
       assert.equal(m.status, 0, name + " => " + m.out);
     }
@@ -142,4 +143,28 @@ ROLLBACK;`);
     assert.notEqual(r.status, 0, r.out);
     assert.match(r.out, /AG_F4_BOOKING_SELLING_PARTY_MISMATCH/);
   });
+
+  it("PR3-N8 application and PostgreSQL agree on ID boundaries and forbidden characters", () => {
+    const cases: readonly (readonly [string, boolean])[] = [
+      ["a", true], ["9", true], ["_", true], ["-", true], ["sup_a", true], ["sup-a_9", true],
+      ["a".repeat(64), true], ["", false], ["a".repeat(65), false], ["Sup-a", false],
+      ["P1", false], ["sup a", false], ["sup.a", false], ["é", false], ["a\n", false],
+      ["a\r\n", false], ["a\tb", false], ["a'b", false],
+    ];
+    const sql = cases.map(([id]) =>
+      `SELECT ag_f4_supplier_id_is_canonical('${id.replaceAll("'", "''")}');`).join("\n");
+    const r = psql(db, rollback(sql));
+    assert.equal(r.status, 0, r.out);
+    assert.deepEqual(cases.map(([id]) => isPartyId(id)), cases.map(([, valid]) => valid));
+    assert.deepEqual(r.out.trim().split("\n"), cases.map(([, valid]) => valid ? "t" : "f"));
+  });
+
+  for (const supplier of ["a", "_", "-", "sup_a", "a".repeat(64)]) {
+    it(`PR3-N8 accepts app-valid supplier ${supplier} on INSERT and first assignment`, () => {
+      const inserted = psql(db, rollback(fixture(supplier)));
+      assert.equal(inserted.status, 0, inserted.out);
+      const assigned = psql(db, rollback(fixture(null) + `UPDATE booking SET supplier_id='${supplier}' WHERE id='${fixtureId}';`));
+      assert.equal(assigned.status, 0, assigned.out);
+    });
+  }
 });

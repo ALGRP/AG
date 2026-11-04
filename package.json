@@ -12,8 +12,9 @@
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json && tsc -p qa-independent/tsconfig.json",
-    "test": "node --test \"packages/*/src/**/*.test.ts\" \"apps/*/src/**/*.test.ts\" \"qa-independent/**/*.test.ts\"",
+    "test": "node --test --test-concurrency=1 \"packages/*/src/**/*.test.ts\" \"apps/*/src/**/*.test.ts\" \"qa-independent/**/*.test.ts\"",
     "check": "npm run typecheck && npm test",
+    "db:generate-id-format": "node packages/db/src/generate-id-format.ts",
     "build:sites": "node packages/ssg/src/cli.ts",
     "dev:api": "NODE_ENV=development node --watch apps/api/src/main.ts",
     "report:sample": "node apps/api/src/sample-week.ts"
