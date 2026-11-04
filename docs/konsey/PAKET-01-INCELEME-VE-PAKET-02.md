@@ -631,3 +631,14 @@ Not: süper kullanıcı oturumunda `SET ROLE ag_app` sonrası `SET ROLE ag_platf
 **Sıradaki iş:**
 - PR3-N2 küçük ve isteğe bağlı; CRS adaptörü tasarımıyla birlikte de ele alınabilir.
 - QA-F4'ün E grubu (pay kaydı bütünlüğü) H-23 sınırıyla başlayabilir. Kural: SQL pay fonksiyonu bugünkü `splitOnCollected` algoritmasını birebir kopyalar ve karşılaştırma testiyle 0–10.000 kuruşta eşitlik gösterir. Küsurat politikası değiştirilmez.
+
+### 18.1 Ek kontrol: geri alma ve eşzamanlı kapanış (aynı sürüm; karar değişmedi, PASS aday)
+
+Atılabilir PG16, 0001 → sentetik tohum → 0002 → 0003:
+- **Geri alma:** platform kapanış işlemi `ROLLBACK` ile bitince hafta satırı 0, pay satırı 0 kalıyor.
+- **Eşzamanlı kapanış:** A oturumu W44'ü yazıp 3 saniye bekliyor; B oturumu aynı anda W44'ü kapatmaya çalışıyor. B, A'nın işlemini bekliyor; A commit edince B `settlement_week_pkey` ihlaliyle reddediliyor. Sonuç: 1 hafta, 1 pay satırı (A'nınki).
+- Aynı haftanın iki kez kapanmasını birincil anahtar engelliyor. Rapor hesaplaması ile kapanış arasındaki yarış ise uygulama ve adaptör tarafında ele alınmalı (`pg_advisory_xact_lock`, QA-F4 planı §6).
+
+**Aday göç gerçek CRS şemasına uygun varsayılmadı;** SEL-331 eşlemesi yapılmadı.
+
+**Sıradaki iş:** QA-F4 / E: [`QA-F4-E-PAY-KAYDI-GOREVLERI.md`](./QA-F4-E-PAY-KAYDI-GOREVLERI.md). H-23 açık.
