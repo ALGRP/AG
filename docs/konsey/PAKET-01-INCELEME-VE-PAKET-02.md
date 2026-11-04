@@ -830,3 +830,23 @@ Sabitlenen sürüm `ff9899a54ca186229dca9efb97ef267708a3a70e` (tek commit). `npm
 - PR3-N2 (SAVEPOINT).
 
 H-22, H-23, H-25, H-26, K8 ve K17 açık. 0003–0011 staging veya canlıya uygulanmaz.
+
+## 25. QA-F4/L (Q30) akran incelemesi (`34b8ed1` → `6b15f09`)
+
+Sabitlenen sürüm `6b15f0946237cb4ed0ccd5e6f0cecbcebae2923a` (tek commit). `npm run check`: **222 test: 212 geçti, 0 kaldı, 9 todo, 1 skip**. Atılabilir PostgreSQL 16.15, tüm DB testleri: **98 test: 87 geçti, 0 kaldı, 11 todo** (Codex ile aynı).
+
+**Karar: `6b15f09` PASS (aday).**
+- `0012` durum geçişlerini uygulamadaki `TRANSITIONS` tablosuyla birebir uyguluyor:
+  - request → quoted / confirmed / cancelled
+  - quoted → confirmed / cancelled
+  - confirmed → delivered / cancelled
+  - delivered ve cancelled son durum
+- DB `booking_status` enum'u aynı beş değer.
+- Özgün Q30 → `AG_F4_BOOKING_STATUS_TRANSITION_INVALID` (tam neden).
+- Aynı durumun yeniden yazılması geçiş sayılmıyor; uzlaşmış rezervasyona not eklenebiliyor.
+- Tetikleyici `BEFORE UPDATE OF status`. `status` değişmeyen güncellemeleri etkilemez; değiştiren her güncellemede çalışır.
+- Testlerde gevşetme yok; 0001–0011 değişmedi.
+
+**Not (P3, karar gerektirmez):** kural yalnız UPDATE'te. Bir rezervasyon doğrudan `delivered` veya `cancelled` durumuyla INSERT edilebilir. Uygulama her zaman `request` ile açıyor; risk yalnız geri doldurma ve içe aktarmada. CRS eşlemesinde (SEL-331) içe aktarma kuralı olarak ele alınmalı.
+
+**Kalan DB todo'ları:** P (Q23–Q26, Q29, Q31), P (Q22, Q32; H-22), R (Q27–Q28; K8), PR3-N2. Adım 2 için gerçek CRS şeması bekleniyor.
