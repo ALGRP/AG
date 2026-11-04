@@ -216,6 +216,8 @@ export function createApiServer(opts: HttpOptions): Server {
               return reply(res, await opts.service.resolveDispute(actor, ref, v));
             case "clear-duplicate":
               return reply(res, await opts.service.clearDuplicate(actor, ref, v));
+            case "credit-note":
+              return reply(res, await opts.service.approveCustomerCredit(actor, ref, v));
             case "cancel":
               return reply(res, await opts.service.cancel(ref));
             case "invoice":

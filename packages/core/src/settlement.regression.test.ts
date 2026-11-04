@@ -139,7 +139,7 @@ describe("D-F04 — müşteriye iade ve onaylı hizmet kredisi yeniden müşteri
 
   it(
     "paket F04: 30 € tahsil + onaylı 20 € nakitsiz hizmet kredisi → müşteri borcu 0",
-    { todo: "PKG-F04b · Paket-02: onaylı kredi notu kaydı (2FA, gerekçe, referans) henüz yok" },
+
     () => {
       const withCredit = { ...line({ booking_id: "f4d", money_events: [ev(3000)] }), approved_credit_minor: 2000 } as SettlementLine & { approved_credit_minor: number };
       const w45 = run(W45, [withCredit]);

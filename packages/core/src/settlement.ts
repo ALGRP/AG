@@ -87,6 +87,10 @@ export interface SettlementLine {
   readonly invoice_reference: string | null;
   readonly adjustment_reference: string | null;
   readonly money_events: readonly MoneyEvent[];
+  /** H-25 open: approved non-cash service credits reduce only customer debt, not commission base. */
+  readonly approved_credit_minor?: number;
+  /** Time-bound credit history avoids retroactively changing the view of prior open weeks. */
+  readonly approved_credit_events?: readonly { readonly at: string; readonly amountMinor: number }[];
 }
 
 export interface SplitAmounts {
@@ -604,14 +608,22 @@ export function weeklyReport(input: {
       const base = Math.max(0, Math.min(sum.net, l.final_booking_price));
       // D-F04: müşteri borcu brüt tahsilata göre; müşteriye yapılan iade (onaylı iyi niyet iadesi dahil) borcu yeniden yaratmaz.
       const paidByCustomer = Math.min(sum.collected, l.final_booking_price);
-      if (paidByCustomer < l.final_booking_price) {
+      const creditMinor = l.approved_credit_events
+        ? l.approved_credit_events
+          .filter((c) => ts(c.at) < ts(week.end_utc))
+          .reduce((amount, c) => amount + c.amountMinor, 0)
+        : (l.approved_credit_minor ?? 0);
+      // Credit only closes customer's outstanding balance. It creates no cash, entitlement,
+      // adjustment, obligation or automatic settlement between supplier, site and AGOS.
+      const customerRemaining = Math.max(0, l.final_booking_price - paidByCustomer - creditMinor);
+      if (customerRemaining > 0) {
         balances.push({
           booking_id: l.booking_id,
           booking_ref: l.booking_ref,
           supplier_id: l.supplier_id,
           final_booking_price: l.final_booking_price,
           collected_amount: paidByCustomer,
-          remaining: l.final_booking_price - paidByCustomer,
+          remaining: customerRemaining,
           currency: l.currency,
         });
       }

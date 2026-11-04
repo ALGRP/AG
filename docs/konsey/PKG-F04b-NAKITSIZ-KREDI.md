@@ -45,3 +45,14 @@ Sözleşme: `BookingService.approveCustomerCredit(actor, ref, { amountMinor, rea
 ## 5. Kapsam dışı
 
 Krediyi taşıyan tarafın belirlenmesi (H-25), gerçek iade ödemesi, fatura veya muhasebe kaydı, mali müşavir onayı. Hepsi HOLD.
+
+
+## 6. Codex yerel uygulama kanıtı (04.11.2026)
+
+Kod geçici kuralı uygular; H-25 kararı **alınmış değildir**. StoredBooking.creditNotes ekleme-yalnız kayıt olarak para hareketlerinden ayrıdır. approveCustomerCredit gerçek servis yolunda MFA, yetkili rol, gerekçe, benzersiz referans ve tahsilat+önceki krediler sonrasındaki kalan borç sınırını kontrol eder. Sentetik yerel yönetici aktöründe MFA doğrulandı varsayılır; **gerçek kimlik sağlayıcı SEL-332 yoktur** ve HTTP üzerindeki statik yönetici anahtarı kredi onaylayamaz.
+
+SettlementLine.approved_credit_minor ve zaman damgalı kredi olayları **yalnız müşteri bakiyesine** uygulanır. Tahsilat/pay, obligations, adjustments ve banka dekontları krediden etkilenmez. Geç verilen kredi kapanmış haftaları değiştirmez; henüz kapanmamış önceki haftada da geçmişe uygulanmaz.
+
+Kabul kanıtı: A14.1–A14.4 ve paket F04 artık todo değil; ek A14.5 kontrolleri (başka rezervasyonda kredi referansı, 2FA'lı fakat site kapsamlı aktör, gerekçe PII maskesi, kayıt ve outbox denetimi, önceki hafta, nakit/mahsup yok) yerel çalışır. Tam test sonucu ve commit SHA PR #9 yorumundadır.
+
+Açık sınırlar: gerçek kredi tahakkuku/finansman tarafı H-25, vergi-fatura etkisi, kredi sonrasında yapılan gerçek ek tahsilatların iade hesabı, kalıcı CRS şeması, bağımsız insan kabulü ve G0. Üretim, ödeme ve PR birleştirme HOLD.

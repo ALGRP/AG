@@ -41,6 +41,18 @@ export interface SensitiveDecisionAudit {
   readonly reason: string;
 }
 
+/** QA-F04b local append-only credit-note record; no cash movement. */
+export interface ApprovedCustomerCredit {
+  readonly id: string;
+  readonly amountMinor: number;
+  readonly reference: string;
+  readonly reason: string;
+  readonly actorId: string;
+  readonly actorRole: "admin" | "finance_manager";
+  readonly mfaVerified: true;
+  readonly at: string;
+}
+
 export interface StoredBooking {
   readonly id: string;
   readonly ref: string;
@@ -65,6 +77,8 @@ export interface StoredBooking {
   readonly supplierEntitlementMinor?: number;
   /** Tahsilat ve müşteriye iade hareketleri; referans rezervasyon başına tekil (aynı kayıt iki kez yazılmaz). */
   readonly moneyEvents: readonly MoneyEvent[];
+  /** Non-cash service credits are separate from money events and obligations. */
+  readonly creditNotes?: readonly ApprovedCustomerCredit[];
   readonly priceApproval?: PriceApprovalRecord;
   readonly completedAt?: string;
   readonly cancelledAt?: string;

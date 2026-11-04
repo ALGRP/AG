@@ -34,7 +34,7 @@ import {
 } from "@ag/core";
 import { normalizeAdjustmentReference, normalizeBankReference } from "./store.ts";
 import type { HumanVerification } from "./human.ts";
-import type { OutboxEvent, SensitiveDecisionAudit, Store, StoredBooking } from "./store.ts";
+import type { ApprovedCustomerCredit, OutboxEvent, SensitiveDecisionAudit, Store, StoredBooking } from "./store.ts";
 
 export interface ServiceDeps {
   readonly store: Store;
@@ -372,6 +372,8 @@ export class BookingService {
       payment_reference: null,
       invoice_reference: b.invoiceReference ?? null,
       adjustment_reference: b.adjustmentReference ?? null,
+      approved_credit_minor: (b.creditNotes ?? []).reduce((total, item) => total + item.amountMinor, 0),
+      approved_credit_events: (b.creditNotes ?? []).map((item) => ({ at: item.at, amountMinor: item.amountMinor })),
       money_events: b.moneyEvents,
     };
   }
@@ -396,6 +398,7 @@ export class BookingService {
       disputeResolutionHistory: b.disputeResolutionHistory ?? (b.disputeResolutionAudit ? [b.disputeResolutionAudit] : []),
       isTest: b.isTest,
       moneyEvents: b.moneyEvents,
+      creditNotes: b.creditNotes ?? [],
       settlement: line ? settlement : null,
     };
   }
@@ -637,6 +640,52 @@ export class BookingService {
       if (b.settlementWeekId) await tx.appendOutbox([this.#event(b, "finance.refund_after_settlement", { reference: refundReference })]);
       return { ...b, moneyEvents: [...b.moneyEvents, ev], ...(b.settlementWeekId ? { settlementStatus: "adjusted" as const } : {}) };
     });
+  }
+
+  /**
+   * PKG-F04b: a non-cash customer credit needs verified manager MFA and a unique, auditable
+   * reference. H-25 remains OPEN; this NEVER generates a remittance or changes commission base.
+   */
+  async approveCustomerCredit(actor: Actor, ref: string, input: Record<string, unknown>): Promise<ServiceResult<unknown>> {
+    if (actor.scope && actor.scope.kind !== "platform") return fail(403, "scope_forbidden");
+    const denied = this.#requireMfa(actor, ["admin", "finance_manager"]);
+    if (denied) return denied;
+    const { amountMinor, reason, creditReference } = input;
+    if (!Number.isSafeInteger(amountMinor) || (amountMinor as number) <= 0) return fail(422, "invalid_amount");
+    if (typeof reason !== "string" || reason.trim().length < 5) return fail(422, "reason_required");
+    if (typeof creditReference !== "string" ||
+        !/^[A-Za-z0-9./_ -]{3,96}$/.test(creditReference) ||
+        !/^[A-Z0-9./_-]{3,64}$/.test(normalizeBankReference(creditReference))) {
+      return fail(422, "creditReference_invalid");
+    }
+    const normalized = normalizeBankReference(creditReference);
+    return this.#mutate(ref, async (b, tx) => {
+      if (b.status === "cancelled") return fail(409, "booking_cancelled");
+      if (!b.price) return fail(409, "price_not_set");
+      // Append-only credit references are globally unique, including previously approved credits.
+      const reused = (await tx.listBookings()).some((other) =>
+        (other.creditNotes ?? []).some((note) => normalizeBankReference(note.reference) === normalized));
+      if (reused) return fail(409, "duplicate_credit_reference");
+      const cash = collectionSummary(b.moneyEvents, b.price.total.amountMinor);
+      const previouslyApproved = (b.creditNotes ?? []).reduce((total, c) => total + c.amountMinor, 0);
+      const remaining = Math.max(0, b.price.total.amountMinor -
+        Math.min(cash.collected, b.price.total.amountMinor) - previouslyApproved);
+      if ((amountMinor as number) > remaining) return fail(422, "credit_exceeds_remaining");
+      const credit: ApprovedCustomerCredit = {
+        id: this.#d.random.id(),
+        amountMinor: amountMinor as number,
+        reference: normalized,
+        reason: redactPii(reason.trim()).slice(0, 300),
+        actorId: actor.id,
+        actorRole: actor.role as "admin" | "finance_manager",
+        mfaVerified: true,
+        at: this.#now(),
+      };
+      const event = this.#event(b, "audit.customer_credit_approved",
+        { actor: actor.id, role: actor.role, creditId: credit.id });
+      await tx.appendOutbox([{ ...event, dedupeKey: `${event.dedupeKey}:${credit.id}` }]);
+      return { ...b, creditNotes: [...(b.creditNotes ?? []), credit] };
+    }).then((r) => r.ok ? { ...r, status: 201 } : r);
   }
 
   /** QA-F10: clearing a duplicate releases a financial hold; only an MFA-verified authorised manager may do so. */

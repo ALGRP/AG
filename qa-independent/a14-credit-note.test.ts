@@ -12,7 +12,7 @@ const credit = (h: ReturnType<typeof harness>): Credit => {
 const quad = (entries: any[], ref: string) => ["collected_delta", "site_delta", "agos_delta", "supplier_delta"].map((f) => sumFor(entries, ref, f));
 
 describe("A14 PKG-F04b approved non-cash credit", () => {
-  it("A14.1 [RULE] 30 EUR cash + approved 20 EUR credit: customer debt 0, shares stay on cash only (6/3/21), no party-to-party lines", { todo: "PKG-F04b · Codex Paket-02 (H-25 açık)" }, async () => {
+  it("A14.1 [RULE] 30 EUR cash + approved 20 EUR credit: customer debt 0, shares stay on cash only (6/3/21), no party-to-party lines", async () => {
     const h = harness();
     h.setNow("2026-11-04T10:00:00Z");
     const ref = await h.shuttleJob({}, "sup-a", 3000);
@@ -30,7 +30,7 @@ describe("A14 PKG-F04b approved non-cash credit", () => {
     );
   });
 
-  it("A14.2 [RULE] credit needs MFA manager, reason, unique reference (case-insensitive) and must not exceed the remaining debt", { todo: "PKG-F04b · Codex Paket-02" }, async () => {
+  it("A14.2 [RULE] credit needs MFA manager, reason, unique reference (case-insensitive) and must not exceed the remaining debt", async () => {
     const h = harness();
     h.setNow("2026-11-04T10:00:00Z");
     const ref = await h.shuttleJob({}, "sup-a", 3000);
@@ -48,7 +48,7 @@ describe("A14 PKG-F04b approved non-cash credit", () => {
     assert.deepEqual(got, ["mfa_required", "role_not_allowed", "reason_required", "credit_exceeds_remaining", 201, "duplicate_credit_reference", "credit_exceeds_remaining"]);
   });
 
-  it("A14.3 [RULE] the static admin token and a site credential cannot grant a credit over HTTP", { todo: "PKG-F04b · Codex Paket-02" }, async () => {
+  it("A14.3 [RULE] the static admin token and a site credential cannot grant a credit over HTTP", async () => {
     const h = harness();
     await h.start();
     try {
@@ -63,7 +63,7 @@ describe("A14 PKG-F04b approved non-cash credit", () => {
     }
   });
 
-  it("A14.4 [RULE] a credit after W45 is closed changes only later weeks; W45 stays frozen; cancelled bookings get no credit", { todo: "PKG-F04b · Codex Paket-02" }, async () => {
+  it("A14.4 [RULE] a credit after W45 is closed changes only later weeks; W45 stays frozen; cancelled bookings get no credit", async () => {
     const h = harness();
     h.setNow("2026-11-04T10:00:00Z");
     const ref = await h.shuttleJob({}, "sup-a", 3000);
@@ -78,5 +78,59 @@ describe("A14 PKG-F04b approved non-cash credit", () => {
     const b = await h.book({});
     await h.service.cancel(b.body.ref);
     assert.equal((await credit(h)(MANAGER, b.body.ref, { amountMinor: 100, reason: "Iptal sonrasi kredi denemesi", creditReference: "KRD-0005" })).status, 409);
+  });
+});
+
+
+describe("A14.5 customer credit boundary checks (LOCAL_ONLY)", () => {
+  it("rejects reused global credit reference even on another booking, and site-scoped callers cannot approve", async () => {
+    const h = harness();
+    h.setNow("2026-11-04T10:00:00Z");
+    const first = await h.shuttleJob({}, "sup-a", 3000);
+    const second = await h.shuttleJob({}, "sup-a", 3000);
+    const approve = credit(h);
+    const request = { amountMinor: 1000, reason: "Gecikme nedeni ile kredi", creditReference: "KRD-GLOBAL-001" };
+    assert.equal((await approve(MANAGER, first, request)).status, 201);
+    assert.deepEqual(
+      [(await approve(MANAGER, second, { ...request, creditReference: "krd-global-001" })).status,
+       (await approve({ ...MANAGER, scope: { kind: "site", siteId: "partner-site", partyId: "p-001" } }, second, { ...request, creditReference: "KRD-GLOBAL-002" })).status],
+      [409, 403],
+    );
+    const row = await h.row(first);
+    assert.equal(row.creditNotes.length, 1);
+    assert.equal(row.creditNotes[0].reference, "KRD-GLOBAL-001");
+    assert.equal(row.creditNotes[0].amountMinor, 1000);
+    assert.equal(row.creditNotes[0].mfaVerified, true);
+    const audit = (await h.store.listOutbox()).filter((e) => e.type === "audit.customer_credit_approved");
+    assert.equal(audit.length, 1);
+    assert.equal(audit[0]!.payload.creditId, row.creditNotes[0].id);
+  });
+
+  it("credit granted after week end does not rewrite even an unclosed earlier week's customer balance", async () => {
+    const h = harness();
+    h.setNow("2026-11-04T10:00:00Z");
+    const ref = await h.shuttleJob({}, "sup-a", 3000);
+    h.setNow("2026-11-10T10:00:00Z");
+    assert.equal((await credit(h)(MANAGER, ref, { amountMinor: 2000, reason: "Gecikme nedeniyle kredi", creditReference: "KRD-WEEK-01" })).status, 201);
+    const earlier = await h.report(W45);
+    const later = await h.report(W46);
+    assert.deepEqual((earlier.customer_balances as any[]).filter((x) => x.booking_ref === ref).map((x) => x.remaining), [2000]);
+    assert.equal((later.customer_balances as any[]).filter((x) => x.booking_ref === ref).length, 0);
+    assert.equal(later.entries.filter((x: any) => x.booking_ref === ref).length, 1,
+      "unclosed prior week collection should first settle in the earliest closed week; no credit-only payment entry");
+  });
+
+  it("credit reason PII is redacted and no credit creates money events or manual adjustments", async () => {
+    const h = harness();
+    h.setNow("2026-11-04T10:00:00Z");
+    const ref = await h.shuttleJob({}, "sup-a", 3000);
+    const beforeEvents = (await h.row(ref)).moneyEvents.length;
+    const body = { amountMinor: 2000, reason: "Musteri jane@example.com +90 555 123 4567 aradi", creditReference: "KRD-REDACT-01" };
+    assert.equal((await credit(h)(MANAGER, ref, body)).status, 201);
+    const row = await h.row(ref);
+    assert.equal(row.moneyEvents.length, beforeEvents);
+    assert.ok(!row.creditNotes[0].reason.includes("jane@example.com"));
+    assert.ok(!row.creditNotes[0].reason.includes("555 123"));
+    assert.equal((await h.store.listAdjustments()).length, 0);
   });
 });
