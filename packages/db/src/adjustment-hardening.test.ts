@@ -41,7 +41,7 @@ describe("QA-F4/A hardening (disposable PG16 only)", {
     assert.equal(psql("postgres", `CREATE DATABASE ${db};`).status, 0);
     assert.equal(psql(db, readFileSync(resolve(ROOT, "packages/db/migrations/0001_network_core.sql"), "utf8")).status, 0);
     psql(db, SETUP.replace(/^\\.*$/gm, "")); // synthetic fixture setup only (no probes)
-    for (const n of ["0002_tenant_rls", "0003_week_integrity", "0004_entry_integrity", "0005_money_events", "0006_adjustments_audit"]) {
+    for (const n of ["0002_tenant_rls", "0003_week_integrity", "0004_entry_integrity", "0005_money_events", "0006_adjustments_audit", "0007_adjustment_hardening"]) {
       const m = psql(db, readFileSync(resolve(ROOT, `packages/db/migrations/${n}.sql`), "utf8"));
       assert.equal(m.status, 0, `${n}: ${m.out}`);
     }
@@ -50,14 +50,14 @@ describe("QA-F4/A hardening (disposable PG16 only)", {
     if (RUN) psql("postgres", `DROP DATABASE IF EXISTS ${db};`);
   });
 
-  it("PR3-N5 [RULE] the same offset reference in another letter case is a duplicate", { todo: "PR3-N5 · Codex Paket-03 (adjustment_reference normalize UNIQUE)" }, () => {
+  it("PR3-N5 [RULE] the same offset reference in another letter case is a duplicate", () => {
     const first = psql(db, offset("OFS-2026-W45-ONAY-N5", "onay-n5", "clock_timestamp() - interval '1 minute'"));
     assert.equal(first.status, 0, first.out);
     const second = psql(db, offset("ofs-2026-w45-onay-n5", "onay-n5", "clock_timestamp() - interval '1 minute'"));
     assert.notEqual(second.status, 0, "case-variant duplicate offset stored");
   });
 
-  it("PR3-N6 [RULE] 2FA evidence must be fresh (a 2019 timestamp is not evidence for a 2026 decision)", { todo: "PR3-N6 · Codex Paket-03 (mfa_verified_at tazelik penceresi)" }, () => {
+  it("PR3-N6 [RULE] 2FA evidence must be fresh (a 2019 timestamp is not evidence for a 2026 decision)", () => {
     const r = psql(db, offset("OFS-2026-W45-ONAY-N6", "onay-n6", "'2019-01-01 00:00+00'"));
     assert.notEqual(r.status, 0, "stale 2FA evidence accepted");
     assert.match(r.out, /AG_F4_ADJUSTMENT_AUDIT_REQUIRED/);
