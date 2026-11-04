@@ -1,0 +1,197 @@
+{
+  "generated_at": "2026-11-03",
+  "generated_by": "tools/skill-inventory.mjs + manifest.json (bulut oturumu, salt okunur)",
+  "scope_note": "Yalnız bu bulut oturumunun gördüğü kaynaklar. Mac'te kurulu 38 skill, Codex ve Hermes skill'leri ve SEL-456 zip'i bu oturumdan ERİŞİLEMEDİ; aşağıda 'unavailable' olarak listelenir.",
+  "installed_agos": [
+    {
+      "name": "ag-domain-network-seo",
+      "source": "claude.ai org sync (plugin)",
+      "status": "installed",
+      "skill_md_sha256": "6565636bc895e1f7371b12aa27ca6902ddcffcca3128ca9a6225fa575bc79663",
+      "tree_sha256": "8e6a9a68d3983b426c1ffae58cbcb0092c7ae701e319d9acf913f51ef7ad7902",
+      "file_count": 1,
+      "skill_md_lines": 271,
+      "org_updated_at": "2026-11-02T10:47:03.448808Z",
+      "org_source": "plugin",
+      "backing_plugin_id": "plugin_01G8VsHkyKtzKmhG5WDnm8B4",
+      "assessment": "KÜÇÜK GÜNCELLEME: tek fiyat kaynağı kuralı uyumlu (shortcode/adaptör); K1 (ana site Next.js, uydular statik) ve uydu kurulum adımları yok."
+    },
+    {
+      "name": "agos-governance",
+      "source": "claude.ai org sync (plugin)",
+      "status": "installed",
+      "skill_md_sha256": "97c7a21fe1efb507d1bf248e03d0234b288ff795078e6b561525cfa2443b522b",
+      "tree_sha256": "0a71f08e5b00b91725a28c0cda8aa754bfa2b3fc97ca5f1cf91c68a7472deb1b",
+      "file_count": 1,
+      "skill_md_lines": 130,
+      "org_updated_at": "2026-10-30T13:19:37.864756Z",
+      "org_source": "plugin",
+      "backing_plugin_id": "plugin_01B58d5WpFNxPssSw6quksSb",
+      "assessment": "KISMEN STALE: 2FA kuralı güncel; uygulama Supabase'e özgü (app_role, Supabase Dashboard) — SEL-332 kimlik sağlayıcı kararı açık. 'Mahsup tedarikçi düzeyinde yapılır' T1 ile çelişir. Tenant izolasyonu bölümü yok."
+    },
+    {
+      "name": "agos-notification-automations",
+      "source": "claude.ai org sync (plugin)",
+      "status": "installed",
+      "skill_md_sha256": "db978e94b51e1b0bcd26cdd1381e955ec69318081ff0387632322d83d0c89f8a",
+      "tree_sha256": "dd3b8beff7c527d450961249f7669f217dce623588d4adedfa44729f770aa5b6",
+      "file_count": 1,
+      "skill_md_lines": 145,
+      "org_updated_at": "2026-10-30T11:02:15.509698Z",
+      "org_source": "plugin",
+      "backing_plugin_id": "plugin_01XrQb5CJ9LW7FMdVaegqYLm",
+      "assessment": "UYUMLU (outbox, dondurulmuş fiyat). Eksik bağımlılık: agos-realtime-dispatch, automation-security-ops bu ortamda yok."
+    },
+    {
+      "name": "agos-pool-finance",
+      "source": "claude.ai org sync (plugin)",
+      "status": "installed",
+      "skill_md_sha256": "9876d38a9683955cb5461439fa3087c3a2181a8022f3b76907e586d791ac4d18",
+      "tree_sha256": "7e91573f73a2630bd707f9ac1dae48e4ded9ed30423d51eac1ff483df3e7aa7a",
+      "file_count": 1,
+      "skill_md_lines": 159,
+      "org_updated_at": "2026-10-30T13:19:36.646674Z",
+      "org_source": "plugin",
+      "backing_plugin_id": "plugin_01CPf7mY15ViC85jEqRRi6Ty",
+      "assessment": "STALE: 'Shuttle AG'nin kendi işi', 'nakit/kart otomatik mahsup' (T1 ile çelişir), Supabase fonksiyonlarına bağlı (SEL-331: çekirdek CRS). Haftalık kapanış bölümü settlement adaylarıyla çakışır."
+    },
+    {
+      "name": "agos-pricing-matrix",
+      "source": "claude.ai org sync (plugin)",
+      "status": "installed",
+      "skill_md_sha256": "86ef0045e7087cf7ac1144640e774428e5b9604a575d9d8a820c19ba4ee88571",
+      "tree_sha256": "2c6524b4a91d82d9d249149e88f98a0caff86db3e257a39ea7f28be7ecab67f9",
+      "file_count": 1,
+      "skill_md_lines": 133,
+      "org_updated_at": "2026-10-30T10:52:00.284676Z",
+      "org_source": "plugin",
+      "backing_plugin_id": "plugin_01X1Lkti7vB6CQtJRkiyv7Pf",
+      "assessment": "STALE: 03.11 kararlarından önce (30.10). '5 = 80 €', '+10 €/kişi', 'AG kendisi satıp işletir', %20 tabanı 'teyit et', test verisi 1–8 yolcu. Bkz. A §3 S1–S6."
+    },
+    {
+      "name": "agos-reviews",
+      "source": "claude.ai org sync (plugin)",
+      "status": "installed",
+      "skill_md_sha256": "5f956b3b6d5b1294b14220e6328bfe59ab449507fd5507050b8d583527bd10af",
+      "tree_sha256": "bf28d2e65210017a57f8a49319c52927ee962d9f8065e57449912f634ee6c10e",
+      "file_count": 1,
+      "skill_md_lines": 127,
+      "org_updated_at": "2026-10-30T12:51:26.840097Z",
+      "org_source": "plugin",
+      "backing_plugin_id": "plugin_01GKyJYJmhUAWodGmJqnvrAR",
+      "assessment": "UYUMLU; konsorsiyum kapsamı dışında. Değişiklik önerilmiyor."
+    }
+  ],
+  "installed_tooling": [
+    {
+      "name": "skill-creator",
+      "source": "claude.ai org sync (anthropic-example)",
+      "status": "installed",
+      "skill_md_sha256": "1d51c0b077c24489baa7fdb6c7072ff0c94479dab7110dad2fc6039a47a4bed4",
+      "tree_sha256": "1c4edfe53b0bece8836607b7e522b5d7bb27e225da84c40740b164e6d306b018",
+      "file_count": 18,
+      "skill_md_lines": 507,
+      "org_updated_at": "2026-10-28T17:00:24.127636Z",
+      "org_source": "anthropic-example",
+      "backing_plugin_id": null,
+      "assessment": "Değerlendirme aracı: evals/<case>/ (prompt.md, case.yaml, graders/), with/without skill karşılaştırması, 'claude plugin eval'."
+    }
+  ],
+  "repo_drafts": [
+    {
+      "name": "agos-consortium-settlement",
+      "source": "repo skills/ @ c0b3175",
+      "status": "draft_in_repo",
+      "skill_md_sha256": "37bb05f823febe9b8b9f235c987424bcc6e7c05e2421eb22c01aaef96d90e826",
+      "tree_sha256": "fc64d03cc28e022f873dd1fe9a1800c2a0ad975faae2198f766520dfcb712349",
+      "file_count": 1,
+      "skill_md_lines": 131,
+      "assessment": "MÜKERRER RİSKİ: SEL-456 adayı agos-weekly-settlement ve agos-consortium-policy ile örtüşür. Ayrı skill olarak kurulmamalı; birleştirme girdisi olarak kullanılmalı."
+    },
+    {
+      "name": "ORG-SKILL-UPDATES-2026-11-03.md",
+      "source": "repo skills/ @ c0b3175",
+      "status": "change_proposal",
+      "sha256": "4469f1e2e9244d806dfe07a5059be497b6a5cc60a3e4789bc1da67fea1f87ef2",
+      "assessment": "agos-pricing-matrix ve agos-pool-finance için S1–S10 metin önerileri."
+    }
+  ],
+  "unavailable": [
+    {
+      "name": "AGOS_Consortium_Skills_Ads_MVP_V1.zip",
+      "declared_sha256": "6ab42a6c9f6b3cbf56cdf60fd85db351c958efb73104c7dcf760a1564ccc6c59",
+      "declared_in": "SEL-456, SEL-442, SEL-197",
+      "contents_declared": [
+        "agos-consortium-policy",
+        "agos-tenant-ads-onboarding",
+        "agos-ads-budget-control",
+        "agos-ads-attribution",
+        "agos-weekly-settlement",
+        "15 eğitim/değerlendirme senaryosu",
+        "5/5 skill validator",
+        "29/29 Node test (saf JS MVP)",
+        "önerilen SQL ve API sözleşmeleri"
+      ],
+      "reason": "Linear issue'da ek yok; repo'da yok; bu oturumda dosya bulunamadı."
+    },
+    {
+      "name": "AGOS_NEW_CHAT_SKILL_INTAKE_V1_20261102.zip",
+      "declared_in": "SEL-442 (02.11)",
+      "contents_declared": [
+        "agos-skill-intake",
+        "12/12 statik test",
+        "manifest ve kayıt şablonu"
+      ],
+      "reason": "Erişilemedi; kurulum yok (SEL-442)."
+    },
+    {
+      "name": "Mac Claude kurulu skill seti",
+      "declared_count": 38,
+      "declared_in": "SEL-442, SEL-456",
+      "reason": "Mac dosya sistemi bu bulut oturumundan erişilemez. tools/skill-inventory.mjs ile --label mac-claude çalıştırılmalı."
+    },
+    {
+      "name": "Codex skill/talimat seti (Mac)",
+      "reason": "Erişilemedi; konumu doğrulanmalı (ör. ~/.codex/skills, AGENTS.md)."
+    },
+    {
+      "name": "Hermes skill/talimat seti",
+      "reason": "Erişilemedi; G0 HOLD (SEL-324/326) kapsamında salt okunur envanter."
+    }
+  ],
+  "referenced_but_missing": [
+    {
+      "name": "agos-realtime-dispatch",
+      "referenced_by": [
+        "agos-pool-finance",
+        "agos-notification-automations"
+      ]
+    },
+    {
+      "name": "automation-security-ops",
+      "referenced_by": [
+        "agos-notification-automations"
+      ]
+    },
+    {
+      "name": "agos-ai-booking-intake",
+      "referenced_by": [
+        "SEL-88",
+        "SEL-197"
+      ]
+    },
+    {
+      "name": "agos-transfer-yield-planning",
+      "referenced_by": [
+        "SEL-88",
+        "SEL-197"
+      ]
+    },
+    {
+      "name": "agos-skill-intake",
+      "referenced_by": [
+        "SEL-442 (yeni sohbet standardı)"
+      ]
+    }
+  ]
+}

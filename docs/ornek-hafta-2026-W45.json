@@ -1,0 +1,1009 @@
+{
+  "w45": {
+    "week": {
+      "week_id": "2026-W45",
+      "start_utc": "2026-11-01T21:00:00.000Z",
+      "end_utc": "2026-11-08T21:00:00.000Z",
+      "payment_due_utc": "2026-11-10T15:00:00.000Z"
+    },
+    "generated_at": "2026-11-10T17:00:00.000Z",
+    "entries": [
+      {
+        "entry_id": "id-0156",
+        "week_id": "2026-W45",
+        "booking_id": "id-0001",
+        "booking_ref": "AG-R4FT6H",
+        "service_type": "shuttle",
+        "selling_party_id": "p-ege",
+        "selling_site_id": "ege-transfer",
+        "supplier_id": "sup-yildiz",
+        "collector": "supplier",
+        "currency": "EUR",
+        "policy_id": "shuttle-split-v1",
+        "kind": "collection",
+        "base_before": 0,
+        "base_after": 3000,
+        "collected_delta": 3000,
+        "site_delta": 600,
+        "agos_delta": 300,
+        "supplier_delta": 2100,
+        "self_supplied": false,
+        "payment_reference": "TR-EFT-1001,TR-EFT-1002"
+      },
+      {
+        "entry_id": "id-0157",
+        "week_id": "2026-W45",
+        "booking_id": "id-0015",
+        "booking_ref": "AG-Q3ES5G",
+        "service_type": "shuttle",
+        "selling_party_id": "p-ege",
+        "selling_site_id": "ege-transfer",
+        "supplier_id": "sup-yildiz",
+        "collector": "supplier",
+        "currency": "EUR",
+        "policy_id": "shuttle-split-v1",
+        "kind": "collection",
+        "base_before": 0,
+        "base_after": 5000,
+        "collected_delta": 5000,
+        "site_delta": 1000,
+        "agos_delta": 500,
+        "supplier_delta": 3500,
+        "self_supplied": false,
+        "payment_reference": "TR-EFT-1001,TR-EFT-1002"
+      },
+      {
+        "entry_id": "id-0158",
+        "week_id": "2026-W45",
+        "booking_id": "id-0029",
+        "booking_ref": "AG-P2DR4F",
+        "service_type": "shuttle",
+        "selling_party_id": "alanya-group",
+        "selling_site_id": "alanyagroup-com",
+        "supplier_id": "sup-yildiz",
+        "collector": "supplier",
+        "currency": "EUR",
+        "policy_id": "shuttle-split-v1",
+        "kind": "collection",
+        "base_before": 0,
+        "base_after": 7000,
+        "collected_delta": 7000,
+        "site_delta": 1400,
+        "agos_delta": 700,
+        "supplier_delta": 4900,
+        "self_supplied": false,
+        "payment_reference": "TR-EFT-1002,TR-EFT-1003"
+      },
+      {
+        "entry_id": "id-0159",
+        "week_id": "2026-W45",
+        "booking_id": "id-0043",
+        "booking_ref": "AG-NZCQ3E",
+        "service_type": "shuttle",
+        "selling_party_id": "alanya-group",
+        "selling_site_id": "alanyagroup-com",
+        "supplier_id": "sup-akdeniz",
+        "collector": "supplier",
+        "currency": "EUR",
+        "policy_id": "shuttle-split-v1",
+        "kind": "collection",
+        "base_before": 0,
+        "base_after": 6000,
+        "collected_delta": 6000,
+        "site_delta": 1200,
+        "agos_delta": 600,
+        "supplier_delta": 4200,
+        "self_supplied": false,
+        "payment_reference": "TR-EFT-1005,TR-EFT-1006,TR-EFT-1008"
+      },
+      {
+        "entry_id": "id-0160",
+        "week_id": "2026-W45",
+        "booking_id": "id-0057",
+        "booking_ref": "AG-MYBP2D",
+        "service_type": "shuttle",
+        "selling_party_id": "p-side",
+        "selling_site_id": "side-tur",
+        "supplier_id": "p-side",
+        "collector": "supplier",
+        "currency": "EUR",
+        "policy_id": "shuttle-split-v1",
+        "kind": "collection",
+        "base_before": 0,
+        "base_after": 5000,
+        "collected_delta": 5000,
+        "site_delta": 0,
+        "agos_delta": 500,
+        "supplier_delta": 4500,
+        "self_supplied": true,
+        "payment_reference": "TR-EFT-1004"
+      },
+      {
+        "entry_id": "id-0161",
+        "week_id": "2026-W45",
+        "booking_id": "id-0071",
+        "booking_ref": "AG-KXANZC",
+        "service_type": "shuttle",
+        "selling_party_id": "p-ege",
+        "selling_site_id": "ege-transfer",
+        "supplier_id": "sup-akdeniz",
+        "collector": "supplier",
+        "currency": "EUR",
+        "policy_id": "shuttle-split-v1",
+        "kind": "collection",
+        "base_before": 0,
+        "base_after": 3000,
+        "collected_delta": 3000,
+        "site_delta": 600,
+        "agos_delta": 300,
+        "supplier_delta": 2100,
+        "self_supplied": false,
+        "payment_reference": "TR-EFT-1006,TR-EFT-1008"
+      },
+      {
+        "entry_id": "id-0162",
+        "week_id": "2026-W45",
+        "booking_id": "id-0085",
+        "booking_ref": "AG-JW9MYB",
+        "service_type": "shuttle",
+        "selling_party_id": "p-ege",
+        "selling_site_id": "ege-transfer",
+        "supplier_id": "sup-yildiz",
+        "collector": "supplier",
+        "currency": "EUR",
+        "policy_id": "shuttle-split-v1",
+        "kind": "collection",
+        "base_before": 0,
+        "base_after": 3000,
+        "collected_delta": 3000,
+        "site_delta": 600,
+        "agos_delta": 300,
+        "supplier_delta": 2100,
+        "self_supplied": false,
+        "payment_reference": "TR-EFT-1001,TR-EFT-1002"
+      },
+      {
+        "entry_id": "id-0163",
+        "week_id": "2026-W45",
+        "booking_id": "id-0127",
+        "booking_ref": "AG-FT6HV8",
+        "service_type": "shuttle",
+        "selling_party_id": "p-ege",
+        "selling_site_id": "ege-transfer",
+        "supplier_id": "sup-akdeniz",
+        "collector": "supplier",
+        "currency": "EUR",
+        "policy_id": "shuttle-split-v1",
+        "kind": "collection",
+        "base_before": 0,
+        "base_after": 9000,
+        "collected_delta": 9000,
+        "site_delta": 1800,
+        "agos_delta": 900,
+        "supplier_delta": 6300,
+        "self_supplied": false,
+        "payment_reference": "TR-EFT-1006,TR-EFT-1008"
+      },
+      {
+        "entry_id": "id-0164",
+        "week_id": "2026-W45",
+        "booking_id": "id-0143",
+        "booking_ref": "AG-5GU7JW",
+        "service_type": "private",
+        "selling_party_id": "p-ege",
+        "selling_site_id": "ege-transfer",
+        "supplier_id": "sup-akdeniz",
+        "collector": "supplier",
+        "currency": "EUR",
+        "policy_id": "private-pro-rata-on-collection",
+        "kind": "collection",
+        "base_before": 0,
+        "base_after": 8000,
+        "collected_delta": 8000,
+        "site_delta": 3250,
+        "agos_delta": 0,
+        "supplier_delta": 4750,
+        "self_supplied": false,
+        "payment_reference": null
+      }
+    ],
+    "exceptions": [
+      {
+        "booking_id": "id-0085",
+        "booking_ref": "AG-JW9MYB",
+        "supplier_id": "sup-yildiz",
+        "selling_site_id": "ege-transfer",
+        "reason": "overcollected",
+        "final_booking_price": 3000,
+        "collected_amount": 3500,
+        "customer_refund_due": 500,
+        "currency": "EUR",
+        "note": null
+      },
+      {
+        "booking_id": "id-0099",
+        "booking_ref": "AG-HV8KXA",
+        "supplier_id": "sup-akdeniz",
+        "selling_site_id": "alanyagroup-com",
+        "reason": "disputed",
+        "final_booking_price": 3000,
+        "collected_amount": 3000,
+        "customer_refund_due": 0,
+        "currency": "EUR",
+        "note": "Müşteri bekleme süresine itiraz etti"
+      },
+      {
+        "booking_id": "id-0114",
+        "booking_ref": "AG-U7JW9M",
+        "supplier_id": "unassigned",
+        "selling_site_id": "ege-transfer",
+        "reason": "cancelled",
+        "final_booking_price": 5000,
+        "collected_amount": 0,
+        "customer_refund_due": 0,
+        "currency": "EUR",
+        "note": null
+      }
+    ],
+    "customer_balances": [
+      {
+        "booking_id": "id-0071",
+        "booking_ref": "AG-KXANZC",
+        "supplier_id": "sup-akdeniz",
+        "final_booking_price": 5000,
+        "collected_amount": 3000,
+        "remaining": 2000,
+        "currency": "EUR"
+      }
+    ],
+    "adjustments": [],
+    "obligations": [
+      {
+        "week_id": "2026-W45",
+        "debtor_id": "p-side",
+        "creditor_id": "agos",
+        "kind": "agos_fee",
+        "currency": "EUR",
+        "amount": 500,
+        "paid": 500,
+        "outstanding": 0,
+        "status": "paid",
+        "late": false,
+        "paid_late": false,
+        "receipt_ids": [
+          "id-0168"
+        ],
+        "receipt_refs": [
+          "TR-EFT-1004"
+        ],
+        "booking_ids": [
+          "id-0057"
+        ],
+        "adjustment_ids": []
+      },
+      {
+        "week_id": "2026-W45",
+        "debtor_id": "sup-akdeniz",
+        "creditor_id": "agos",
+        "kind": "agos_fee",
+        "currency": "EUR",
+        "amount": 1800,
+        "paid": 1800,
+        "outstanding": 0,
+        "status": "paid",
+        "late": false,
+        "paid_late": false,
+        "receipt_ids": [
+          "id-0170",
+          "id-0171"
+        ],
+        "receipt_refs": [
+          "TR-EFT-1006",
+          "TR-EFT-1008"
+        ],
+        "booking_ids": [
+          "id-0043",
+          "id-0071",
+          "id-0127"
+        ],
+        "adjustment_ids": []
+      },
+      {
+        "week_id": "2026-W45",
+        "debtor_id": "sup-akdeniz",
+        "creditor_id": "alanya-group",
+        "kind": "site_commission",
+        "currency": "EUR",
+        "amount": 1200,
+        "paid": 1200,
+        "outstanding": 0,
+        "status": "paid",
+        "late": false,
+        "paid_late": false,
+        "receipt_ids": [
+          "id-0169"
+        ],
+        "receipt_refs": [
+          "TR-EFT-1005"
+        ],
+        "booking_ids": [
+          "id-0043"
+        ],
+        "adjustment_ids": []
+      },
+      {
+        "week_id": "2026-W45",
+        "debtor_id": "sup-akdeniz",
+        "creditor_id": "p-ege",
+        "kind": "site_commission",
+        "currency": "EUR",
+        "amount": 2400,
+        "paid": 0,
+        "outstanding": 2400,
+        "status": "unpaid",
+        "late": true,
+        "paid_late": false,
+        "receipt_ids": [],
+        "receipt_refs": [],
+        "booking_ids": [
+          "id-0071",
+          "id-0127"
+        ],
+        "adjustment_ids": []
+      },
+      {
+        "week_id": "2026-W45",
+        "debtor_id": "sup-akdeniz",
+        "creditor_id": "p-ege",
+        "kind": "site_sale_share",
+        "currency": "EUR",
+        "amount": 3250,
+        "paid": 0,
+        "outstanding": 3250,
+        "status": "unpaid",
+        "late": true,
+        "paid_late": false,
+        "receipt_ids": [],
+        "receipt_refs": [],
+        "booking_ids": [
+          "id-0143"
+        ],
+        "adjustment_ids": []
+      },
+      {
+        "week_id": "2026-W45",
+        "debtor_id": "sup-yildiz",
+        "creditor_id": "agos",
+        "kind": "agos_fee",
+        "currency": "EUR",
+        "amount": 1800,
+        "paid": 1000,
+        "outstanding": 800,
+        "status": "partially_paid",
+        "late": true,
+        "paid_late": false,
+        "receipt_ids": [
+          "id-0166"
+        ],
+        "receipt_refs": [
+          "TR-EFT-1002"
+        ],
+        "booking_ids": [
+          "id-0001",
+          "id-0015",
+          "id-0029",
+          "id-0085"
+        ],
+        "adjustment_ids": []
+      },
+      {
+        "week_id": "2026-W45",
+        "debtor_id": "sup-yildiz",
+        "creditor_id": "alanya-group",
+        "kind": "site_commission",
+        "currency": "EUR",
+        "amount": 1400,
+        "paid": 1400,
+        "outstanding": 0,
+        "status": "paid",
+        "late": false,
+        "paid_late": false,
+        "receipt_ids": [
+          "id-0167"
+        ],
+        "receipt_refs": [
+          "TR-EFT-1003"
+        ],
+        "booking_ids": [
+          "id-0029"
+        ],
+        "adjustment_ids": []
+      },
+      {
+        "week_id": "2026-W45",
+        "debtor_id": "sup-yildiz",
+        "creditor_id": "p-ege",
+        "kind": "site_commission",
+        "currency": "EUR",
+        "amount": 2200,
+        "paid": 2200,
+        "outstanding": 0,
+        "status": "paid",
+        "late": false,
+        "paid_late": false,
+        "receipt_ids": [
+          "id-0165"
+        ],
+        "receipt_refs": [
+          "TR-EFT-1001"
+        ],
+        "booking_ids": [
+          "id-0001",
+          "id-0015",
+          "id-0085"
+        ],
+        "adjustment_ids": []
+      }
+    ],
+    "unmatched_receipts": [
+      {
+        "id": "id-0172",
+        "week_id": "2026-W45",
+        "payer_id": "sup-bilinmeyen",
+        "payee_id": "p-ege",
+        "amount": 2500,
+        "currency": "EUR",
+        "bank_reference": "TR-EFT-1007",
+        "paid_at": "2026-11-10T08:30:00.000Z",
+        "purpose": "settlement"
+      }
+    ],
+    "subscription_receipts": [
+      {
+        "id": "id-0173",
+        "week_id": "2026-W45",
+        "payer_id": "p-ege",
+        "payee_id": "agos",
+        "amount": 20000,
+        "currency": "EUR",
+        "bank_reference": "TR-SAAS-1101",
+        "paid_at": "2026-11-10T08:30:00.000Z",
+        "purpose": "subscription"
+      }
+    ],
+    "supplier_statements": [
+      {
+        "supplier_id": "p-side",
+        "currency": "EUR",
+        "jobs": 1,
+        "collected": 5000,
+        "entitlement": 4500,
+        "owes_sites": [],
+        "owes_agos": 500,
+        "paid_agos": 500,
+        "total_owed": 500,
+        "total_paid": 500,
+        "outstanding": 0,
+        "overpaid": 0,
+        "credits": 0,
+        "status": "settled"
+      },
+      {
+        "supplier_id": "sup-akdeniz",
+        "currency": "EUR",
+        "jobs": 4,
+        "collected": 26000,
+        "entitlement": 17350,
+        "owes_sites": [
+          {
+            "site_party_id": "alanya-group",
+            "amount": 1200,
+            "paid": 1200
+          },
+          {
+            "site_party_id": "p-ege",
+            "amount": 2400,
+            "paid": 0
+          },
+          {
+            "site_party_id": "p-ege",
+            "amount": 3250,
+            "paid": 0
+          }
+        ],
+        "owes_agos": 1800,
+        "paid_agos": 1800,
+        "total_owed": 8650,
+        "total_paid": 3000,
+        "outstanding": 5650,
+        "overpaid": 0,
+        "credits": 0,
+        "status": "late"
+      },
+      {
+        "supplier_id": "sup-yildiz",
+        "currency": "EUR",
+        "jobs": 4,
+        "collected": 18000,
+        "entitlement": 12600,
+        "owes_sites": [
+          {
+            "site_party_id": "alanya-group",
+            "amount": 1400,
+            "paid": 1400
+          },
+          {
+            "site_party_id": "p-ege",
+            "amount": 2200,
+            "paid": 2200
+          }
+        ],
+        "owes_agos": 1800,
+        "paid_agos": 1000,
+        "total_owed": 5400,
+        "total_paid": 4600,
+        "outstanding": 800,
+        "overpaid": 0,
+        "credits": 0,
+        "status": "late"
+      }
+    ],
+    "site_receivables": [
+      {
+        "site_party_id": "alanya-group",
+        "currency": "EUR",
+        "by_supplier": [
+          {
+            "supplier_id": "sup-akdeniz",
+            "amount": 1200,
+            "paid": 1200
+          },
+          {
+            "supplier_id": "sup-yildiz",
+            "amount": 1400,
+            "paid": 1400
+          }
+        ],
+        "total": 2600,
+        "received": 2600,
+        "outstanding": 0
+      },
+      {
+        "site_party_id": "p-ege",
+        "currency": "EUR",
+        "by_supplier": [
+          {
+            "supplier_id": "sup-akdeniz",
+            "amount": 2400,
+            "paid": 0
+          },
+          {
+            "supplier_id": "sup-akdeniz",
+            "amount": 3250,
+            "paid": 0
+          },
+          {
+            "supplier_id": "sup-yildiz",
+            "amount": 2200,
+            "paid": 2200
+          }
+        ],
+        "total": 7850,
+        "received": 2200,
+        "outstanding": 5650
+      }
+    ],
+    "agos_fees": {
+      "by_supplier": [
+        {
+          "supplier_id": "p-side",
+          "currency": "EUR",
+          "amount": 500,
+          "paid": 500
+        },
+        {
+          "supplier_id": "sup-akdeniz",
+          "currency": "EUR",
+          "amount": 1800,
+          "paid": 1800
+        },
+        {
+          "supplier_id": "sup-yildiz",
+          "currency": "EUR",
+          "amount": 1800,
+          "paid": 1000
+        }
+      ],
+      "total_by_currency": {
+        "EUR": 4100
+      },
+      "received_by_currency": {
+        "EUR": 3300
+      }
+    },
+    "statement_disputes": [
+      {
+        "id": "ITZ-2026-W45-0001",
+        "week_id": "2026-W45",
+        "raised_by": "p-ege",
+        "reason": "AG-tahsilat farkı: özel transfer satış farkı eksik hesaplandı iddiası",
+        "category": "calculation_error",
+        "raised_at": "2026-11-12T09:00:00.000Z",
+        "statement_sent_at": "2026-11-09T05:00:00.000Z",
+        "status": "rejected",
+        "decided_by": "ornek-finans-yoneticisi",
+        "decided_role": "finance_manager",
+        "decision_reason": "Dekont ve tahsilat kaydı karşılaştırıldı; satış farkı 32,50 € doğru hesaplanmış",
+        "decided_at": "2026-11-12T09:00:00.000Z",
+        "adjustment_ids": [],
+        "timing": {
+          "deadline": "2026-11-16T05:00:00.000Z",
+          "within_window": true,
+          "reviewable": true,
+          "note": "süresinde"
+        }
+      }
+    ],
+    "debts_and_disputes": [
+      {
+        "kind": "late_payment",
+        "obligation_kind": "site_commission",
+        "late": true,
+        "debtor_id": "sup-akdeniz",
+        "creditor_id": "p-ege",
+        "amount": 2400,
+        "currency": "EUR",
+        "detail": "son tarih (Salı 18:00) geçti"
+      },
+      {
+        "kind": "late_payment",
+        "obligation_kind": "site_sale_share",
+        "late": true,
+        "debtor_id": "sup-akdeniz",
+        "creditor_id": "p-ege",
+        "amount": 3250,
+        "currency": "EUR",
+        "detail": "son tarih (Salı 18:00) geçti"
+      },
+      {
+        "kind": "partial_payment",
+        "obligation_kind": "agos_fee",
+        "late": true,
+        "debtor_id": "sup-yildiz",
+        "creditor_id": "agos",
+        "amount": 800,
+        "currency": "EUR",
+        "detail": "son tarih (Salı 18:00) geçti"
+      },
+      {
+        "kind": "unmatched_receipt",
+        "obligation_kind": null,
+        "late": false,
+        "debtor_id": "sup-bilinmeyen",
+        "creditor_id": "p-ege",
+        "amount": 2500,
+        "currency": "EUR",
+        "detail": "dekont TR-EFT-1007 hiçbir borçla eşleşmedi"
+      },
+      {
+        "kind": "booking_dispute",
+        "obligation_kind": null,
+        "late": false,
+        "debtor_id": "sup-akdeniz",
+        "creditor_id": null,
+        "amount": 3000,
+        "currency": "EUR",
+        "detail": "AG-HV8KXA: Müşteri bekleme süresine itiraz etti"
+      }
+    ],
+    "payout_execution": "disabled_owner_go_required",
+    "closed": true
+  },
+  "w46": {
+    "week": {
+      "week_id": "2026-W46",
+      "start_utc": "2026-11-08T21:00:00.000Z",
+      "end_utc": "2026-11-15T21:00:00.000Z",
+      "payment_due_utc": "2026-11-17T15:00:00.000Z"
+    },
+    "generated_at": "2026-11-16T05:00:00.000Z",
+    "entries": [
+      {
+        "entry_id": "id-0177",
+        "week_id": "2026-W46",
+        "booking_id": "id-0015",
+        "booking_ref": "AG-Q3ES5G",
+        "service_type": "shuttle",
+        "selling_party_id": "p-ege",
+        "selling_site_id": "ege-transfer",
+        "supplier_id": "sup-yildiz",
+        "collector": "supplier",
+        "currency": "EUR",
+        "policy_id": "shuttle-split-v1",
+        "kind": "refund_correction",
+        "base_before": 5000,
+        "base_after": 0,
+        "collected_delta": -5000,
+        "site_delta": -1000,
+        "agos_delta": -500,
+        "supplier_delta": -3500,
+        "self_supplied": false,
+        "payment_reference": null
+      },
+      {
+        "entry_id": "id-0178",
+        "week_id": "2026-W46",
+        "booking_id": "id-0071",
+        "booking_ref": "AG-KXANZC",
+        "service_type": "shuttle",
+        "selling_party_id": "p-ege",
+        "selling_site_id": "ege-transfer",
+        "supplier_id": "sup-akdeniz",
+        "collector": "supplier",
+        "currency": "EUR",
+        "policy_id": "shuttle-split-v1",
+        "kind": "collection",
+        "base_before": 3000,
+        "base_after": 5000,
+        "collected_delta": 2000,
+        "site_delta": 400,
+        "agos_delta": 200,
+        "supplier_delta": 1400,
+        "self_supplied": false,
+        "payment_reference": null
+      }
+    ],
+    "exceptions": [
+      {
+        "booking_id": "id-0085",
+        "booking_ref": "AG-JW9MYB",
+        "supplier_id": "sup-yildiz",
+        "selling_site_id": "ege-transfer",
+        "reason": "overcollected",
+        "final_booking_price": 3000,
+        "collected_amount": 3500,
+        "customer_refund_due": 500,
+        "currency": "EUR",
+        "note": null
+      },
+      {
+        "booking_id": "id-0099",
+        "booking_ref": "AG-HV8KXA",
+        "supplier_id": "sup-akdeniz",
+        "selling_site_id": "alanyagroup-com",
+        "reason": "disputed",
+        "final_booking_price": 3000,
+        "collected_amount": 3000,
+        "customer_refund_due": 0,
+        "currency": "EUR",
+        "note": "Müşteri bekleme süresine itiraz etti"
+      }
+    ],
+    "customer_balances": [],
+    "adjustments": [],
+    "obligations": [
+      {
+        "week_id": "2026-W46",
+        "debtor_id": "sup-akdeniz",
+        "creditor_id": "agos",
+        "kind": "agos_fee",
+        "currency": "EUR",
+        "amount": 200,
+        "paid": 0,
+        "outstanding": 200,
+        "status": "unpaid",
+        "late": false,
+        "paid_late": false,
+        "receipt_ids": [],
+        "receipt_refs": [],
+        "booking_ids": [
+          "id-0071"
+        ],
+        "adjustment_ids": []
+      },
+      {
+        "week_id": "2026-W46",
+        "debtor_id": "sup-akdeniz",
+        "creditor_id": "p-ege",
+        "kind": "site_commission",
+        "currency": "EUR",
+        "amount": 400,
+        "paid": 0,
+        "outstanding": 400,
+        "status": "unpaid",
+        "late": false,
+        "paid_late": false,
+        "receipt_ids": [],
+        "receipt_refs": [],
+        "booking_ids": [
+          "id-0071"
+        ],
+        "adjustment_ids": []
+      },
+      {
+        "week_id": "2026-W46",
+        "debtor_id": "sup-yildiz",
+        "creditor_id": "agos",
+        "kind": "agos_fee",
+        "currency": "EUR",
+        "amount": -500,
+        "paid": 0,
+        "outstanding": -500,
+        "status": "credit_due",
+        "late": false,
+        "paid_late": false,
+        "receipt_ids": [],
+        "receipt_refs": [],
+        "booking_ids": [
+          "id-0015"
+        ],
+        "adjustment_ids": []
+      },
+      {
+        "week_id": "2026-W46",
+        "debtor_id": "sup-yildiz",
+        "creditor_id": "p-ege",
+        "kind": "site_commission",
+        "currency": "EUR",
+        "amount": -1000,
+        "paid": 0,
+        "outstanding": -1000,
+        "status": "credit_due",
+        "late": false,
+        "paid_late": false,
+        "receipt_ids": [],
+        "receipt_refs": [],
+        "booking_ids": [
+          "id-0015"
+        ],
+        "adjustment_ids": []
+      }
+    ],
+    "unmatched_receipts": [],
+    "subscription_receipts": [],
+    "supplier_statements": [
+      {
+        "supplier_id": "sup-akdeniz",
+        "currency": "EUR",
+        "jobs": 1,
+        "collected": 2000,
+        "entitlement": 1400,
+        "owes_sites": [
+          {
+            "site_party_id": "p-ege",
+            "amount": 400,
+            "paid": 0
+          }
+        ],
+        "owes_agos": 200,
+        "paid_agos": 0,
+        "total_owed": 600,
+        "total_paid": 0,
+        "outstanding": 600,
+        "overpaid": 0,
+        "credits": 0,
+        "status": "open"
+      },
+      {
+        "supplier_id": "sup-yildiz",
+        "currency": "EUR",
+        "jobs": 1,
+        "collected": -5000,
+        "entitlement": -3500,
+        "owes_sites": [
+          {
+            "site_party_id": "p-ege",
+            "amount": -1000,
+            "paid": 0
+          }
+        ],
+        "owes_agos": -500,
+        "paid_agos": 0,
+        "total_owed": 0,
+        "total_paid": 0,
+        "outstanding": 0,
+        "overpaid": 0,
+        "credits": -1500,
+        "status": "credit"
+      }
+    ],
+    "site_receivables": [
+      {
+        "site_party_id": "p-ege",
+        "currency": "EUR",
+        "by_supplier": [
+          {
+            "supplier_id": "sup-akdeniz",
+            "amount": 400,
+            "paid": 0
+          },
+          {
+            "supplier_id": "sup-yildiz",
+            "amount": -1000,
+            "paid": 0
+          }
+        ],
+        "total": -600,
+        "received": 0,
+        "outstanding": 400
+      }
+    ],
+    "agos_fees": {
+      "by_supplier": [
+        {
+          "supplier_id": "sup-akdeniz",
+          "currency": "EUR",
+          "amount": 200,
+          "paid": 0
+        },
+        {
+          "supplier_id": "sup-yildiz",
+          "currency": "EUR",
+          "amount": -500,
+          "paid": 0
+        }
+      ],
+      "total_by_currency": {
+        "EUR": -300
+      },
+      "received_by_currency": {
+        "EUR": 0
+      }
+    },
+    "statement_disputes": [],
+    "debts_and_disputes": [
+      {
+        "kind": "missing_payment",
+        "obligation_kind": "agos_fee",
+        "late": false,
+        "debtor_id": "sup-akdeniz",
+        "creditor_id": "agos",
+        "amount": 200,
+        "currency": "EUR",
+        "detail": "son tarih bekleniyor"
+      },
+      {
+        "kind": "missing_payment",
+        "obligation_kind": "site_commission",
+        "late": false,
+        "debtor_id": "sup-akdeniz",
+        "creditor_id": "p-ege",
+        "amount": 400,
+        "currency": "EUR",
+        "detail": "son tarih bekleniyor"
+      },
+      {
+        "kind": "credit_due",
+        "obligation_kind": "agos_fee",
+        "late": false,
+        "debtor_id": "agos",
+        "creditor_id": "sup-yildiz",
+        "amount": 500,
+        "currency": "EUR",
+        "detail": "iade sonrası yeniden hesap: alacaklı fazlayı ödeyene iade eder; mahsup yalnız yazılı onayla"
+      },
+      {
+        "kind": "credit_due",
+        "obligation_kind": "site_commission",
+        "late": false,
+        "debtor_id": "p-ege",
+        "creditor_id": "sup-yildiz",
+        "amount": 1000,
+        "currency": "EUR",
+        "detail": "iade sonrası yeniden hesap: alacaklı fazlayı ödeyene iade eder; mahsup yalnız yazılı onayla"
+      },
+      {
+        "kind": "booking_dispute",
+        "obligation_kind": null,
+        "late": false,
+        "debtor_id": "sup-akdeniz",
+        "creditor_id": null,
+        "amount": 3000,
+        "currency": "EUR",
+        "detail": "AG-HV8KXA: Müşteri bekleme süresine itiraz etti"
+      }
+    ],
+    "payout_execution": "disabled_owner_go_required",
+    "closed": true
+  }
+}

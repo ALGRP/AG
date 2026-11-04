@@ -1,0 +1,930 @@
+# Codex Paket-01 akran incelemesi ve Paket-02 şartnamesi
+
+**Tarih:** 03.11.2026 · **İnceleyen:** Claude (akran) · **Tür:** PEER_REVIEW
+**Durum:** `LOCAL_ONLY · INDEPENDENT_HUMAN_ACCEPTED=NO · PR DRAFT · G0 HOLD`. Bu inceleme insan bağımsız kabulünün yerine geçmez.
+**İncelenen sürüm:** BASE `a911358e003921155e5eae16b81acb78f99def4f` → HEAD `29979b45ac82661ee7de94c80e580c9503227649` (yedi commit; origin ile aynı, temiz ağaç).
+
+## 1. Commit kararları
+
+| Commit | Kalem | Karar | Kanıt (bu oturumda koşuldu) | Not |
+| -- | -- | -- | -- | -- |
+| 8338590 | QA-F12 · 5+ otomatik fiyat yasağı | **PASS** | A12.5 | Dördüncüden sonraki grup toplamı tarifede reddediliyor; 80 € geri gelemez. |
+| de540da | QA-F13 · üretim kapısı | **PASS** | A13.3, A13.1–A13.5 | Boş, `prod`, `Production` ve diğer her değer kapalı; yalnız `development` / `test` açık. `dev:api` öneki POSIX kabuğu ister (N3). Gerçek IdP/CRS/Hermes kapıları bu commit'te değişmedi; hâlâ "her durumda red". |
+| a64facf | QA-F8 · tekrarlanan dekont | **PASS** | A5.5, A5.6, E3 | Eşzamanlı 4 yazım varyantında tek 201, üç 409. Farklı haftada aynı ödeyen + aynı referans da 409. Saklanan değer ham kalıyor (§5, CRS notu). |
+| e19805a | QA-F2 · mükerrer mahsup | **NEEDS REVIEW** | A3.8, E1, E2 | Eşzamanlı 6 aynı istekte tek 201. Ama referans normalize edilmiyor: `onay-dup-1` ve `ONAY-DUP-1` iki ayrı mahsup olarak kaydedildi (**N2**, koşuldu). |
+| eca5377 | QA-F1 · atanmış sefere geç katılım | **PASS (yerel)** | A2.6, E4, E5 | Eşzamanlı 3 geç rezervasyonda kapasite korunuyor (8 + 8 yolcu, ikinci sefer açıldı). Atanmış tedarikçi o sitenin doğrulanmamış kendi tarafıysa geç rezervasyon açık sefere gidiyor. Gerçek DB yarış koşulu **NOT_RUN** (MemoryStore sıralı). |
+| 6a48921 | QA-F7 + L2 · ilk kapanış sırası | **FAIL** | A4.4, A4.5, E6–E8, A4.12 | Kural doğru yönde, ama ilk faaliyet 4 haftadan eskiyse hiçbir hafta kapanamıyor (**N1**, P1). Yıl sınırı doğru (`2026-W53` → `2027-W01`). A1.3'ün `skip` gerekçesi doğru. |
+| 29979b4 | PKG-F05b · pay tutarsızlığı | **PASS** | "paket F05", E9 | Eski kayıtlar değişmiyor; istisna her hafta görünüyor; iptal tam kayıtlı payı ters çeviriyor. Otomatik düzeltme yok (H-24). |
+
+## 2. Gerçekten çalıştırılan testler
+
+| Koşum | Ortam | Sonuç |
+| -- | -- | -- |
+| `npm run typecheck` | Node 22, Linux | PASS |
+| `npm test`, HEAD `29979b4` | aynı | **184 test: 165 geçti, 0 kaldı, 18 todo, 1 skip.** Codex raporuyla aynı. |
+| `npm test`, bu belgeyle (iki yeni `todo` test eklendi) | aynı | 186 test: 165 geçti, 0 kaldı, 20 todo, 1 skip |
+| `AG_TEST_PG=1` şema probları | PostgreSQL 16.15, atılabilir küme | **38 test: 2 geçti, 0 kaldı, 36 todo.** P1–P16 ve C01–C05 reddedildi. Q01–Q35 hâlâ kabul ediliyor (QA-F4). p1 oturumu p2 satırlarını görüyor (QA-F3). Paket-01 şemaya dokunmadı. |
+| Sunucu erişilemezken `AG_TEST_PG=1` | — | Çıkış kodu 1. Yanlış "geçti" üretmiyor. |
+| Ek problar E1–E9 | geçici test dosyaları; koşum sonrası silindi | Aşağıda |
+
+Ek problar:
+
+| # | Ne | Sonuç |
+| -- | -- | -- |
+| E1 | 6 eşzamanlı aynı mahsup | 1 × 201, 5 × 409; tek kayıt |
+| E2 | `onay-dup-1` sonra `ONAY-DUP-1` | 201, 201 (**N2**) |
+| E3 | `TR-77 12`, `tr-7712`, `TR-7712`, `Tr-77 12 ` eşzamanlı; sonra farklı hafta | 1 × 201, 3 × 409; farklı hafta 409 |
+| E4 | atanmış sefere eşzamanlı 3 geç rezervasyon (4'er yolcu, kapasite 10) | sefer başına 8 yolcu; tedarikçi atanmış seferdeki geç rezervasyona geçti |
+| E5 | tedarikçi = geç rezervasyonun sitesinin doğrulanmamış kendi tarafı | geç rezervasyon atanmış sefere girmedi, tedarikçi atanmadı |
+| E6 | faaliyetsiz depo, W45 sonu + tam 4 hafta / + 4 hafta 1 ms | 201 / 409 `first_week_too_old` |
+| E7 | faaliyet 2026-W53, önce 2027-W01 | 409 `close_first_active_week:2026-W53`; sonra W53 ve W01 201 |
+| E8 | yalnız W45'te oluşturulmuş rezervasyon (tahsilat yok), önce W46 | 409 `close_first_active_week:2026-W45` |
+| E9 | kayıtlı 700/200/2100 (beklenen 600/300/2100) → W46 +20 € → W47 −20 € iade → W48 iptal | Eski kayıt nesnesi değişmedi. W46 deltası 400/200/1400, W47 −400/−200/−1400; iki haftada da `share_mismatch`. W48 ters kayıt −3000/−700/−200/−2100, toplam 0. |
+
+**NOT_RUN:** gerçek CRS PostgreSQL üzerinde yarış koşulu, gerçek IdP / 2FA, reklam API'leri, Hermes, ajan davranış testleri, insan bağımsız QA.
+
+## 3. Yeni bulgular
+
+| # | Önem | Commit | Bulgu | Kabul testi |
+| -- | -- | -- | -- | -- |
+| **PR1-N1** | **P1** | 6a48921 | 4 haftalık koruma, faaliyet olsa da uygulanıyor. İlk kapanış ilk faaliyetten 4 haftadan geç yapılırsa en erken hafta `first_week_too_old`, sonraki hafta `close_first_active_week` alıyor: hiçbir hafta kapanamıyor. Kodun yorumu korumayı "faaliyet yoksa" diye anlatıyor. | `A4.12` (`todo: PR1-N1 · Codex Paket-01b`) |
+| **PR1-N2** | P2 | e19805a | Mahsup referansı `OFS-<hafta>-<onay ref>` normalize edilmiyor; büyük/küçük harf farkıyla aynı yazılı onay iki mahsup olur. | `A3.13` (`todo: PR1-N2 · Codex Paket-01b`) |
+| PR1-N3 | P3 | de540da | `dev:api` betiği `NODE_ENV=development node …` POSIX kabuğu ister; Windows'ta çalışmaz. Mac/Linux için sorun yok. | — (gözlem) |
+| PR1-N4 | Gözlem | 29979b4 | Pay farkı kontrolü yalnız engellenmemiş ve tamamlanmış satırlarda çalışıyor. İtirazlı veya mükerrer şüpheli satırdaki fark, engel kalkınca görünür. Para hareketi yok; kabul edilebilir. | — |
+
+**PR1-N1 için en küçük düzeltme önerisi:** Faaliyet varsa yalnız `weekId === earliest` kabul edilsin, yaş sınırı uygulanmasın. 4 hafta koruması yalnız `earliest === undefined` iken çalışsın. Bu bir yerel korumadır; üretim saklama politikası değildir ve Owner kararı gerektirmez.
+
+**PR1-N2 için öneri:** `adjustment_reference` F8'deki `normalizeBankReference` ile aynı biçimde normalize edilerek karşılaştırılsın. Mahsup kaydı için `MemoryStore.appendAdjustments` içindeki benzersizlik de normalize değere baksın.
+
+## 4. Kalan güvenlik açıkları (Paket-01 sonrası)
+
+| Bulgu | Açık | Durum |
+| -- | -- | -- |
+| QA-F3 | Kiracı (site) bazında yetki yok; tek global yönetim anahtarı her siteyi görüyor ve değiştiriyor. DB'de RLS yok. | Paket-02 |
+| QA-F10 | Rezervasyon itirazı kararı ve mükerrer işaretinin kaldırılması 2FA, gerekçe ve aktör kaydı istemiyor; komisyonu serbest bırakıyor. | Paket-02 |
+| QA-F11 | Satış atfı taklit edilebilir `Origin` başlığına dayanıyor; Turnstile yanıtında alan adı karşılaştırılmıyor. | Paket-02 |
+| QA-F9 | Aynı tedarikçi makbuzu iki rezervasyona yazılabiliyor. | Paket-02 |
+| QA-F4 | Defter tablolarında 35 kural ihlali şemada kabul ediliyor. | Paket-03 (DB) |
+| QA-L5 | Arama belirteci idempotency kaydında düz metin. | Paket-02 düşük |
+| SEL-332 | Gerçek IdP ve 2FA yok; HTTP üzerinden 2FA isteyen işler kapalı (doğru davranış). | Güvenlik hattı |
+
+## 5. Skill tutarlılığı ve birleştirme durumu
+
+Karşılaştırılanlar: karar kaydı `config/policy-decisions.json` (paket V2.5 birebir), bu oturuma senkronlanan org skill'leri, repo adayı `skills/agos-consortium-settlement/SKILL.md` ve V2.5 paketindeki adaylar (izole çalışma alanında).
+
+Org skill SHA-256 ilk 8 hane (bu oturum, değişmedi): `agos-pricing-matrix` `86ef0045`, `agos-pool-finance` `9876d38a`, `agos-governance` `97c7a21f`. **Hiçbir aktif skill dosyasına yazılmadı.**
+
+### 5.1 Hâlâ aktif olan çelişkiler
+
+| # | Kural | Aktif org skill (eski) | Karar kaydı / kod | Öneri |
+| -- | -- | -- | -- | -- |
+| S-1 | 5+ yolcu fiyatı | `agos-pricing-matrix` satır 23: "5 = 80 €, +10 €/kişi" | `commercial.group_total_minor` yalnız 1–4; `open.manual_5plus_bounds = null`; kod 5. toplamı reddediyor (QA-F12) | Satır `LEGACY_BID_MARKUP` / tarihsel kayıt olarak işaretlensin; konsorsiyum için "5+ yalnız onaylı hat sınırı + 2FA" yazılsın. |
+| S-2 | Mahsup | `agos-pool-finance` satır 60: "Otomatik mahsup (Owner kararı) … tek yönde net tutar" | `T1_REFUND_NOT_AUTO_OFFSET`; D-F03 kodda brüt ve yönlü | Kural `LEGACY_DRIVER_LEDGER` kapsamına alınsın; konsorsiyum kapsamında "yazılı onay + 2FA olmadan netleşme yok" yazılsın. |
+| S-3 | Tedarikçi düzeyinde mahsup | `agos-governance` satır 40 | aynı | S-2 ile aynı ayrım; cümle konsorsiyum kapsamı dışında tutulsun. |
+| S-4 | ×1,30 teklif marjı | `agos-pricing-matrix` | Private/VIP'de AGOS payı 0; ×1,30 konsorsiyuma taşınmaz | Ayrı politika kimliği `LEGACY_BID_MARKUP` (değişiklik yok, yalnız kapsam etiketi). |
+
+S-1…S-3 V2 devrinde de bulunmuştu (`skills/ORG-SKILL-UPDATES-2026-11-03.md` S1–S10). Org skill'leri değişmediği için hâlâ geçerliler.
+
+### 5.2 Paket-01 sonrası skill'lerde eksik kalan kurallar
+
+Ne repo adayı ne paket adayı şu kuralları içeriyor:
+
+| Kural (kod) | Repo adayı | Paket `agos-consortium-settlement` | Öneri |
+| -- | -- | -- | -- |
+| `share_mismatch` istisnası, otomatik düzeltme yok (H-24) | yok | genel ("actual prior posted shares") | Repo adayına D-F05 altında bir madde. |
+| İlk kapanış en erken faaliyet haftasından başlar | yok | yok | **PR1-N1 düzeltilmeden yazılmaz.** Düzeltmeden sonra eklenir. |
+| Dekont referansı normalize edilerek tekilleştirilir | yok | genel ("source reference") | Repo adayına "mükerrer" maddesi. |
+| Aynı mahsup referansı bir kez | yok | yok | PR1-N2 düzeltmesinden sonra eklenir. |
+| 5+ toplam tarifede reddedilir | var | `agos-consortium-policy` var | Tutarlı. |
+| `NODE_ENV` yalnız `development`/`test` | var (satır 149, eski açıklama) | yok | Repo adayı satır 149 güncellenmeli. |
+
+**Birleştirme önerisi (uygulanmadı):**
+1. Paket-01b (N1, N2) Codex'te kapanır ve testler yeşile döner.
+2. Claude, repo adayına yukarıdaki dört kuralı ve satır 149'u ekleyen tek bir commit hazırlar. Üç yönlü birleştirme tabanı `96ebf0a` blob `451b53a…` korunur; V2.5 paketiyle 4 çakışma bilinmektedir (V2.5 ilk teslim §5).
+3. Org skill'leri için S-1…S-4 değişikliği yalnız öneri metni olarak kalır. Kurulum ayrı kapıdır: taban ölçümü + aday ölçümü + bağımsız inceleyici onayı (D §1).
+
+**Değerlendirme sonuçları:**
+- Referans hesaplama (paket doğrulayıcısı ve Python referansı) önceki turda 72/72 geçti. Bu, koddan bağımsız bir hesap olduğu için Paket-01'den etkilenmez.
+- Karar kaydı ile kod: `policy-decisions.test.ts` bu HEAD'de geçti.
+- Ajan davranış testi: **NOT_RUN** (78 senaryo; bütçe onayı H-14).
+
+## 6. Paket-01b (önce, küçük)
+
+| Kalem | Dosya | Kabul |
+| -- | -- | -- |
+| PR1-N1 ilk kapanış kilitlenmesi | `apps/api/src/service.ts` `closeWeek` | `A4.12` `todo` kaldırılır ve geçer; A4.4 ve A4.5 yeşil kalır |
+| PR1-N2 mahsup referansı normalizasyonu | `apps/api/src/service.ts` `createOffset`, `apps/api/src/store.ts` `appendAdjustments` | `A3.13` `todo` kaldırılır ve geçer; A3.8 yeşil kalır |
+
+Beklenen durum: 186 test, 167 geçti, 18 todo, 1 skip.
+
+## 7. Paket-02 şartnamesi
+
+Kurallar:
+- Her kalem ayrı commit. Kabul ölçütü: ilgili testin `todo` işareti kaldırılır ve test **assertion değişmeden** geçer.
+- Bir test yalnız fikstür veya harness değişikliğiyle geçebiliyorsa bu değişiklik commit mesajında ayrıca belirtilir ve inceleyiciye gösterilir.
+- Testi gevşetmek, silmek veya `skip` yapmak yasak.
+- Canlı sistem, gerçek müşteri verisi, ödeme, reklam API'si yok.
+
+### 7.1 QA-F3 · Uydu siteler arasında veri izolasyonu (FINANCE + SECURITY, P0)
+
+- **Sorun:** Tek global yönetim anahtarı her sitenin rezervasyonunu ve ekstresini görüyor, değiştiriyor. DB şemasında RLS yok.
+- **Kabul testleri:**
+  - `qa-independent/a06-cross-site.test.ts` A6.3 (site A, site B rezervasyonlarını okuyamaz), A6.4 (değiştiremez → 403), A6.5 (ekstrede yalnız kendi alacağı).
+  - `packages/db/src/schema-probes.test.ts` "QA-F3 (DB)": p1 oturumu p2 satırlarını görmez; defter tablolarında RLS açık ve zorunlu (`AG_TEST_PG=1` ile koşulur).
+  - **Uyarı:** A6.3–A6.5 bugün `x-site-id` başlığıyla "site adına" davranıyor. Yalnız başlığa göre süzmek testi geçirir ama izolasyon sağlamaz, çünkü aynı anahtar başlıksız istekle her şeyi görebilir. Bu yüzden şu iki ek test **zorunludur** (Paket-02'de yazılacak, assertion bu metinle aynı):
+    - A6.8: site kapsamlı kimlikle `x-site-id` başka siteye çevrilse de yanıt yalnız kendi sitesinin satırlarını içerir veya 403 döner.
+    - A6.9: site kapsamlı kimlik platform uçlarına (`/v1/admin/outbox`, başka sitenin kapanışı) erişemez → 403.
+- **Dosyalar:** `apps/api/src/http.ts` (kimlik → `Actor`), `apps/api/src/service.ts` (`Actor`'a `scope`; `listBookings`, `cancel`, `weekReport` süzme), `packages/db/migrations/` (yeni göç: `ENABLE` + `FORCE ROW LEVEL SECURITY`, `current_setting('ag.party_id')` politikaları).
+- **Önerilen çözüm:**
+  - `Actor` = `{ id, role, mfa, scope: { kind: "platform" } | { kind: "site", siteId, partyId } }`.
+  - Kapsam yalnız doğrulanmış kimlikten türer, istek başlığından türemez. Yerelde: site başına ayrı yerel anahtar (`AG_SITE_TOKENS` JSON).
+  - Servis katmanında her okuma ve yazma kapsamla süzülür. Kapsam dışı kayıt 404 (varlık sızdırmaz), kapsam dışı işlem 403.
+  - DB: ayrı göç dosyası; mevcut `0001` değişmez.
+- **Bağımlılık:** Gerçek kimlik SEL-332. Yerel anahtar modeli yalnız LOCAL_ONLY; üretim kapısı kapalı kalır.
+
+### 7.2 QA-F10 · Yönetici kimlik doğrulaması ve 2FA (SECURITY, P0)
+
+- **Sorun:** `resolveDispute` ve `clearDuplicate` 2FA, gerekçe ve aktör kaydı istemiyor; HTTP'deki statik anahtar komisyonu serbest bırakabiliyor.
+- **Kabul testleri:** `qa-independent/a07-a08-a12-price-2fa.test.ts` A8.3 ve A8.5. A8.4 **`todo` kalır** (H-21 kararı bekliyor).
+- **Dosyalar:** `apps/api/src/service.ts` (`resolveDispute`, `clearDuplicate`), `apps/api/src/http.ts` (ilgili uçlar `actor`'ı geçirir), `packages/core/src/booking.ts` (karar kaydı alanları).
+- **Önerilen çözüm:**
+  - İki fonksiyon da `actor` alır ve `#requireMfa(actor, ["admin", "finance_manager"])` çağırır.
+  - Gerekçe en az 5 karakter; `decided_by`, `decided_role`, `decided_at`, `reason` rezervasyona yazılır.
+  - HTTP'deki statik anahtar `mfa: false` taşıdığı için 403 `mfa_required` döner. Bu, mevcut K17 fiyat onayıyla aynı desen.
+- **Bağımlılık:** Gerçek 2FA SEL-332; yerel testte `MANAGER` aktörü kullanılır.
+
+### 7.3 QA-F9 · Aynı ödeme belgesinin birden fazla rezervasyonda kullanılması (FINANCE, P1)
+
+- **Sorun:** Aynı tedarikçinin aynı makbuz numarası iki rezervasyona tam tutarla yazılabiliyor; çift tahsilat görünür.
+- **Kabul testi:** `qa-independent/a05-duplicates.test.ts` A5.4.
+- **Dosyalar:** `apps/api/src/service.ts` `recordCollection` (satır ~529), `apps/api/src/store.ts`.
+- **Önerilen çözüm (varsayılan reddet):** Aynı tahsil eden + normalize referans başka bir rezervasyonda varsa 409 `reference_used_on_other_booking`. Normalizasyon F8 ile aynı fonksiyon.
+- **Açık karar (H-26):** Bir makbuz gerçekten birden fazla rezervasyonu kapsıyorsa (grup ödemesi) açık tahsis modeli gerekir: makbuz kaydı + rezervasyon başına tahsis, tahsislerin toplamı makbuz tutarını geçemez. Paket-02 yalnız reddi uygular; tahsis modeli karar gelince ayrı iş olur.
+
+### 7.4 QA-F11 · Reklam ve site kaynak atfı güvenliği (SECURITY + FINANCE, P1)
+
+- **Sorun:** Tarayıcı dışı bir istemci `Origin` başlığını taklit ederek rezervasyonu (ve gelecekteki %20 komisyonu) istediği siteye yazdırabiliyor. Turnstile doğrulamasında alan adı karşılaştırılmıyor.
+- **Kabul testi:** `qa-independent/a10-attribution.test.ts` A10.2. A10.1 ve A10.3–A10.4 yeşil kalır.
+- **Dosyalar:** `apps/api/src/main.ts` (`verifyHuman`), `apps/api/src/service.ts` (`submit`, satır ~169), `qa-independent/harness.ts` (sahte `verifyHuman`).
+- **Önerilen çözüm:**
+  - `verifyHuman(token, ip)` yerine `verifyHuman(token, ip) → { ok, hostname }`. Cloudflare siteverify yanıtındaki `hostname` talep edilen sitenin `domains` listesinde değilse 403 `attribution_not_verified`.
+  - Yerel modda (`TURNSTILE_SECRET` yok) belirteç zorunlu kalır. Sahte doğrulayıcı yalnız `local:<alan adı>` biçimindeki belirteci kabul eder; belirteçsiz istek reddedilir.
+  - **Harness değişikliği gerekir** (sahte doğrulayıcı alan adını tanır). A10.2'nin assertion'ı değişmez. Değişiklik commit mesajında belirtilir.
+  - Reklam tıklama kimlikleri (gclid/fbclid) atıf kanıtı sayılmaz; yalnız ölçüm verisidir. Reklam API'si yok.
+
+### 7.5 QA-F14 · Tahsil edilmiş ama tamamlanmamış rezervasyonların görünmesi (FINANCE, P1)
+
+- **Sorun:** Tedarikçi müşteriden para almış ama iş tamamlanmamışsa rezervasyon hiçbir ekstrede (kayıt, istisna, bakiye) görünmüyor.
+- **Kabul testi:** `qa-independent/a02-partial-collection.test.ts` A2.7.
+- **Dosyalar:** `packages/core/src/settlement.ts` (`ExceptionReason`, `exceptionReasons`, `OPEN_EXCEPTION_REASONS`), `apps/api/src/report-html.ts` (`REASON_TR`).
+- **Önerilen çözüm:**
+  - Yeni istisna `collected_not_completed`: iptal edilmemiş, hafta sonuna kadar net tahsilatı > 0, tamamlanma yok veya hafta sonundan sonra.
+  - **Durdurucu değil** ve pay üretmez (T2: tamamlanmadan pay yok). Tamamlanana kadar her hafta taşınır.
+  - Raporda "Tahsil edildi, transfer tamamlanmadı — tedarikçide müşteri parası" etiketi.
+- **Yan etki kontrolü:** W45 örnek raporu (`npm run report:sample`) değişirse fark ayrıca gösterilir.
+
+### 7.6 PKG-F04b · Onaylı nakitsiz kredi / iade işlemleri (FINANCE, P2)
+
+- **Sorun:** 30 € tahsil edildi, kalan 20 € için müşteriye onaylı bir hizmet kredisi verildi. Sistem bunu kaydedemiyor; müşteri borcu 20 € görünmeye devam ediyor.
+- **Kabul testi:** `packages/core/src/settlement.regression.test.ts` "paket F04: 30 € tahsil + onaylı 20 € nakitsiz hizmet kredisi → müşteri borcu 0".
+- **Dosyalar:** `packages/core/src/settlement.ts` (`SettlementLine.approved_credit_minor`, müşteri bakiyesi), `packages/core/src/booking.ts` (kredi notu kaydı), `apps/api/src/service.ts` (yeni `approveCustomerCredit`, 2FA), `apps/api/src/http.ts`.
+- **Önerilen çözüm:**
+  - Kredi notu: 2FA'lı yönetici, gerekçe ≥ 5 karakter, tekil referans (normalize), tutar ≤ kalan borç. Statik HTTP anahtarıyla 403 `mfa_required`.
+  - Müşteri borcu = fiyat − brüt tahsilat − onaylı kredi.
+  - **Komisyon tabanı değişmez:** pay yalnız gerçek nakit tahsilattan (T2). 30 € → 6/3/21.
+- **Açık karar (H-25):** Krediyi kim taşır (tedarikçi, satış sitesi, AGOS)? Karar gelene kadar kredi yalnız müşteri borcunu kapatır; taraflar arası hiçbir para kaydı üretmez.
+
+### 7.7 Önerilen sıra ve beklenen sonuç
+
+1. Paket-01b (N1, N2)
+2. QA-F10 (küçük, güvenlik)
+3. QA-F3 (en büyük; servis + DB göçü)
+4. QA-F14
+5. QA-F9
+6. QA-F11
+7. PKG-F04b
+
+Not: Owner sırası F3, F10, F9, F11, F14, F04b. F10'u öne almamın nedeni: F3'teki `Actor` kapsam değişikliği F10'un 2FA desenini kullanır ve F10 tek dosyada kalır. Owner aksini söylerse Owner sırası geçerlidir.
+
+Paket-02 bitince beklenen: A6.3–A6.5, A6.8, A6.9, A8.3, A8.5, A5.4, A10.2, A2.7 ve F04 testleri yeşil; DB QA-F3 testi yeşil. `todo` kalanlar: A8.4 (H-21), A4.11 (H-20), F02 (H-23), QA-F4 Q-probları (Paket-03), düşük bulgular.
+
+## 8. Paket-01b akran incelemesi (`954328c` → `8741de3`)
+
+Sabitlenen sürüm `8741de30af52ba651971b5bc814c54ab471be723`. `npm run check`: 186 test, 167 geçti, 0 kaldı, 18 todo, 1 skip; Codex raporuyla aynı. A4.12 ve A3.13 assertion değişmeden geçiyor.
+
+| Commit | Kalem | Karar | Kanıt |
+| -- | -- | -- | -- |
+| f2a5bd4 | PR1-N1 ilk kapanış kilitlenmesi | **FAIL (gerileme)** | A4.12 geçiyor; 10 hafta sonra W45 ve W46 kapanıyor; yalnız iptal edilmiş rezervasyon da faaliyet sayılıyor. **Ama** faaliyet varken ilk kapanış olarak faaliyetten önceki boş bir hafta (`2020-W01`) kabul ediliyor. Önceki sürümde bunu 4 hafta sınırı engelliyordu. Sonuç: W45'e ulaşmak için ~350 boş haftanın sırayla kapanması gerekir (PR1-N5). |
+| 8741de3 | PR1-N2 mahsup referansı | **PASS** | 4 eşzamanlı harf varyantından tek 201; eski küçük harfli kayıt yeni büyük harfli isteği engelliyor; farklı hafta ayrı mahsup (201). |
+
+**PR1-N5 kabul testi:** `A4.13` (`todo: PR1-N5 · Codex Paket-01c`). En küçük düzeltme: `earliest` tanımlıysa yalnız `weekId === earliest` kabul edilsin; `weekId < earliest` için 409 `close_first_active_week:<earliest>`.
+
+Gözlemler (karar gerektirmez, not):
+- PR1-N2 sonrası `written_approval_reference` büyük harfe çevrilerek saklanıyor; belgedeki özgün yazım kaybolur. Denetim için özgün metnin ayrı alanda saklanması önerilir (P3).
+- Aynı yazılı onay referansı aynı hafta için farklı taraflar arası ikinci mahsupta da 409 veriyor. Bir onay belgesinin tek mahsuba bağlanması tutucu ve kabul edilebilir; bir belge birden çok mahsubu kapsayacaksa Owner kararı gerekir.
+- 4 haftalık sınır yalnız boş defterde çalışıyor; LOCAL_ONLY. Üretim saklama politikası değildir; ayrıca Owner kararı gerektirmez.
+
+**PostgreSQL'de ileride zorunlu kısıtlar (bugün yalnız MemoryStore'da):**
+- `bank_receipt`: `UNIQUE (payer_id, upper(regexp_replace(bank_reference, '\s', '', 'g')))`.
+- `settlement_adjustment`: `UNIQUE (upper(adjustment_reference))`.
+- Haftalık kapanış: `SERIALIZABLE` işlem veya `pg_advisory_xact_lock` ile tek kapanış; `closed_week` üzerinde `UNIQUE (week_id)`.
+- Bunlar Paket-03 (QA-F4) kapsamında; `AG_TEST_PG=1` probları bunları doğrulayacak.
+
+## 9. Paket-01b ek doğrulama, PostgreSQL gereksinimleri ve ilk Paket-02 görevi
+
+**Sürüm:** origin `753f0e7` (Codex `8741de3` + A4.13 todo testi). Ek problar bu sürümde koşuldu; geçici dosyalar silindi.
+
+| Prob | Sonuç |
+| -- | -- |
+| Yıl geçişi: faaliyet 2026-W53, iki ay sonra önce 2027-W01 | 409 `close_first_active_week:2026-W53`; sonra W53 201, 2027-W01 201 |
+| Faaliyetsiz defter: W45 sonu + tam 4 hafta / + 4 hafta 1 ms / ~30 hafta | 201 / 409 `first_week_too_old` / 409 |
+| Faaliyet W45, 10 hafta sonra W45 ve W46 | 201, 201 (kilitlenme çözüldü) |
+| Faaliyet W45, ilk kapanış `2020-W01` | **201 (PR1-N5, gerileme)**; A4.13 `todo` |
+| Mahsup: 4 eşzamanlı harf varyantı / eski küçük harfli kayıt + yeni büyük harf / farklı hafta | 1×201 + 3×409 / 409 / 201 |
+
+**Commit kararları değişmedi:** `f2a5bd4` FAIL (PR1-N5), `8741de3` PASS.
+
+### 9.1 Gerçek PostgreSQL'de gereken kontroller (Paket-03, QA-F3/F4)
+
+Bugün bu kontrollerin hepsi yalnız uygulama katmanında ve MemoryStore'da. CRS PostgreSQL'e geçmeden önce şemada da olmalı.
+
+**Benzersizlik:**
+
+| Tablo | Kısıt | Neden |
+| -- | -- | -- |
+| `bank_receipt` | `UNIQUE (payer_id, upper(regexp_replace(bank_reference, '\s', '', 'g')))` | QA-F8 |
+| `settlement_adjustment` | `UNIQUE (upper(adjustment_reference))` | QA-F2, PR1-N2 |
+| `money_event` (tahsilat) | `UNIQUE (collector_party_id, upper(regexp_replace(reference, '\s', '', 'g')))` | QA-F9. H-26 "çoklu tahsis" derse yerine tahsis tablosu + toplam kontrolü |
+| `settlement_week` (kapanış) | `UNIQUE (week_id)` | çift kapanış |
+| `settlement_entry` | `UNIQUE (booking_id, week_id)` | haftada tek fark kaydı |
+| `statement_dispute` | `UNIQUE (dispute_ref)` | `ITZ-<hafta>-NNNN` |
+
+**İşlem ve eşzamanlılık:**
+- Kapanış ve mahsup yazımı `SERIALIZABLE` veya `pg_advisory_xact_lock(hashtext(week_id))` ile.
+- Kapanış sırası kuralı (ilk kapanış = en erken faaliyet haftası; sonra `next_week_id`) bir `BEFORE INSERT` tetikleyicisiyle de doğrulanır; uygulama tek savunma olmaz.
+- Kapanmış haftaya ait `settlement_entry`, `bank_receipt` ve `settlement_adjustment` satırları için `UPDATE`/`DELETE` reddeden tetikleyici (değişmezlik).
+
+**Yetki (RLS ve roller):**
+- Defter tablolarında `ENABLE` + `FORCE ROW LEVEL SECURITY`. Politika: `selling_party_id = current_setting('ag.party_id')` veya `supplier_id = current_setting('ag.party_id')`. Platform rolü ayrı ve 2FA'lı oturumla.
+- Uygulama rolü tablo sahibi olmaz; `BYPASSRLS` yok. Göç rolü ile çalışma rolü ayrı.
+- Mahsup, itiraz kararı, mükerrer temizleme ve kredi notu satırlarında `actor_id`, `actor_role`, `mfa_verified_at`, `reason` alanları `NOT NULL` (bugün Q21 probu bu alanların olmadığını gösteriyor).
+- Bunların kabul ölçütü mevcut `AG_TEST_PG=1` probları: Q01–Q35, Q21 ve "QA-F3 (DB)".
+
+### 9.2 Codex'e ilk Paket-02 görevi: QA-F10 · itiraz kararı ve mükerrer temizlemede 2FA
+
+**Önkoşul:** Paket-01c (PR1-N5, A4.13) ayrı commit olarak önce kapanır.
+
+**Kapsam (tek commit):**
+- `apps/api/src/service.ts`:
+  - `resolveDispute(actor, ref, input)` ve `clearDuplicate(actor, ref, input)` imzaları `actor` alır.
+  - İkisi de `#requireMfa(actor, ["admin", "finance_manager"])` çağırır.
+  - `reason` en az 5 karakter, `redactPii` uygulanır.
+  - Rezervasyona `disputeDecidedBy`, `disputeDecidedRole`, `disputeDecisionReason` (ve mükerrer için `duplicateClearedBy`, `duplicateClearedRole`, `duplicateClearReason`, `duplicateClearedAt`) yazılır; outbox olayına aktör kimliği eklenir.
+- `apps/api/src/http.ts` satır 184–187: iki uç da `actor`'ı geçirir. Statik anahtar `mfa: false` taşıdığı için yanıt 403 `mfa_required`. K17 fiyat onayı ve mahsupla aynı desen.
+- `packages/core/src/booking.ts`: yeni alanlar (isteğe bağlı, geriye uyumlu).
+
+**Kabul testleri:**
+- `qa-independent/a07-a08-a12-price-2fa.test.ts` A8.3 ve A8.5: `todo` kaldırılır, assertion değişmeden geçer.
+- A8.4 `todo` kalır (H-21: haklı itirazın mali etkisi kararı yok; bu görev mali sonucu değiştirmez).
+
+**Değişmesi gereken mevcut testler (açıkça bildirilmeli):**
+- `apps/api/src/api.test.ts` satır 460: statik anahtarla `clear-duplicate` → **200** bekliyor.
+- `apps/api/src/api.test.ts` satır 476: statik anahtarla `resolve-dispute` → **200** bekliyor.
+- Bu iki assertion bugünkü güvensiz davranışı kodluyor ve A8.3/A8.5 ile doğrudan çelişiyor. Gevşetme değil sıkılaştırma: beklenti **403 `mfa_required`** olur. Aynı testlerdeki sonraki adımlar (mükerrerin hesaba girmesi, itirazın çözülmesi) `MANAGER` aktörüyle servis çağrısına taşınır, böylece olumlu yol da test edilir.
+- `qa-independent/a04-weekly-close.test.ts` satır 72 ve A8.4'teki `resolveDispute(ref, …)` çağrıları yeni imzaya `MANAGER` ile güncellenir; assertion değişmez.
+- Commit mesajı bu dört çağrı değişikliğini tek tek listeler; inceleyici her birini ayrıca onaylar.
+
+**Beklenen durum:** 187 test; PR1-N5 + QA-F10 sonrası 170 geçti, 16 todo, 1 skip.
+
+**Kapsam dışı:** gerçek IdP / 2FA (SEL-332), kiracı kapsamı (QA-F3, sıradaki görev), haklı itirazın mali etkisi (H-21).
+
+### 9.3 Açık Owner kararları (Paket-02'yi etkileyen)
+
+| Karar | Etkilediği kalem | Karar gelene kadar uygulanacak (kesinleştirme değil) |
+| -- | -- | -- |
+| **H-25** · nakitsiz krediyi kim taşır | PKG-F04b | Kredi yalnız müşteri borcunu kapatır; taraflar arası para kaydı üretmez; komisyon tabanı gerçek nakit. |
+| **H-26** · bir makbuz birden çok rezervasyona tahsis edilebilir mi | QA-F9 | Varsayılan red (409). Tahsis modeli yazılmaz. |
+| H-21 · haklı itirazın mali etkisi | QA-F10 (A8.4) | A8.4 `todo` kalır. |
+| H-20 · 7 takvim günü sayımı | A4.11 | `todo` kalır. |
+| H-23 · küsurat dağıtımı | D-F02 | Algoritma değişmez. |
+
+### 9.4 Skill birleştirme planının doğrulanması
+
+- Org skill SHA-256 (bu tur yeniden hesaplandı): `agos-pricing-matrix` `86ef0045`, `agos-pool-finance` `9876d38a`. Değişmedi; hiçbir aktif skill dosyasına yazılmadı.
+- Üç yönlü birleştirme provası (geçici çalışma alanında): taban `451b53a` (`96ebf0a`'daki aday), bizim taraf repo adayı, karşı taraf V2.5 paketi. `git merge-file --diff3`: **4 çakışma**, önceki turla aynı. Repo'ya uygulanmadı.
+- Plan geçerli. Sıra:
+  1. PR1-N5 ve QA-F10 kapanır.
+  2. 4 çakışma elle çözülür; Paket-01 kuralları (§5.2) eklenir; tek commit.
+  3. Taban ölçümü (eski org skill) ve aday ölçümü (H-14 bütçesi).
+  4. Bağımsız inceleyici onayı.
+  5. Org kurulumu ayrı kapı; Owner GO.
+
+## 10. Paket-01c ve QA-F10 akran incelemesi (`3839bc7` → `66d5ecb`)
+
+Sabitlenen sürüm `66d5ecba2c481dc7a3345dff32d4deff38c857a8`. `npm run check`: **188 test: 171 geçti, 0 kaldı, 16 todo, 1 skip**, Codex raporuyla aynı. Bu turda eklenen iki `todo` testle: 190 test, 171 geçti, 18 todo, 1 skip.
+
+| Commit | Kalem | Karar | Kanıt |
+| -- | -- | -- | -- |
+| de0b8f5 | Paket-01c / PR1-N5 | **PASS** | A4.13, A4.12, A4.4, A4.5 geçiyor. W44 tarihli dekont varken önce W44, sonra W45 kapanıyor. **A4.8 beklentisi değişti:** boş W52'nin W53 faaliyetinden önce kapanması artık 409. Bu, A4.13 ile aynı kuralın tutarlı uygulanması; gevşetme değil sıkılaştırma. Kabul ediyorum; W52→W53 geçişi `nextWeekId` assertion'ıyla hâlâ test ediliyor. |
+| 66d5ecb | Paket-02 / QA-F10 | **NEEDS REVIEW** | A8.3, A8.5, A8.6 geçiyor. HTTP gövdesinde ve başlıklarda sahte aktör / `mfa: true` → 403 `mfa_required` (aktör sunucuda kuruluyor). 3 eşzamanlı karar → 1×200, 2×409. Yalnız boşluktan oluşan gerekçe → 422. Gerekçedeki e-posta ve telefon maskeleniyor. `api.test.ts`'teki iki 200 → 403 değişikliği gerçek sıkılaştırma; olumlu yol 2FA'lı yöneticiyle ayrıca test ediliyor. **Ama** denetim geçmişi korunmuyor (PR2-N1). |
+
+### Yeni bulgular
+
+| # | Önem | Bulgu | Kabul testi |
+| -- | -- | -- | -- |
+| **PR1-N6** | P2 | İlk kapanış kuralı dekontları "faaliyet" sayıyor ve dekontun `paidAt` / `weekId` değerleri sınırlanmıyor. Tek bir yanlış girilmiş dekont (ör. `paidAt` 2016 veya `weekId` 2020-W01) ilk kapanışı o haftaya zorluyor: yüzlerce boş haftanın sırayla kapanması gerekir. Koşuldu: `close(W45)` → 409 `close_first_active_week:2016-W09` ve `:2020-W01`. 6a48921'den beri var; de0b8f5'in gerilemesi değil. | `A4.14` (`todo: PR1-N6 · Codex Paket-01d`) |
+| **PR2-N1** | P2 | Aynı rezervasyonda ikinci itiraz kararı ilk kararın denetim kaydını (`disputeResolutionAudit`) üzerine yazıyor. İkinci kararın `audit.booking_dispute_resolved` outbox olayı `dedupeKey = type:bookingId` yüzünden sessizce düşüyor. Sonuç: ilk kararın gerekçesi kayboluyor, ikinci kararın olayı hiç yazılmıyor. | `A8.7` (`todo: PR2-N1 · Codex Paket-02`) |
+| PR2-N2 | Gözlem | İkinci itiraz açıkken rezervasyonda önceki kararın denetim kaydı duruyor. PR2-N1 çözülürken geçmiş listesi olarak tutulursa kendiliğinden çözülür. | — |
+
+**Önerilen en küçük düzeltmeler:**
+- **PR1-N6:** `addReceipt` gelecekteki `paidAt` değerini ve rezervasyon faaliyeti başlamadan önceki haftaları reddetsin (`weekId` en erken rezervasyon haftasından eski olamaz; `paidAt` ile `weekId` arasında makul bir fark sınırı, ör. 8 hafta). Alternatif: ilk kapanış için yalnız rezervasyon faaliyeti sayılsın; dekontlar eşleşmeyen dekont olarak raporlansın. İkisi de para kuralı değiştirmez.
+- **PR2-N1:** Denetim alanı tek kayıt yerine ekleme-yalnız liste (`…AuditHistory: SensitiveDecisionAudit[]`). Denetim olaylarının `dedupeKey`'i karar kimliğini içersin (ör. `audit.booking_dispute_resolved:<bookingId>:<at>`).
+
+**Yerel aktör uyarısı (Codex'in notuyla aynı):** `Actor.mfa = true` servis testlerinde güvenilir çağıranın temsili. Gerçek IdP iddiası, imzalı oturum veya 2FA zamanı değildir. SEL-332 bitmeden hiçbir 2FA'lı finans işlemi HTTP'de açılmamalı. Bugün HTTP'de hepsi 403; doğru.
+
+**Kapsam dışında kalan 2FA'sız finans uçları (kayıt için):** statik anahtarla `cancel`, `refund`, `collection`, `/v1/admin/receipts` ve haftalık kapanış hâlâ 2FA istemiyor. Bunlar QA-F10'un kapsamında değildi. Kişi ve rol modeli (H-12) ve SEL-332 ile birlikte ele alınmalı; QA-F3'te `Actor` kapsamı eklenirken bu uçlar da aktör alacak şekilde hazırlanmalı.
+
+## 11. Sıradaki Paket-02 görevi: QA-F3 · kiracı izolasyonu ve RLS
+
+**Önkoşul:** PR1-N6 (A4.14) ve PR2-N1 (A8.7) ayrı küçük commit'ler olarak kapanır.
+
+**İlke:** Yetki yalnız sunucuda doğrulanmış kimlikten türer. `Origin`, `x-site-id` gibi istemci başlıkları, alan adı ve satış kaynağı atfı hiçbir zaman yetki vermez; en fazla zaten sahip olunan yetkiyi daraltır.
+
+**Kabul testleri:**
+- Mevcut: A6.3, A6.4, A6.5 (`qa-independent/a06-cross-site.test.ts`), "QA-F3 (DB)" (`packages/db/src/schema-probes.test.ts`, `AG_TEST_PG=1`).
+- Yeni, Paket-02'de yazılır (assertion bu metinle aynı):
+  - **A6.8:** site kapsamlı kimlik `x-site-id` başlığını başka siteye çevirse de yanıtta yalnız kendi sitesinin satırları bulunur veya 403 döner. Başlıksız istek de yalnız kendi sitesini görür.
+  - **A6.9:** site kapsamlı kimlik platform uçlarına (`/v1/admin/outbox`, `/v1/admin/receipts`, haftalık kapanış, başka sitenin ekstresi) erişemez → 403.
+  - **A6.10:** başka sitenin rezervasyon referansı tahmin edilse bile site kapsamlı kimlik için 404 (varlık sızdırmaz).
+- Platform kimliğiyle mevcut tüm testler değişmeden geçer.
+
+**Dosyalar:** `apps/api/src/http.ts`, `apps/api/src/service.ts` (`Actor.scope`), `apps/api/src/main.ts` (yerel site anahtarları), `qa-independent/harness.ts` (site kimliğiyle istek yardımcıları), yeni göç `packages/db/migrations/0002_tenant_rls.sql`.
+
+**PostgreSQL en az yetki (göç adayı; canlı veritabanına uygulanmaz):**
+- Roller: `ag_owner` (tablo sahibi, yalnız göç), `ag_app` (uygulama; `NOBYPASSRLS`, tablo sahibi değil), `ag_platform` (2FA'lı platform işlemleri), `ag_readonly` (rapor).
+- Defter ve rezervasyon tablolarında `ENABLE` + `FORCE ROW LEVEL SECURITY`.
+- Politika: `current_setting('ag.party_id', true)` boşsa hiç satır yok (kapalı varsayılan); doluysa `selling_party_id` veya `supplier_id` eşleşmeli. Platform politikası yalnız `ag_platform` rolünde.
+- `ag_app` için `DELETE` yetkisi yok; kapanmış hafta satırlarına `UPDATE` tetikleyiciyle reddedilir.
+- Kabul: "QA-F3 (DB)" probu (p1 oturumu p2'nin para hareketini ve dekontunu göremez; RLS açık ve zorunlu).
+
+**Kapsam dışı:** gerçek IdP (SEL-332), staging veritabanı (SEL-329), canlı göç.
+
+**Sonraki sıra (değişmedi):** QA-F14 → QA-F9 (H-26) → QA-F11 → PKG-F04b (H-25).
+
+## 12. PR1-N6, PR2-N1 ve QA-F3 akran incelemesi (`6f29d50` → `afaac11`)
+
+Sabitlenen sürüm `afaac11eb5644687a0c68ffd0ddf459ed83255aa`.
+
+**Bu oturumda koşulanlar:**
+- `npm run check`: **193 test: 179 geçti, 0 kaldı, 13 todo, 1 skip** (Codex ile aynı).
+- PostgreSQL 16.15, atılabilir yerel küme (ağ yok, gerçek veri yok): `AG_TEST_PG=1 AG_TEST_PG_ISOLATED=YES` ile `tenant-rls.test.ts` + `schema-probes.test.ts`: **42 test: 7 geçti, 0 kaldı, 35 todo.** RLS testleri 4/4; "QA-F3 (DB)" geçti; P1–P16 ve C01–C05 reddedildi. **Q01–Q35 (QA-F4) hâlâ todo; geçti sayılmaz.** Küme sonra durduruldu.
+- Test dosyalarında **assertion değişikliği yok**; yalnız `todo` işaretleri kaldırıldı. Fikstür değişikliği yok.
+
+| Commit | Kalem | Karar | Kanıt ve not |
+| -- | -- | -- | -- |
+| 759580a | PR2-N1 denetim geçmişi | **PASS** | A8.7 geçiyor. Her karar `disputeResolutionHistory` listesine ekleniyor; outbox anahtarı karar sırasıyla ayrışıyor. Tekrar gönderim `no_open_dispute` (409). Yerel defter kalıcı CRS değildir. |
+| 768667a | PR1-N6 dekont tarihi | **NEEDS REVIEW** | A4.14 geçiyor; 6 hafta geç gelen gerçek ödeme (faaliyetli hafta) kabul ediliyor. **Ama** kendi içinde tutarlı eski dekont (`weekId` 2020-W01, `paidAt` 2020-01-01) kabul ediliyor ve ilk kapanışı 2020-W01'e zorluyor (**PR1-N7**, A4.15 `todo`). 28 gün eşiği yalnız `paidAt − hafta sonu` farkına bakıyor; haftanın **bugüne göre** yaşına bakmıyor. Gelecek tarihli dekont da kabul ediliyor (P3). 28 gün yerel bir eşik; finansal saklama politikası değil. |
+| fb3df6a | QA-F3 API | **PASS (yerel)** | A6.3, A6.4, A6.8, A6.9, A6.10 geçiyor. Site anahtarıyla `Origin` ve `x-site-id` kapsamı değiştirmiyor; outbox ve platform uçları 403; bilinmeyen `x-site-id` 403; site anahtarıyla gövdede `raisedBy: p-003` gönderilen ekstre itirazı `p-001` adına kaydediliyor. Site anahtarları sentetik ve yalnız yerel. |
+| 794daff | QA-F3 ekstre | **PASS (yerel)** | A6.5 ve A6.8 ekstre kısmı geçiyor. Kendi tarama probum: rakip site rezervasyonu, rakip tedarikçi, rakip dekont, eşleşmeyen dekont, rakip itiraz notu, rakip mahsup ve rakip ekstre itirazı varken partner-site W45 ve W46 ekstrelerinde **sızıntı yok**. `supplier_statements`, `agos_fees` ve `unmatched_receipts` site görünümünde boş. Platform raporu değişmedi (`weekReport` aynı yol). |
+| afaac11 | QA-F3 DB | **PASS (aday)** | 12 tabloda `ENABLE` + `FORCE RLS`; tablolar `ag_owner`'a ait; `ag_app` `NOBYPASSRLS`, `DELETE` yok, `ag_platform` üyeliği yok; kapsamsız oturum 0 satır; sahte `app.scope=platform` 0 satır. Yalnız atılabilir veritabanında. |
+
+**Yeni bulgular ve notlar:**
+
+| # | Önem | Bulgu | Kabul |
+| -- | -- | -- | -- |
+| **PR1-N7** | P2 | Eski ama kendi içinde tutarlı dekont ilk kapanışı yıllar öncesine zorluyor (768667a eksik kalan durum). Öneri: faaliyetsiz haftaya ait dekontta `now − hafta sonu > 28 gün` ise reddet; ya da ilk kapanış hesabında dekontları sayma, eşleşmeyen dekont olarak raporla. | `A4.15` (`todo: PR1-N7`) |
+| PR1-N8 | P3 | Gelecek tarihli `paidAt` kabul ediliyor. | gözlem |
+| QA-F3-N1 | P3 | `listBookingsForActor` önce tüm sitelerden son 200 kaydı alıp sonra süzüyor; yoğun bir başka site, sitenin eski kayıtlarını listeden düşürebilir. Sızıntı değil, eksik liste. Sayfalama ve kapsamlı sorgu CRS adaptöründe. | gözlem |
+| QA-F3-N2 | Tasarım | `ag_app` yalnız okuyabiliyor; yazma `ag_platform` gerektiriyor ve ona geçiş yok. Uygulamanın yazma yolu (doğrulanmış ağ geçidi + kapsamlı bağlantı) SEL-331/332 tasarımında çözülmeli. `app.party_id` kriptografik kimlik değil; bağlantıyı ele geçiren onu ayarlayabilir. | SEL-332 |
+| QA-F3-N3 | Tasarım | `ag_app` `LOGIN … PASSWORD NULL`: yerel `trust` doğrulamasında parolasız giriş. Atılabilir küme için kabul; staging ve üretimde yasak. | SEL-329 |
+| QA-F3-N4 | Kapsam | `partner`, `site`, `subscription_invoice` gibi kayıt tablolarına hiçbir role izin verilmedi (platform dahil). Platform ekranları için ayrı izin gerekecek. | sonraki DB paketi |
+
+**Durum:** 194 test (A4.15 eklendi): 179 geçti, 0 kaldı, 14 todo, 1 skip.
+
+**Sıradaki iş:**
+1. Paket-01e: PR1-N7 (A4.15), küçük tek commit.
+2. Paket-02 devam: **QA-F14** (tahsil edilmiş ama tamamlanmamış rezervasyonun görünmesi, A2.7). Şartname §7.5.
+3. Sonra QA-F9 (H-26), QA-F11, PKG-F04b (H-25). QA-F4 DB kısıtları (35 prob) ayrı paket.
+
+### 12.1 Ek saldırgan kontroller (aynı sürüm, kararlar değişmedi)
+
+**PostgreSQL rol geçişleri** (atılabilir küme; 0001 + fikstür + 0002; sonra silindi):
+
+| Deneme | `ag_app` sonucu |
+| -- | -- |
+| Doğrudan `ag_app` girişiyle `SET SESSION AUTHORIZATION postgres` | reddedildi |
+| `SET ROLE` ag_owner / ag_platform / ag_readonly / postgres | dördü de reddedildi |
+| `ALTER TABLE booking DISABLE` / `NO FORCE ROW LEVEL SECURITY`, `DROP POLICY` | "must be owner" |
+| `CREATE TABLE` / `SECURITY DEFINER` fonksiyon | şema yetkisi yok |
+| `site`, `partner`, `outbox_event`, `idempotency_key`, `settlement_week` okuma | yetki yok |
+| Kapsamsız `SELECT` / `COPY booking` | 0 satır |
+| p1 kapsamında p2 satırları | 0 |
+| p1 kapsamında `UPDATE booking` | yetki yok |
+| `app.scope=platform` (ag_app) | yetki yok |
+| `app.party_id=p2` olarak ayarlama | **p2 satırlarını görüyor (beklenen)**: GUC kimlik değildir; değeri yalnız doğrulanmış ağ geçidi ayarlamalı (QA-F3-N2, SEL-331/332) |
+
+Not: Süper kullanıcı oturumunda `SET SESSION AUTHORIZATION ag_app` sonrası tekrar `postgres`'e dönülebiliyor; bu yalnız test düzeneğinin özelliği. Doğrudan `ag_app` girişinde reddedildi.
+
+**Müşteri verisi:** yönetim listesi (`#adminView`) müşteri adı, e-posta veya telefon döndürmüyor; site kimliği ve platform için aynı. Ortak seferde site kimliği yalnız kendi rezervasyonlarını görüyor. DB'de site, kendi rezervasyonlarının müşteri kolonlarını görebilir (beklenen); tedarikçi politikası bilerek kaldırıldı.
+
+**Sıradaki iş:** PR1-N7 (A4.15), sonra QA-F14: [`QA-F14-TAHSIL-EDILMIS-TAMAMLANMAMIS.md`](./QA-F14-TAHSIL-EDILMIS-TAMAMLANMAMIS.md) (A2.7, A2.8, A2.10; A2.9 koruma testi).
+
+## 13. PR1-N7 ve QA-F14 akran incelemesi (`f8227bd` → `7971f7f`)
+
+Sabitlenen sürüm `7971f7fcc3d3c081912719526d2f801c6f4da67a`. `npm run check`: **197 test: 184 geçti, 0 kaldı, 12 todo, 1 skip** (Codex ile aynı). Test dosyalarında yalnız `todo` kaldırılmış; assertion değişikliği yok. `npm run report:sample` sonrası izlenen örnek dosyalar değişmedi (git diff boş). PostgreSQL bu turda koşulmadı; bu iki commit şemaya dokunmuyor.
+
+| Commit | Karar | Kanıt |
+| -- | -- | -- |
+| 1c09815 PR1-N7 | **PASS** | A4.15, A4.14, A4.12, A4.13 geçiyor. Kapanmış W45 için 7 hafta sonra gelen dekont → 201. Faaliyetli W45 için 10 hafta sonra → 201. Boş W40 (5 hafta önce) yazım hatası → 422 `unverified_historical_receipt_week`. 28 gün eşiği yerel bir sezgi; Owner veya mali müşavir onaylı bir politika değildir. |
+| 7971f7f QA-F14 | **PASS** | A2.7, A2.8, A2.10 geçiyor; A2.9 koruması yeşil. Sıfıra kadar iade → istisna yok. Çoklu tahsilat → tek satır, net 2500. Kısmi iade → net 3000. İtiraz → `disputed` + `collected_not_completed`. Hiçbirinde pay kaydı veya müşteri bakiyesi yok. Görülen tek borç/itiraz satırı mevcut `booking_dispute` kaydı (F14 öncesinden). |
+
+Notlar (karar gerektirmez):
+- PR1-N8 (P3, açık): gelecek tarihli dekont (2027-W20) hâlâ kabul ediliyor.
+- PR1-N9 (P3): son 28 gün içindeki boş bir hafta için dekont kabul ediliyor ve ilk kapanışı en fazla ~4 hafta geriye çekebiliyor (ör. W43). Sınırlı; kabul edilebilir.
+- F14-N1 (P3, sunum): fazla tahsil edilmiş ve tamamlanmamış işte iki istisna satırı aynı tutarı (8000) gösteriyor. Okuyan aynı parayı iki kez saymamalı; raporda tek satırda birleştirme ileride düşünülebilir.
+
+**Sıradaki iş:** QA-F9: [`QA-F9-MAKBUZ-TAHSIS.md`](./QA-F9-MAKBUZ-TAHSIS.md). A5.4, A5.7, A5.9 `todo`; A5.8 koruma testi. Ardından QA-F11, sonra PKG-F04b (H-25).
+
+## 14. QA-F9 akran incelemesi (`f457d35` → `fe14851`)
+
+Sabitlenen sürüm `fe1485139a410797f807493a0c95dfc1c20c37b1`. `npm run check`: **202 test: 190 geçti, 0 kaldı, 11 todo, 1 skip** (Codex ile aynı). A5.4, A5.7, A5.9 assertion'ları değişmeden geçiyor; A5.8 koruması yeşil; A5.10 ve A5.11 Codex'in ek testleri. `report:sample` sonrası örnek dosyalar değişmedi. PostgreSQL koşulmadı (şema değişmedi).
+
+**Karar: `fe14851` PASS (yerel).**
+
+| Saldırgan kontrol | Sonuç |
+| -- | -- |
+| HTTP üzerinden 3 eşzamanlı istek, `HTTP-1` / `http-1` / `Http-1`, üç farklı rezervasyon | 1 × 200, 2 × 409 `reference_used_on_other_booking` |
+| İptal edilmiş veya tam iade edilmiş rezervasyonun makbuzu yeni rezervasyonda | 409 (A5.10) |
+| Private iş: site tahsilatı `SLIP-S1`, aynı numara tedarikçi tahsilatı | 200 / 200 (taraflar ayrı) |
+| Aynı site aynı numarayı başka rezervasyonda (`slip-s1`) | 409 |
+| Tahsilattan sonra tedarikçiyi değiştirme (makbuz anahtarını kaydırma denemesi) | 409 `collection_already_recorded` (değişiklik zaten yasak) |
+| Aynı rezervasyonda harf varyantı | 409 `reference_already_recorded` |
+
+**`MemoryStore` değişikliği:** Eski `#inTx` boole değeri, bir işlem beklerken gelen **başka bir isteği** iç içe çağrı sanıp kuyruğu atlatıyordu. Bu gerçek bir yerel yarıştı (kodu okuyarak doğruladım; önceki eşzamanlılık problarımın geçmesi bu yarışın tetiklenmediği sıralamalardandı). `AsyncLocalStorage` ile yalnız aynı işlemin içinden gelen çağrı yeniden girer; diğerleri sıraya girer. A5.11 sıralamayı doğruluyor. Geri alma yalnız dış işlemde (önceki gibi). Beklenmeyen alt görev, işlem bittikten sonra çağırırsa sıraya girer (kilitlenme yok). Bu yalnız yerel depo içindir; PostgreSQL yalıtımı hakkında bir şey kanıtlamaz.
+
+Notlar (P3): makbuz kontrolü tüm rezervasyonları tarıyor (yerelde sorun değil); kalıcı garanti Paket-03'teki `collection_slip` benzersiz kısıtında. **H-26 açık**; tahsis modeli yazılmadı.
+
+**Sıradaki iş: QA-F11** · [`QA-F11-SATIS-KAYNAGI.md`](./QA-F11-SATIS-KAYNAGI.md). A10.2 `todo`; A10.8 yeni koruma testi (pazarlama alanları atıf değiştirmiyor; bugün geçiyor).
+
+### 14.1 QA-F9 ek kontroller (aynı sürüm, karar değişmedi: PASS)
+
+**`MemoryStore` / `AsyncLocalStorage` zamanlama probları** (geçici test; silindi):
+
+| Senaryo | Sonuç |
+| -- | -- |
+| İşlemden taşan beklenmeyen alt görev, başka işlem etkinken `transaction` çağırıyor | Sıraya giriyor (A, B-start, B-end, child) |
+| Etkin işlem içinde `setTimeout` geri çağrısından iç içe çağrı | Yeniden giriyor; kilitlenme yok |
+| İç içe yazımdan sonra dış işlem hata fırlatıyor | Tüm yazımlar geri alındı; kuyruk çalışmaya devam ediyor |
+| 50 eşzamanlı oku-değiştir-yaz | Sonuç 50 (tam sıralı) |
+
+Yeni yarış bulunmadı. Bu sonuçlar yalnız yerel depo içindir.
+
+**PostgreSQL için gerekenler (Paket-03; özet):**
+- `collection_slip (collector_party_id, reference_norm)` benzersiz; tahsilat olayı makbuza bağlı. H-26'ya göre `UNIQUE (slip_id)` ya da tahsis tablosu + toplam ≤ makbuz tutarı (QA-F9 §4a).
+- Tahsilat yazımı tek işlemde; benzersiz kısıt ihlali 409'a çevrilir. Uygulama taraması tek savunma olmaz.
+- `READ COMMITTED` altında da benzersiz indeks yarışı keser; tahsis toplamı kontrolü için `SELECT … FOR UPDATE` makbuz satırında veya `SERIALIZABLE`.
+- Olay tabloları ekleme-yalnız (mevcut tetikleyiciler); iade makbuzu serbest bırakmaz.
+- RLS: makbuz yalnız tahsil eden tarafa ve platforma görünür.
+
+**QA-F11 şartnamesine ek:** başlık saldırıları ve belirteç ayrıntıları ([§4a](./QA-F11-SATIS-KAYNAGI.md)).
+
+## 15. QA-F11 akran incelemesi (`d14d879` → `f6d5662`)
+
+Sabitlenen sürüm `f6d566241157cf7a7e7779df452196aa1f0b77fc`. `npm run check`: **212 test: 201 geçti, 0 kaldı, 10 todo, 1 skip** (Codex ile aynı).
+
+**Fikstür değişiklikleri incelendi:** `harness.ts`, `api.test.ts`, `sample-week.ts`, `policy-freeze.test.ts` ve A5'teki her zaman `true` dönen sahte doğrulayıcı, `local:<alan adı>:<nonce>` belirteci üreten yerel doğrulayıcıyla değiştirilmiş. Rezervasyon yardımcıları belirteci otomatik ekliyor. **Hiçbir iş assertion'ı gevşetilmemiş**; A10.2'den yalnız `todo` kaldırılmış. A10.9–A10.17 yeni testler.
+
+**Karar: `f6d5662` NEEDS REVIEW.** Doğrulanan güvenlik davranışı:
+- Rakip sitenin belirteciyle satış yazılamıyor; yanlış `action` veya eksik `hostname` → 403.
+- `Host`, `X-Forwarded-Host` ve `Referer` sahteciliği etkisiz.
+- Doğrulayıcı hatası veya zaman aşımı → 403, kayıt yok. `main.ts`: 5 saniye `AbortSignal`, HTTP durum kontrolü, `catch` → kapalı başarısızlık.
+- Belirteç tekrarı: aynı belirteçle 8 eşzamanlı istek → 1 rezervasyon; yanlış sitede harcanan belirteç tekrar kullanılamıyor.
+- Yerel olmayan her `NODE_ENV`'de `devOrigins` boş.
+- Yerel sahte belirteç yalnız `development` / `test` ve `TURNSTILE_SECRET` yokken kabul ediliyor. **Uydurulabilir; güvenlik değildir.**
+- `form.js` belirteç yokken göndermiyor; `data-action="booking"` eklendi.
+- Gerçek Turnstile ağı, site anahtarı ve gizli anahtar **test edilmedi**.
+
+**Yeni bulgu PR2-N3 (P2), A10.18 `todo`:**
+- `requestHash` gövdenin tamamından hesaplanıyor; `humanToken` da dahil.
+- `form.js` artık ağ hatasında Turnstile'ı sıfırlıyor, ama aynı idempotency anahtarını koruyor.
+- Sonuç: sunucu rezervasyonu oluşturdu ama yanıt kayboldu; tarayıcı yeni belirteç ve aynı anahtarla yeniden gönderiyor → **409 `idempotency_key_reused_with_different_body`**. Müşteri hata görür; yeni anahtarla tekrar denerse mükerrer rezervasyon oluşur.
+- Yeniden üretildi.
+- Öneri: `requestHash`, `humanToken` hariç tutularak hesaplansın. Önbellekteki yanıt, yeni belirteci doğrulamadan dönsün; yeni belirteç harcanmaz.
+
+**Notlar:**
+- **A10.7 (QA-L7):** yerelde tek geliştirme kökeninden her site adına rezervasyon. Artık A10.14 (yerel olmayan modda `devOrigins` boş) ve belirteç-alan adı bağlantısı aynı riski kapatıyor. Yerel geliştirmede birden çok siteyi test etmek amaçlanan davranış. Öneri: A10.7 gerekçesiyle `skip` (A1.3 emsali); inceleyici onayıyla.
+- Turnstile `hostname` alt alan adı içerebilir (`www.` ile ve olmadan). Site kaydında iki biçim de bulunmalı.
+- Yerel tekrar koruması 10 dakika; Cloudflare belirteci 300 saniyede sona erer ve kendisi tek kullanımlık.
+
+**Sıradaki iş:**
+1. PR2-N3 (A10.18), küçük tek commit.
+2. PKG-F04b: [`PKG-F04b-NAKITSIZ-KREDI.md`](./PKG-F04b-NAKITSIZ-KREDI.md). A14.1–A14.4 ve "paket F04" `todo`. H-25 açık.
+
+### 15.1 QA-F11 madde bazında karar (Owner sorusu, aynı sürüm `f6d5662` + inceleme testleri)
+
+| # | Konu | Karar | Kanıt |
+| -- | -- | -- | -- |
+| 1 | A10.2, A10.9–A10.17 | **PASS** | Yeniden koşuldu: hepsi `ok`. A10.18 (PR2-N3) `todo`, kırmızı. |
+| 2 | Sahte `Origin` / `Host` / `X-Forwarded-Host` / `Referer`, reklam parametreleri | **PASS** | A10.1, A10.2, A10.11, A10.8: satış atfı değişmiyor. |
+| 3 | Turnstile hostname/action, ağ hatası, eşzamanlı tekrar | **PASS** | A10.9, A10.10, A10.15 (hostname/action), A10.12 (hata/zaman aşımı → 403, kayıt yok), A10.13 ve A10.16 (8 eşzamanlı → 1), A10.17. `main.ts`: 5 sn `AbortSignal`, `r.ok` kontrolü, `catch` → reddet. Gerçek Cloudflare ağı **NOT_RUN**. |
+| 4 | Yerel sahte belirteç ve `devOrigins` | **PASS** | `verifyHuman`: `TURNSTILE_SECRET` yokken yerel belirteç yalnız `development`/`test`; başka modda `{ ok: false }`. Ayrıca `main.ts` üretim kapısı yerel olmayan modda sunucuyu hiç açmıyor. Gizli anahtar varsa yerel belirteç Cloudflare'e gider ve reddedilir. `devOriginsForEnvironment` yerel olmayan modda `[]` (A10.14). |
+| 5 | SSG formunda gerçek site anahtarı eksikliği | **NEEDS REVIEW (operasyon)** | `config/sites.registry.example.json`'da hiçbir sitede `turnstileSiteKey` yok. `build.ts` anahtar yoksa widget'ı ve Turnstile betiğini hiç basmıyor. `form.js` belirteç yoksa gönderimi durdurup hata gösteriyor. Sonuç güvenli (kapalı başarısızlık) ama **anahtarı eksik bir canlı sitede hiçbir rezervasyon alınamaz ve bu sessizce olur.** Öneri (küçük, ayrı commit): `build:sites` `status: "live"` olup anahtarı olmayan sitede hata versin; önizleme (`noindex`) derlemesinde uyarı versin. Gerçek site anahtarları ve gizli anahtar SEL-329 / pilot hazırlığında; bu oturumda yok. |
+| 6 | A10.7 (QA-L7) | **Ayrı düzeltme gerekmiyor** | Kaygı, tek geliştirme kökeninin her site adına rezervasyon açmasıydı. Yerel olmayan modda `devOrigins` artık boş (A10.14). Belirteç de sitenin alan adına bağlı (A10.9, A10.10). Yerelde birden çok siteyi tek kökenden denemek amaçlanan davranış. Öneri: A10.7 gerekçesiyle `skip` ("QA-F11 ile kapandı: A10.14 + alan adı bağlı belirteç"); inceleyici onayıyla. Silinmez, gevşetilmez (A1.3 emsali). |
+
+**Commit kararı değişmedi: `f6d5662` NEEDS REVIEW** (tek neden PR2-N3 / A10.18; 5. madde operasyonel öneri). Ayrıca A10.6 (QA-L6, gelecekte tarihli "self-operation" doğrulaması) ayrı bir `todo`; QA-F11 kapsamında değil.
+
+**PKG-F04b sınırları (Owner talimatıyla teyit):** komisyon yalnız gerçek nakit tahsilattan; kredi yalnız müşteri borcunu kapatır; onaysız mahsup, otomatik ödeme ve taraflar arası finans kaydı yok; H-25 açık. Şartname: [`PKG-F04b-NAKITSIZ-KREDI.md`](./PKG-F04b-NAKITSIZ-KREDI.md); kabul testleri A14.1–A14.4.
+
+## 16. PR2-N3 ve PKG-F04b akran incelemesi (`4f04fb6` → `a1ca24a`)
+
+Sabitlenen sürüm `a1ca24ae15f935c5d980a067958e5acbb1f15f64`. `npm run check`: **220 test: 210 geçti, 0 kaldı, 9 todo, 1 skip** (Codex ile aynı). Test dosyalarında yalnız `todo` işaretleri kaldırılmış; assertion değişikliği yok. A14.5 Codex'in ek testi.
+
+| Commit | Karar | Kanıt |
+| -- | -- | -- |
+| aba1027 PR2-N3 | **NEEDS REVIEW** | A10.18 geçiyor: aynı anahtar + yeni belirteç → ilk rezervasyon dönüyor. İş alanı değişirse (yolcu 2 → 3) hâlâ 409. **Ama yeni açık PR2-N4:** önbellekteki yanıt site ve belirteç kontrolünden **önce** dönüyor. Daha önce yeniden oynatma, yalnız ilk istemcinin bildiği tek kullanımlık belirteci gerektiriyordu. Artık aynı anahtar ve gövdeyle belirteçsiz, `Origin`'siz veya rakip sitenin belirteciyle gelen istek 201 ve `lookupToken` alıyor (koşuldu). Saldırgan idempotency anahtarını ve gövdenin tamamını (müşteri bilgileri dahil) bilmeli; risk sınırlı ama gerçek. Kabul testi `A10.19` (`todo`). |
+| a1ca24a PKG-F04b | **PASS (yerel)** | A14.1–A14.5 ve "paket F04" geçiyor. Eşzamanlı iki istek, farklı rezervasyonlarda `krd 77` / `KRD77` → 1×201, 1×409. Kredi için `obligations` veya `adjustments` satırı yok. Komisyon gerçek nakitten: kredi sonrası kalan 20 € nakit ödenince pay 5000 → 1000/500/3500. Kapanmış hafta değişmiyor. İptal → 409. Statik anahtar ve site kimliği → 403. Kredi olayları zamana bağlı; önceki açık haftanın borcu geriye dönük azalmıyor. |
+
+**PR2-N4 için önerilen en küçük düzeltme:** Yeniden oynatmada önbellekteki yanıt dönmeden önce `resolveSite` (Origin) kontrolü yapılsın ve yeni bir doğrulanmış, sitenin alan adına bağlı belirteç istensin. Yeni belirteç harcanır; ikinci rezervasyon açılmaz. Alternatif: yeniden oynatma yanıtında `lookupToken` hiç dönmesin (müşteri e-postadaki bağlantıyı kullanır).
+
+**H-25'e eklenen açık sorular (kesinleştirilmedi):**
+- **H-25a:** Kredi teslim edilmemiş (onaylanmış ama tamamlanmamış) rezervasyona verilebilir mi? Bugün veriliyor (201). Hizmet kredisi tanımı gereği yalnız teslimden sonra mı olmalı?
+- **H-25b:** Kredi verildikten sonra müşteri kalanı yine nakit öderse (30 nakit + 20 kredi + 20 nakit) müşteri fiilen 20 € fazla ödemiş olur. Bugün istisna da iade alacağı da görünmüyor; komisyon 50 € nakit üzerinden. Fazla ödeme fiyata mı, fiyat − krediye mi göre hesaplanmalı? İade borcu kimde?
+- **H-25c:** Kredinin fatura ve vergi karşılığı (iskonto mu, iade faturası mı); mali müşavir sorusu (H-16).
+- **H-25d:** Kredi onayı için yerel `mfa: true` yeterli değil; gerçek imzalı oturum ve 2FA (SEL-332) gelmeden HTTP'de kapalı kalmalı (bugün öyle).
+
+**Sıradaki iş:**
+1. PR2-N4 (A10.19), küçük tek commit.
+2. QA-F4: DB defter kısıtları (35 negatif prob), ayrı paket. Atılabilir PostgreSQL 16 ile.
+
+### 16.1 Ek kontrol: kredi verisi izolasyonu (aynı sürüm, kararlar değişmedi)
+
+Partner ve rakip sitenin rezervasyonlarına ayrı krediler verildikten sonra partner-site kimliğiyle denendi:
+- Yönetim listesinde kendi kredisi görünüyor; rakibin kredi referansı ve gerekçesi görünmüyor.
+- Ekstrede rakip rezervasyon veya kredi yok.
+- Site kimliğiyle kendi rezervasyonuna ve rakibe kredi verme → ikisi de 403 `scope_forbidden`.
+
+Kararlar: `aba1027` **NEEDS REVIEW** (PR2-N4, A10.19); `a1ca24a` **PASS (yerel)**.
+
+**Sıradaki iş:** PR2-N4, sonra QA-F4: [`QA-F4-DB-KISITLARI-PLANI.md`](./QA-F4-DB-KISITLARI-PLANI.md).
+
+## 17. PR2-N4 ve QA-F4/W akran incelemesi (`33ed0c0` → `7d6f022`)
+
+Sabitlenen sürüm `7d6f0229cdbec2bb064060cf0a2978cdc614fa3b`. `npm run check`: **221 test: 211 geçti, 0 kaldı, 9 todo, 1 skip** (Codex ile aynı). PostgreSQL 16.15 atılabilir küme: `schema-probes` + `tenant-rls` **42 test: 15 geçti, 0 kaldı, 27 todo** (Codex'in "38 test: 11 geçti" sayısı yalnız `schema-probes` içindir; RLS'nin 4 testi eklenince 42 / 15).
+
+| Commit | Karar | Kanıt |
+| -- | -- | -- |
+| 0547ff7 PR2-N4 | **PASS** | A10.19 geçiyor. Yeniden oynatmada önbellek dönmeden önce gövde doğrulama, `resolveSite` (Origin) ve sitenin alan adına bağlı yeni belirteç doğrulaması yapılıyor (`#verifyBookingProof`, yeni oluşturmayla aynı yol). Belirteçsiz, Origin'siz, rakip site belirteçli veya harcanmış belirteçli tekrar `lookupToken` almıyor. Doğru yeniden deneme (yeni belirteç) hâlâ ilk rezervasyonu döndürüyor (A10.18). A5.1 fikstür değişikliği: her eşzamanlı istek kendi belirtecini gönderiyor; rezervasyon ve assertion beklentileri değişmemiş. |
+| 7d6f022 QA-F4/W (0003) | **FAIL (göç adayı olarak)** | Negatif taraf doğru: Q05, Q06, Q07, Q08, Q09, Q14, Q18, Q20 kendi `AG_F4_*` nedenleriyle reddediliyor; P1–P16, C01–C05 ve RLS yeşil. **Ama tek meşru kapanış yolu kapanıyor (PR3-N1).** 0001'de `settlement_entry.week_id`, `settlement_week`'e ertelenemez FK ile bağlı; pay satırı ancak hafta satırı varken yazılabilir. 0003 ise hafta satırı varken gelen her pay satırını `AG_F4_CLOSED_WEEK_ENTRY` ile reddediyor. Koşuldu: biten W44 için hafta + pay satırı tek işlemde → yalnız 0001'de geçiyor, 0003 ile `AG_F4_CLOSED_WEEK_ENTRY`. Codex bu engeli kendisi de belirtti; negatif probların geçmesi olumlu yaşam döngüsünü kanıtlamıyor. |
+
+**Yeni kabul testi PR3-N1:** `packages/db/src/close-lifecycle.test.ts` (`todo`; `AG_TEST_PG=1 AG_TEST_PG_ISOLATED=YES`). Atılabilir kümede 0001 → 0003 → sentetik W44 rezervasyonu → tek işlemde hafta + pay satırı. 0003'süz koşumda geçtiği ayrıca doğrulandı (test kendisi doğru; kırmızılık 0003'ten).
+
+**Önerilen düzeltme yönü (karar değil):**
+- (a) Kapanış tetikleyicisi, **aynı işlemde** oluşturulan hafta satırına pay yazımına izin versin (ör. `settlement_week.xmin = txid_current()` karşılaştırması ya da işlem başına `SET LOCAL ag.closing_week = '<week_id>'` bayrağı; bayrak yalnız platform rolünden ve kapanış fonksiyonundan ayarlanır). **veya**
+- (b) Hafta için açık/kapalı durumu: `settlement_week.status ('open','closed')`, pay satırları açıkken yazılır, kapanış tek `UPDATE … SET status='closed'` ile ve sonrasında yazım reddedilir. Bu, 0001'deki `closed_at NOT NULL DEFAULT now()` tasarımını değiştirir; SEL-331 CRS şeması uzlaşması gerektirir.
+- (a) 0001'e dokunmadan daha küçük; (b) daha açık bir model. Seçim CRS adaptörü tasarımına bağlı.
+
+**Notlar:**
+- SQL'deki ilk kapanış kuralı yalnız rezervasyon ve para hareketini sayıyor; uygulama dekont ve düzeltmeleri de sayıyor (PR1-N6/N7). Küçük tutarsızlık; birleştirilmeli (P3).
+- İstanbul'da 2016'dan beri yaz saati yok; `AT TIME ZONE 'Europe/Istanbul'` hafta sınırları sabit +03. 2026-W53 → 2027-W01 geçişi `IYYY-"W"IW` ile doğru; 2027-W53 reddediliyor (Q09).
+- 0003 tetikleyicileri `SECURITY INVOKER`; FORCE RLS altında yalnız platform kapsamında yazım yapılabildiği için kapsam dışı oturumun tetikleyiciyi "boş tabloyla" kandırma yolu yok (yazım zaten RLS'de reddediliyor).
+
+**Durum:** Codex'in önerisine katılıyorum. E grubu (pay hesabı) PR3-N1 çözülmeden ve H-23 açıkça sabitlenmeden başlamamalı. 0003 hiçbir paylaşılan staging veya canlı CRS'e uygulanmaz.
+
+**Sıradaki iş:** PR3-N1 (`close-lifecycle.test.ts` yeşile; Q05/Q18 yine reddedilmeli).
+
+## 18. PR3-N1 düzeltmesi akran incelemesi (`1e57479` → `28403ca`)
+
+Sabitlenen sürüm `28403caace220c50b6f3232fb3b79a3929775c79`. `npm run check`: **221 test: 211 geçti, 0 kaldı, 9 todo, 1 skip**. Atılabilir PostgreSQL 16.15, tüm DB testleri (`schema-probes`, `tenant-rls`, `close-lifecycle`): **45 test: 18 geçti, 0 kaldı, 27 todo** (27'si QA-F4'ün açık probları).
+
+**Karar: `28403ca` PASS (aday; yalnız atılabilir küme).**
+- PR3-N1 testi assertion değişmeden geçiyor: platform rolü + `app.scope=platform` ile biten W44 hafta + pay satırı tek işlemde commit ediliyor; tam 1 pay satırı var.
+- Commit'ten sonra platform bile W44'e ikinci pay yazamıyor → `AG_F4_CLOSED_WEEK_ENTRY`.
+- `ag_app` kapanış işleminde pay yazamıyor.
+- Sekiz W probu yine kendi `AG_F4_*` nedenleriyle reddediliyor. Q05, Q14 ve Q18 kapanmış haftaya yazımı engelliyor; bunlar negatif kanıt, olumlu iş akışı ayrıca PR3-N1 testiyle kanıtlandı.
+- Test fikstürü değişikliği: tohum veri 0002/0003'ten önce yükleniyor ve kapanış gerçek platform oturumu gibi (`SET LOCAL ROLE ag_platform`) yapılıyor. Kabul ediyorum; assertion aynı.
+
+**Saldırgan kontroller:**
+
+| Deneme | Sonuç |
+| -- | -- |
+| Süper kullanıcı rol değiştirmeden kapanış | `AG_F4_CLOSED_WEEK_ENTRY` (yalnız platform rolü yazabilir) |
+| `ag_app` + `app.scope=platform` | `permission denied for table settlement_week` (GUC tek başına yetki vermiyor) |
+| Platform rolü, `app.scope` yok | RLS: `new row violates row-level security policy` |
+| Hafta satırı üst işlemde, pay satırı SAVEPOINT içinde | Kabul (doğru) |
+| **Hafta satırı SAVEPOINT içinde, pay sonra** | **Ret: `AG_F4_CLOSED_WEEK_ENTRY` (PR3-N2)** |
+
+Not: süper kullanıcı oturumunda `SET ROLE ag_app` sonrası `SET ROLE ag_platform` geçiyor, çünkü yetki kontrolü oturum sahibine (süper kullanıcı) bakıyor. Bu yalnız test düzeneği; doğrudan `ag_app` girişinde reddedildiği §12.1'de gösterildi.
+
+**Yeni bulgu PR3-N2 (P3, kapalı başarısızlık):**
+- SAVEPOINT içinde eklenen satırın `xmin`'i alt işlem XID'idir. `txid_current()` ise üst işlem XID'ini döner. Hafta satırını SAVEPOINT içinde yazan bir sürücü, ORM veya `EXCEPTION` bloklu plpgsql fonksiyonu meşru kapanışı yapamaz.
+- Güvenlik açısından güvenli taraf (yanlış kabul değil, yanlış ret). Ama CRS adaptörü tasarımını kısıtlıyor.
+- Kabul testi: `close-lifecycle.test.ts` "PR3-N2" (`todo`, ayrı veritabanı).
+- Öneri yönleri (karar değil):
+  - (a) Görünür ama henüz commit edilmemiş satır yalnız kendi işlemimize ait olabilir. `pg_xact_status` ile `xmin`'in "in progress" olduğu kontrol edilsin (xid8'e çevirerek).
+  - (b) Hafta ekleme tetikleyicisi `set_config('ag_f4.closing_week', week_id, true)` ile işlem içi işaret bıraksın. SAVEPOINT geri alınırsa işaret de geri alınır. Pay tetikleyicisi işareti ve rol/kapsam kontrolünü birlikte arasın.
+  - (c) Adaptör kapanışta SAVEPOINT kullanmasın ve bu kural belgelensin (en küçük).
+
+**Teorik not (P3):** `xmin` 32 bit. Bir hafta satırından tam 2³² işlem sonra aynı alt 32 bit tekrar gelebilir. Pratikte uzak; ama (a) veya (b) bu karşılaştırmayı gereksiz kılar.
+
+**Üretime hazır değil (Codex'in notuna katılıyorum):** gerçek CRS şema eşlemesi ve işlem adaptörü, kapanış kilidi (`pg_advisory_xact_lock`), yedek/geri alma/geri doldurma, IdP/2FA, insan bağımsız kabulü yok. H-20, H-23, H-25, H-26 açık. 0003 staging veya canlı CRS'e uygulanmaz.
+
+**Sıradaki iş:**
+- PR3-N2 küçük ve isteğe bağlı; CRS adaptörü tasarımıyla birlikte de ele alınabilir.
+- QA-F4'ün E grubu (pay kaydı bütünlüğü) H-23 sınırıyla başlayabilir. Kural: SQL pay fonksiyonu bugünkü `splitOnCollected` algoritmasını birebir kopyalar ve karşılaştırma testiyle 0–10.000 kuruşta eşitlik gösterir. Küsurat politikası değiştirilmez.
+
+### 18.1 Ek kontrol: geri alma ve eşzamanlı kapanış (aynı sürüm; karar değişmedi, PASS aday)
+
+Atılabilir PG16, 0001 → sentetik tohum → 0002 → 0003:
+- **Geri alma:** platform kapanış işlemi `ROLLBACK` ile bitince hafta satırı 0, pay satırı 0 kalıyor.
+- **Eşzamanlı kapanış:** A oturumu W44'ü yazıp 3 saniye bekliyor; B oturumu aynı anda W44'ü kapatmaya çalışıyor. B, A'nın işlemini bekliyor; A commit edince B `settlement_week_pkey` ihlaliyle reddediliyor. Sonuç: 1 hafta, 1 pay satırı (A'nınki).
+- Aynı haftanın iki kez kapanmasını birincil anahtar engelliyor. Rapor hesaplaması ile kapanış arasındaki yarış ise uygulama ve adaptör tarafında ele alınmalı (`pg_advisory_xact_lock`, QA-F4 planı §6).
+
+**Aday göç gerçek CRS şemasına uygun varsayılmadı;** SEL-331 eşlemesi yapılmadı.
+
+**Sıradaki iş:** QA-F4 / E: [`QA-F4-E-PAY-KAYDI-GOREVLERI.md`](./QA-F4-E-PAY-KAYDI-GOREVLERI.md). H-23 açık.
+
+## 19. QA-F4/E akran incelemesi (`de60dea` → `3ce6ea5`)
+
+Sabitlenen sürüm `3ce6ea5d6646f6881a392494fb3bb4aa73ad3ec4`. `npm run check`: **221 test: 211 geçti, 0 kaldı, 9 todo, 1 skip**. Atılabilir PostgreSQL 16.15, tüm DB testleri: **53 test: 31 geçti, 0 kaldı, 22 todo** (21 QA-F4 probu + PR3-N2). Codex ile aynı.
+
+**Test değişiklikleri:** `split-parity.test.ts` (benim yazdığım kabul testi) yalnız `todo` kaldırılarak geçiyor; assertion aynı. `close-lifecycle.test.ts` 0004'ü de uyguluyor; beklentiler aynı. `schema-probes.test.ts` E problarını ayrı bir veritabanında (0001 → tohum → 0002 → 0003 → 0004) koşuyor ve **tam hata nedenini** doğruluyor; kapanmış hafta veya RLS reddi geçti sayılmıyor. `entry-lifecycle.test.ts` yeni (3 olumlu senaryo).
+
+| Kontrol | Sonuç |
+| -- | -- |
+| SQL = uygulama pay eşitliği (4 senaryo, 0..fiyat her kuruş) | **Geçti** (bağımsız koşum) |
+| Q01 / Q02 / Q03 / Q04 / Q10 / Q11 | Sırasıyla `AG_F4_ENTRY_BASE_MISMATCH` / `ENTRY_EXCEEDS_PRICE` / `ENTRY_SPLIT_MISMATCH` / `PRIVATE_AGOS_NONZERO` / `ENTRY_POLICY_INVALID` / `ENTRY_CURRENCY_MISMATCH`. E tetikleyicisi (`ag_f4_a_entry_rules`) ad sırasıyla 0003 korumasından önce çalışıyor; probların reddi finans nedeniyle. |
+| W probları, W44 olumlu kapanış, RLS | Geçiyor; PR3-N2 `todo` |
+| Kısmi tahsilat 30 € → 600/300/2100, kalan 20 € → 400/200/1400 | Geçiyor (`entry-lifecycle`) |
+| Eski farklı pay (550/350/2100) sonrası yeni tahsilat ve iptal ters kaydı | Geçiyor; ters kayıt **kayıtlı** payları sıfırlıyor (D-F06), yeni delta **beklenen** önceki paydan (D-F05) |
+| 1 kuruşluk ek tahsilatta AGOS −1 | Bugünkü davranış aynen; **H-23 açık** |
+| Rezervasyonun politikası dışında bir politika kimliği | `ENTRY_POLICY_INVALID` (shuttle'da `NEW.policy_id = booking.policy_id` zorunlu) |
+
+**Kod okuması:** pay fonksiyonu `numeric` ile taşmasız; shuttle'da `floor` + kalan AGOS'a; kendi aracı 0/10/90; private `floor(c × site / fiyat)`, AGOS 0. `previous_base` önceki kayıtların `collected_delta` toplamı (iptal sonrası 0'a dönebiliyor). `GRANT SELECT ON split_policy TO ag_platform` yalnız okuma.
+
+**Karar: `3ce6ea5` NEEDS REVIEW** (E kuralları doğru; tek neden aşağıdaki P2).
+
+**Yeni bulgu PR3-N3 (P2):**
+- Rezervasyon yalnız `policy_id`'yi donduruyor, oranları değil. 0004 her yeni pay satırını **güncel** `split_policy` satırına göre doğruluyor.
+- Onaylı satır tablo sahibi veya süper kullanıcı (göç rolü) tarafından değiştirilebiliyor. Koşuldu: `shuttle-split-v1` 7000/2000 → 6000/3000 yapılınca, bu politikayla dondurulmuş W44 rezervasyonunun meşru kapanışı (1000/500/3500) `AG_F4_ENTRY_SPLIT_MISMATCH` ile reddedildi. Ters yönde, yanlış oranlı satırlar kabul edilir.
+- Onaylı satır silinebiliyor da.
+- `ag_platform` değiştiremiyor (yalnız `SELECT`); risk göç ve yönetici yolunda.
+- Kabul testi: `packages/db/src/split-policy-immutability.test.ts` (`todo` × 2).
+- Öneri: `split_policy` için `BEFORE UPDATE OR DELETE` tetikleyicisi. `status = 'approved'` satırlar değişmez ve silinmez; yeni oranlar yeni kimlikle gelir (`shuttle-split-v2`). Uygulamadaki dondurulmuş politika kaydıyla (D-F05) aynı ilke.
+
+**Hâlâ açık:** PR3-N2 (SAVEPOINT), kapanış kilidi, CRS adaptörü ve SEL-331 eşlemesi, H-23. 0003/0004 staging veya canlıya uygulanmaz.
+
+**Sıradaki iş:**
+1. PR3-N3 (küçük; `0004` içine veya `0005` başına).
+2. QA-F4 M grubu (Q12, Q13, Q15, Q16: para hareketleri).
+
+### 19.1 Owner sorusu: QA-F4/E madde bazında karar (aynı sürüm `3ce6ea5`)
+
+| Konu | Karar | Kanıt |
+| -- | -- | -- |
+| Altı E probu (Q01, Q02, Q03, Q04, Q10, Q11) | **PASS** | Her biri kendi `AG_F4_ENTRY_*` nedeniyle; E tetikleyicisi 0003 korumasından önce |
+| Dört kuruş-kuruş pay eşitliği | **PASS** | Bağımsız koşum; her kuruşta SQL = uygulama |
+| Üç olumlu yaşam döngüsü (`entry-lifecycle`) | **PASS** | 30 + 20 kısmi tahsilat; eski farklı pay + iptal; 4 → 5 kuruş |
+| Eski farklı pay kayıtları (D-F05) | **PASS** | Yeni delta beklenen önceki paydan |
+| İptal ters kaydı (D-F06) | **PASS** | Kayıtlı paylar tam ters çevriliyor |
+| AGOS −1 kuruş | **PASS (bugünkü davranış)** | H-23 açık; değiştirilmedi |
+| Politika doğrulaması | **NEEDS REVIEW** | Kimlik doğrulanıyor; ama onaylı oranlar değiştirilebiliyor ve silinebiliyor (PR3-N3, P2, `split-policy-immutability.test.ts` `todo`) |
+| Para birimi doğrulaması | **PASS** | `AG_F4_ENTRY_CURRENCY_MISMATCH` |
+| Tenant RLS | **PASS** | `tenant-rls` 4/4; E tetikleyicisi platform kapsamında çalışıyor, site rolü yazamıyor |
+| PR3-N2 SAVEPOINT | **Açık (P3)** | `close-lifecycle` PR3-N2 `todo`; 0004 bunu değiştirmiyor |
+
+**Commit kararı değişmedi: `3ce6ea5` NEEDS REVIEW** (tek neden PR3-N3).
+
+**M grubu şartnamesi** hazırlandı: [`QA-F4-M-PARA-HAREKETLERI.md`](./QA-F4-M-PARA-HAREKETLERI.md). Koruma testleri `packages/db/src/money-lifecycle.test.ts` bugün 3/3 geçiyor. Önkoşul PR3-N3.
+
+## 20. PR3-N3 ve QA-F4/M akran incelemesi (`4121cbc` → `b504683`)
+
+Sabitlenen sürüm `b504683e67e32dd74b6963557d2d65ea0c311deb`. `npm run check`: **221 test: 211 geçti, 0 kaldı, 9 todo, 1 skip**. Atılabilir PostgreSQL 16.15, tüm DB testleri: **61 test: 43 geçti, 0 kaldı, 18 todo** (Owner'ın bildirdiği sonuçla aynı). Benim yazdığım koruma testleri (`money-lifecycle` M-GUARD × 3) ve PR3-N3 testleri **assertion değişmeden** geçiyor; Codex M-RACE, M-CACHE ve M-RLS testlerini ekledi.
+
+| Commit | Konu | Karar | Kanıt |
+| -- | -- | -- | -- |
+| f72b89b | PR3-N3 onaylı politika | **PASS** | Onaylı satır `UPDATE`, `DELETE` ve `TRUNCATE` → `AG_F4_APPROVED_POLICY_IMMUTABLE`. Ayrıca denendi: önerilen (`proposed`) politika onaylanabiliyor, onaylandıktan sonra oranı değişmiyor. Süper kullanıcı tetikleyiciyi kapatabilir; güven sınırı dışı (göçte açıkça yazılı). |
+| b504683 | QA-F4/M para hareketleri | **PASS (aday)** | Q12 `REFUND_EXCEEDS_COLLECTED`, Q13 `SHUTTLE_COLLECTOR_NOT_SUPPLIER`, Q15 `COLLECTED_AMOUNT_DRIFT`, Q16 `RECEIPT_DUPLICATE`: tam neden doğrulanıyor. Eşzamanlı iki iadede rezervasyon satırı `FOR UPDATE` ile kilitleniyor; iki ayrı bağlantıdan yalnız biri geçiyor (M-RACE). Private'ta site tahsilatı ve farklı ödeyenden aynı dekont kabul ediliyor. `ag_app` sahte kapsamla yazamıyor (M-RLS). |
+
+**Yeni bulgu PR3-N4 (P3):**
+- Tahsilat önbelleği kontrolü yalnız `UPDATE OF collected_amount, refunded_amount` üzerinde. `INSERT` yolu korunmuyor.
+- Koşuldu: hiçbir para hareketi olmadan `collected_amount = 4000` ile rezervasyon eklendi.
+- Uygulama yeni rezervasyonu 0 ile açıyor; risk göç, içe aktarma ve CRS eşlemesinde.
+- Kabul testi: `money-lifecycle.test.ts` "PR3-N4" (`todo`).
+- Öneri: aynı tetikleyici `BEFORE INSERT` için de çalışsın (yeni rezervasyonda olay olmadığı için toplam 0 olmalı).
+
+### Kalan 18 PostgreSQL `todo`'su için öncelik önerisi
+
+| Sıra | Grup | Problar | Neden önce | Karar bağımlılığı |
+| -- | -- | -- | -- | -- |
+| 1 | **A · Mahsup, itiraz, denetim** | Q17, Q19, Q21 | Para hareketi doğuran yetki ve kanıt (boş yazılı onay, reddedilen itirazda para, aktör/2FA kolonu yok) | Yok (gerçek 2FA zamanı SEL-332) |
+| 2 | **T · Atıf ve taraf** | Q33, Q34, Q35 | Komisyon yanlış tarafa yazılıyor (site sahibi dışı taraf, doğrulanmamış kendi aracı, private hak ediş > fiyat) | Yok |
+| 3 | **L · Yaşam döngüsü** | Q30 | Uzlaşmış ve teslim edilmiş işin iptale dönmesi | Yok |
+| 4 | **P · Fiyat ve tarife** | Q23, Q24, Q25, Q26, Q29, Q31 | Fiyat dondurma ve 5+ kuralları | K17 |
+| 5 | P (karar bekleyen) | Q22, Q32 | 5+ alt sınır | **H-22** gelene kadar sayısal minimum yazılmaz |
+| 6 | **R · Hat** | Q27, Q28 | Yasak ve pasif hat | **K8** kapsamı; yalnız bugünkü kayıt |
+| — | Ayrı | PR3-N2 (SAVEPOINT), PR3-N4 (INSERT önbelleği) | Küçük; CRS adaptörüyle veya bir sonraki göçte | Yok |
+
+Toplam: 17 QA-F4 probu + PR3-N2 = 18; PR3-N4 eklendi → 19 `todo`.
+
+**Açık kalan Owner kararları:** H-22, H-23, H-25, H-26, K8, K17. Testlerin geçmesi bu kararların verildiği anlamına gelmez. Gerçek CRS (SEL-331), üretim kimlik doğrulaması (SEL-332) ve insan bağımsız kabulü tamamlanmadı. 0003–0005 staging veya canlıya uygulanmaz.
+
+## 21. QA-F4/A ve PR3-N4 akran incelemesi (`c9599a7` → `41b73e6`)
+
+Sabitlenen sürüm `41b73e627158d960b665fdbb6b105fcd244c9655` (tek commit). `npm run check`: **221 test: 211 geçti, 0 kaldı, 9 todo, 1 skip**. Atılabilir PostgreSQL 16.15, tüm DB testleri (`--test-concurrency=1`): **67 test: 52 geçti, 0 kaldı, 15 todo** (Codex ile aynı).
+
+**Test değişiklikleri:** PR3-N4 testim assertion değişmeden geçiyor. Q21 kontrolü daha sıkı hâle gelmiş: "en az bir kolon" yerine "üç kolon da `NOT NULL`", ve tam göçe karşı. Gevşetme yok.
+
+**Karar: `41b73e6` PASS (aday; yalnız atılabilir küme).**
+
+| Kontrol | Sonuç |
+| -- | -- |
+| Q17 boş yazılı onay | `AG_F4_OFFSET_APPROVAL_REQUIRED` (tam neden). Yalnız boşluktan oluşan onay da reddediliyor (ayrıca denendi). |
+| Q19 reddedilmiş itirazdan para | `AG_F4_DISPUTE_NOT_ACCEPTED`. İtiraz `accepted` olmalı ve özgün hafta eşleşmeli. |
+| Q21 aktör / rol / 2FA kolonları | Üçü de `NOT NULL`. Rol yalnız `admin` / `finance_manager`. Gerekçe ≥ 5 karakter. Gelecek tarihli 2FA zamanı reddediliyor. |
+| PR3-N4 | Para hareketi olmadan tahsil edilmiş görünen rezervasyon INSERT'i → `AG_F4_COLLECTED_AMOUNT_DRIFT`. 0/0 yeni rezervasyon kabul. |
+| Olumlu yol | Geçerli mahsup (onay referansı büyük harfe çevrilip saklanıyor) ve kabul edilmiş itiraz düzeltmesi yazılıyor. `ag_app` sahte platform kapsamıyla yazamıyor (`adjustment-audit` 4/4). |
+| Eski gruplar | W, E, M, RLS ve PR3-N1/N3 testleri yeşil. |
+
+**Yeni bulgular (P3, savunma derinliği):**
+- **PR3-N5:** `adjustment_reference` `UNIQUE` ama büyük/küçük harfe duyarlı. Koşuldu: `OFS-2026-W45-ONAY-1` ve `ofs-2026-w45-onay-1` iki ayrı mahsup olarak yazıldı. Uygulama bunu PR1-N2'den beri engelliyor; veritabanı yedek savunması yok. Öneri: `UNIQUE (upper(adjustment_reference))` veya tetikleyicide normalize etme (`written_approval_reference` için zaten yapılıyor).
+- **PR3-N6:** `mfa_verified_at` için yalnız üst sınır var. 2019 tarihli 2FA kanıtı kabul edildi. Öneri: ör. "en fazla 15 dakika önce" penceresi. Bu da gerçek 2FA kanıtı değil, yalnız bayat kaydı engeller.
+- Kabul testleri: `packages/db/src/adjustment-hardening.test.ts` (`todo` × 2).
+
+**Önemli ayrım (Codex'in notuyla aynı):** veritabanı artık aktör, rol ve 2FA zamanını **zorunlu tutuyor**; bu, 2FA'nın **gerçekten yapıldığını kanıtlamaz**. `actor_id` serbest metin ve oturum kimliğine bağlı değil. Gerçek kanıt SEL-332 kimlik sağlayıcısından ve işlem bağlamasından gelmeli. Süper kullanıcı tetikleyicileri kapatabilir. 0006'daki `NOT NULL` kolonlar, gerçek CRS'te mevcut satırlar için onaylı bir geri doldurma planı gerektirir.
+
+**Kalan DB todo'ları:** T (Q33–35) → L (Q30) → P (Q23–26, Q29, Q31) → P (Q22, Q32; H-22) → R (Q27, Q28; K8); ayrıca PR3-N2, PR3-N5, PR3-N6. H-22, H-23, H-25, H-26, K8 ve K17 açık. 0003–0006 staging veya canlıya uygulanmaz.
+
+## 22. PR3-N5/N6 ve QA-F4/T akran incelemesi (`7dcbae3` → `6e166a6`)
+
+Sabitlenen sürüm `6e166a66dd6d957f42da5dc98ef82c0de4c44f83`. `npm run check`: **221 test: 211 geçti, 0 kaldı, 9 todo, 1 skip**. Atılabilir PostgreSQL 16.15, tüm DB testleri: **72 test: 60 geçti, 0 kaldı, 12 todo** (Codex ile aynı). Bu turda eklenen testlerle: 75 test, 60 geçti, 15 todo.
+
+| Commit | Karar | Kanıt |
+| -- | -- | -- |
+| a452807 PR3-N5/N6 (0007) | **PASS (aday)** | Benim iki testim assertion değişmeden geçiyor. Normalize (`upper` + boşluksuz) benzersiz indeks eşzamanlı yazımda da kesin. 2FA zamanı en fazla 15 dakika önce, gelecek değil. 15 dakika yerel aday; onaylı güvenlik politikası değil, 2FA kanıtı değil. Gerçek CRS'te benzersiz indeks mevcut çakışan satırlarla kurulamaz; ön temizlik gerekir. |
+| 6e166a6 QA-F4/T (0008) | **NEEDS REVIEW** | Q33 `BOOKING_SELLING_PARTY_MISMATCH`, Q34 `SUPPLIER_ID_NOT_CANONICAL` / `SELF_SUPPLY_UNVERIFIED`, Q35 `PRIVATE_SUPPLIER_EXCEEDS_PRICE`: tam neden. Yetki site kaydından; `site` okuma yalnız `ag_platform`'a verildi. **Ama** aşağıdaki P2. |
+
+**Yeni bulgu PR3-N7 (P2):**
+- Atıf tetikleyicisi her `UPDATE`'te çalışıyor ve rezervasyonu sitenin **o anki** sahibiyle karşılaştırıyor.
+- Koşuldu, site-one p1'den p9'a devredildikten sonra:
+  - **(a)** eski rezervasyonda basit bir not güncellemesi bile `AG_F4_BOOKING_SELLING_PARTY_MISMATCH` ile reddediliyor. Tamamlama, tahsilat önbelleği gibi işlemler de aynı şekilde kilitlenir.
+  - **(b)** eski rezervasyonun `selling_party_id` değeri **yeni sahibe (p9) yeniden yazılabiliyor**. Geçmiş komisyon yeni partnere yönlendirilebilir.
+- Öneri: INSERT'te bugünkü kontrol kalsın. UPDATE'te sahiplik yeniden kontrol edilmesin; bunun yerine `selling_site_id`, `selling_party_id` ve `supplier_id` değişimi reddedilsin (atıf rezervasyon anında donar). Tedarikçi atama akışı (`supplier_id` NULL → değer) ayrıca izinli bırakılmalı.
+
+**Yeni bulgu PR3-N8 (P3):**
+- Veritabanı tedarikçi kimliği biçimi `^[a-z0-9-]{2,64}$`; uygulamanınki `/^[a-z0-9_-]{1,64}$/`.
+- Uygulamada geçerli `sup_a` veritabanında reddediliyor (koşuldu).
+- İki biçim aynı kaynaktan hizalanmalı.
+
+Kabul testleri: `packages/db/src/attribution-hardening.test.ts` (`todo` × 3; PR3-N7 × 2, PR3-N8 × 1).
+
+**Diğer kontroller:** önceki W, E, M, A ve RLS testleri yeşil. Geleceğe tarihli kendi aracı doğrulaması reddediliyor (Codex testi). `ag_app` sahte kapsamla rezervasyon yazamıyor.
+
+**Sıradaki iş:** PR3-N7 (önce) ve PR3-N8 → QA-F4/L (Q30) → P → P (H-22) → R (K8). PR3-N2 açık. H-22, H-23, H-25, H-26, K8 ve K17 açık. 0003–0008 staging veya canlıya uygulanmaz.
+
+## 23. PR3-N7 ve PR3-N8 akran incelemesi (`b187c9d` → `f247054`)
+
+Sabitlenen sürüm `f247054` (iki commit: `86c8b0d` PR3-N7, `f247054` PR3-N8). `npm run check`: **222 test: 212 geçti, 0 kaldı, 9 todo, 1 skip** (yeni `id-format.test.ts` dahil). Atılabilir PostgreSQL 16.15, tüm DB testleri: **90 test: 78 geçti, 0 kaldı, 12 todo**.
+
+**Test değişiklikleri:** benim üç kabul testim (`attribution-hardening.test.ts`) yalnız `todo` kaldırılarak ve göç listesi uzatılarak geçiyor; assertion aynı. Codex `attribution-integrity.test.ts`'e 14 ek test ekledi (site, taraf ve tedarikçi değiştirme reddi; ilk tedarikçi ataması; ID sınırları).
+
+| Commit | Karar | Kanıt |
+| -- | -- | -- |
+| 86c8b0d PR3-N7 (0009) | **PASS (aday)** | INSERT'te sahiplik kontrolü aynı. UPDATE'te `selling_site_id`, `selling_party_id` değişimi ve atanmış `supplier_id` değişimi/silinmesi → `AG_F4_BOOKING_ATTRIBUTION_IMMUTABLE`. Yalnız `NULL` → tedarikçi ataması izinli (biçim ve kendi aracı kontrolüyle). Site devrinden sonra eski rezervasyon güncellenebiliyor; atfı yeni sahibe yazılamıyor. Q33–Q35 yine tam nedenle. |
+| f247054 PR3-N8 (0010) | **PASS (aday)** | Tek kaynak `packages/core/src/party-id.ts` (`^[a-z0-9_-]{1,64}$`). SQL göçü bu kaynaktan üretiliyor; `id-format.test.ts` sapmayı yakalıyor. `isPartyId` JS'teki `$`'ın sondaki satır sonunu kabul etmesine karşı tam eşleşme istiyor. Uygulamadaki tüm taraf kimliği kontrolleri bu fonksiyona taşındı. `sup_a`, tek karakterli ve 64 karakterli kimlikler kabul; büyük harf (Q34) yine red. |
+
+**Yeni bulgu PR3-N9 (P3, PR3-N7 ile aynı sınıf):**
+- 0009 UPDATE yolunda kendi aracı kontrolünü, tedarikçi değişmese de sitenin **o anki** doğrulamasına göre yeniden yapıyor.
+- Koşuldu: site doğrulanmışken kendi aracıyla alınmış rezervasyon, doğrulama geri alındıktan sonra not güncellemesinde `AG_F4_BOOKING_SELF_SUPPLY_UNVERIFIED` ile reddediliyor.
+- Kabul testi: `attribution-hardening.test.ts` PR3-N9 (`todo`).
+- Öneri: kendi aracı kontrolü yalnız INSERT'te ve `supplier_id` `NULL` → değer atamasında yapılsın.
+
+**Diğer:**
+- `npm test` artık `--test-concurrency=1` (DB testleri için deterministik). Süre uzar, sonuç değişmez.
+- 0001–0008 değişmedi.
+
+**Sıradaki iş (yol haritası Adım 1 kapanışı):** PR3-N9 (küçük). Ardından Adım 2 SEL-331: gerçek CRS şeması gerekiyor (Owner veya altyapı). O gelene kadar yerelde: QA-F4/L (Q30), P (Q23–26, Q29, Q31), R (Q27–28; K8), PR3-N2.
+
+## 24. PR3-N9 akran incelemesi (`a97b43c` → `ff9899a`) · Yol haritası Adım 1 tamam
+
+Sabitlenen sürüm `ff9899a54ca186229dca9efb97ef267708a3a70e` (tek commit). `npm run check`: **222 test: 212 geçti, 0 kaldı, 9 todo, 1 skip**. Atılabilir PostgreSQL 16.15, tüm DB testleri: **91 test: 79 geçti, 0 kaldı, 12 todo** (Codex ile aynı). PR3-N9 testim assertion değişmeden geçiyor; PR3-N7 × 2 ve PR3-N8 de yeşil.
+
+**Karar: `ff9899a` PASS (aday; yalnız atılabilir küme).**
+
+- `0011_self_supply_history.sql` iki fonksiyonu değiştiriyor: `ag_f4_check_booking_attribution()` (0009) ve 0001'in `booking_settlement_guard()`'ı. İkincisi gerekli: eski tetikleyici de aynı kendi aracı kontrolünü yapıyordu.
+- 0001 fonksiyonunun özgün hâliyle satır satır karşılaştırması: yalnız iki değişiklik var, ikisi de amaçlanan.
+  - Kendi aracı kontrolü yalnız INSERT ve `NULL` → tedarikçi atamasında.
+  - Gelecek tarihli doğrulama da reddediliyor (sıkılaştırma).
+  - Pay, tahsilatçı, iade ve uzlaşmış rezervasyon dondurma kuralları aynı.
+- Saldırgan kontroller (doğrulanmamış site):
+  - Kendi aracıyla INSERT → `AG_F4_BOOKING_SELF_SUPPLY_UNVERIFIED`.
+  - Boş tedarikçi alanına kendini atama → aynı hata.
+  - `ag_app` rezervasyon güncelleyemiyor (yetki yok).
+- Doğrulama geri alındıktan sonra eski kendi araçlı rezervasyonda not güncellemesi kabul (PR3-N9). Atıf yine donuk (PR3-N7).
+
+**Adım 1 sonucu:** PR3-N7, PR3-N8 ve PR3-N9 PASS (aday). Yol haritasının 1. adımı kapandı.
+
+**Adım 2 (SEL-331) için gereken:** gerçek CRS şemasının dökümü (yalnız şema). O gelene kadar yerelde yapılabilecekler:
+- QA-F4/L (Q30): uzlaşmış ve teslim edilmiş iş iptale dönmez.
+- QA-F4/P: Q23–Q26, Q29, Q31.
+- QA-F4/R: Q27–Q28 (K8).
+- PR3-N2 (SAVEPOINT).
+
+H-22, H-23, H-25, H-26, K8 ve K17 açık. 0003–0011 staging veya canlıya uygulanmaz.
+
+## 25. QA-F4/L (Q30) akran incelemesi (`34b8ed1` → `6b15f09`)
+
+Sabitlenen sürüm `6b15f0946237cb4ed0ccd5e6f0cecbcebae2923a` (tek commit). `npm run check`: **222 test: 212 geçti, 0 kaldı, 9 todo, 1 skip**. Atılabilir PostgreSQL 16.15, tüm DB testleri: **98 test: 87 geçti, 0 kaldı, 11 todo** (Codex ile aynı).
+
+**Karar: `6b15f09` PASS (aday).**
+- `0012` durum geçişlerini uygulamadaki `TRANSITIONS` tablosuyla birebir uyguluyor:
+  - request → quoted / confirmed / cancelled
+  - quoted → confirmed / cancelled
+  - confirmed → delivered / cancelled
+  - delivered ve cancelled son durum
+- DB `booking_status` enum'u aynı beş değer.
+- Özgün Q30 → `AG_F4_BOOKING_STATUS_TRANSITION_INVALID` (tam neden).
+- Aynı durumun yeniden yazılması geçiş sayılmıyor; uzlaşmış rezervasyona not eklenebiliyor.
+- Tetikleyici `BEFORE UPDATE OF status`. `status` değişmeyen güncellemeleri etkilemez; değiştiren her güncellemede çalışır.
+- Testlerde gevşetme yok; 0001–0011 değişmedi.
+
+**Not (P3, karar gerektirmez):** kural yalnız UPDATE'te. Bir rezervasyon doğrudan `delivered` veya `cancelled` durumuyla INSERT edilebilir. Uygulama her zaman `request` ile açıyor; risk yalnız geri doldurma ve içe aktarmada. CRS eşlemesinde (SEL-331) içe aktarma kuralı olarak ele alınmalı.
+
+**Kalan DB todo'ları:** P (Q23–Q26, Q29, Q31), P (Q22, Q32; H-22), R (Q27–Q28; K8), PR3-N2. Adım 2 için gerçek CRS şeması bekleniyor.
+
+## 26. QA-F4/P (Q23–Q26, Q29, Q31) akran incelemesi (`5277d2b` → `ce61a04`)
+
+Sabitlenen sürüm `ce61a043f6f74258f5ebdeda8a1126df72d94707` (tek commit, 3 dosya: `0013_pricing_integrity.sql`, `pricing-integrity.test.ts`, `schema-probes.test.ts`). Atılabilir PostgreSQL 16, yerel koşum (Codex ile aynı):
+
+| Koşum | Test | Geçti | Kaldı | Todo | Skip |
+| -- | --: | --: | --: | --: | --: |
+| Tüm DB testleri (`ce61a04`) | 119 | 114 | 0 | 5 | 0 |
+| `npm run check` (`ce61a04`) | 340 | 325 | 0 | 14 | 1 |
+| Tüm DB testleri (+ PR3-N10 testleri) | 123 | 115 | 0 | 8 | 0 |
+| `npm run check` (+ PR3-N10 testleri) | 344 | 326 | 0 | 17 | 1 |
+
+**Doğrulananlar:**
+- 0001–0012, `qa-independent/sql/qa_probes.sql` ve `price-lifecycle.test.ts` değişmedi; `price-lifecycle.test.ts` SHA-256 `30a055bf…5dfd`, 3/3 geçiyor.
+- Özgün probların tam red nedenleri: Q23 `AG_F4_SHUTTLE_AUTO_PRICE_PASSENGERS`, Q24 `AG_F4_MANUAL_PRICE_APPROVAL_REQUIRED`, Q25 `AG_F4_TARIFF_AUTO_TOTAL_COUNT`, Q26 `AG_F4_TARIFF_TOTAL_INVALID`, Q29 `AG_F4_BOOKING_PRICE_FROZEN`, Q31 `AG_F4_MANUAL_PRICE_BOOKING_INELIGIBLE`.
+- Prob düzeneği özgün SQL metnini değiştirmeden çalıştırıyor. T ve L grupları artık 0013 dahil tüm aday üzerinde koşuyor (daha sıkı); Q30, Q33–Q35 hâlâ doğru nedenle red.
+- Ek karşı-örnekler (hepsi doğru nedenle red):
+  - tarife alt sınırı `[0:3]` ve 2 boyutlu dizi;
+  - 4 kişilik `FIXED_SHUTTLE` rezervasyonu 5 kişiye çıkarmak;
+  - onaylı rezervasyonu `request`'e geri çekmek (0012).
+- `ag_platform` rolüyle onay → fiyatlama akışı çalışıyor (yenileme tetikleyicisi RLS'e takılmıyor).
+
+**Yeni bulgu PR3-N10 (P2, finans): manuel fiyat onayı yalnız tutarı bağlıyor, fiyatlanan hizmeti bağlamıyor.**
+- `manual_price_approval` satırında yolcu sayısı, hat ve hizmet türü yok. 0013 yalnız tutarı karşılaştırıyor.
+- Karşı-örnek (yerelde kabul edildi):
+  1. 6 kişilik talep;
+  2. 2FA onayı 9000 ("6 kisi Sprinter onayi");
+  3. 9000 + `SHUTTLE_MANUAL_APPROVED`;
+  4. `passengers = 16` → **kabul**, fiyat 9000.
+- Aynı durum hat değişikliğinde de var (`AYT-ALN` → `AYT-KNY`), ve onay ile fiyatlama arasındaki yolcu değişikliğinde de.
+- Onay tablosu append-only ve birincil anahtarı `booking_id`. Bu yüzden ikinci bir onayla yeniden fiyatlama da mümkün değil.
+- Regresyon testi: `packages/db/src/price-approval-binding.test.ts` (PR3-N10a/b/c, `todo`) ve aynı yolcu/hatla meşru güncellemenin kabul edildiğini gösteren bir koruma testi.
+- Düzeltme önerisi (Codex): 0013 aday olduğu için yeni additive göç. Örneğin onay satırına `passengers` / `route_code` / `service_type` anlık görüntüsü eklenir ve fiyatlamada ve sonraki güncellemelerde eşleşmesi zorunlu olur; ya da onay varken bu üç alan değişmez (değişiklik = iptal ve yeni rezervasyon). Hangi yolun seçileceği iş kuralıdır; H-22/K17 sayısal sınırlarından bağımsızdır.
+
+**Not (P3, Owner kararı, kesinleştirilmedi):** tarife toplamlarının kişi sayısıyla artması zorunlu değil (`{7000,5000}` kabul). Q25/Q26 kapsamı dışında; H-22/K17 ile birlikte değerlendirilmeli. Otomatik fiyatın tarife değeriyle eşleşmesi de DB'de değil, uygulamada denetleniyor.
+
+**Karar: `ce61a04` — Q23–Q26, Q29, Q31 için PASS (aday); QA-F4/P grubu bütünüyle NEEDS REVIEW (PR3-N10 açık).** Bağımsız insan kabulü değildir. 0013 staging veya canlıya uygulanmaz.
+
+**Kalan DB todo'ları:** PR3-N10 (×3), PR3-N2, Q22/Q32 (H-22/K17), Q27/Q28 (K8). SEL-331 CRS şema dökümü bekleniyor.
+
+## 27. PR3-N10 akran incelemesi (`4c6c742` → `05e036d`)
+
+Sabitlenen sürüm `05e036d465e02a7361dd0262161825e8e6b4cdc9` (tek commit). Değişen dosyalar:
+- yeni `0014_manual_price_service_freeze.sql`;
+- yeni `price-approval-freeze.test.ts`;
+- `price-approval-binding.test.ts`: yalnız üç `todo` işareti kaldırıldı. Assertion, kurulum ve koruma testi aynı.
+
+0001–0013 ve `price-lifecycle.test.ts` değişmedi (SHA-256 `30a055bf…5dfd`).
+
+| Koşum (atılabilir PG16, yerel) | Test | Geçti | Kaldı | Todo | Skip |
+| -- | --: | --: | --: | --: | --: |
+| Tüm DB testleri | 132 | 127 | 0 | 5 | 0 |
+| `npm run check` | 353 | 338 | 0 | 14 | 1 |
+
+Sonuçlar Codex'in sayılarıyla aynı.
+
+**Seçilen yol:** onay kaydı varsa `passengers`, `route_code` ve `service_type` değişmez. Hizmet değişikliği iptal + yeni rezervasyon + yeni onay ile yapılır.
+
+**Bağımsız karşı-örnekler (0014 dahil tam aday, hepsi `AG_F4_MANUAL_PRICE_SERVICE_IMMUTABLE`):**
+- 6 → 16 yolcu (onaylı ve fiyatlı);
+- hat `AYT-ALN` → `AYT-KNY`;
+- `ag_platform` rolü ve `scope=platform` ile 6 → 7 yolcu;
+- iptal edildikten sonra yolcu değişikliği.
+
+Meşru alım noktası metni güncellemesi kabul ediliyor.
+
+**RLS değerlendirmesi:**
+- Kontrol, çağıranın yetkisiyle `EXISTS` sorgusu yapıyor.
+- Rezervasyonu güncelleyebilen tek veri rolü `ag_platform`.
+- Bu rolün `booking` ve `manual_price_approval` politikaları aynı (`scope=platform`). Bu yüzden görülebilen her rezervasyonun onay kaydı da görülüyor; görünmezlik yoluyla atlatma yok.
+
+**Karar: `05e036d` PASS (aday). PR3-N10 kapandı.** QA-F4/P grubu (Q23–Q26, Q29, Q31 + PR3-N10) PASS (aday).
+
+Açık kalanlar:
+- Tarife sırası P3 notu, H-22/K17 ve K8 açık.
+- Kalan DB todo'ları: PR3-N2, Q22/Q32, Q27/Q28.
+
+Bağımsız insan kabulü değildir. 0013/0014 staging veya canlıya uygulanmaz.
