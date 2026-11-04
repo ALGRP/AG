@@ -24,13 +24,18 @@ describe("A5 duplicate submissions", () => {
     await h.start();
     try {
       const headers = { origin: ORIGIN["partner-site"]!, "idempotency-key": "qa-idem-key-000000001" };
-      const rs = await Promise.all(Array.from({ length: 8 }, () => h.httpPost("/v1/public/bookings", body(), headers)));
+      // PR2-N4 fixture update: each HTTP retry needs its own single-use Turnstile
+      // challenge. The idempotency key and all booking fields remain identical.
+      const challenged = (n: number, extra: Record<string, unknown> = {}) =>
+        body({ ...extra, humanToken: `local:www.partner.example:idemRetry${String(n).padStart(8, "0")}` });
+      const rs = await Promise.all(Array.from({ length: 8 }, (_, n) =>
+        h.httpPost("/v1/public/bookings", challenged(n), headers)));
       assert.ok(rs.every((r) => r.status === 201), JSON.stringify(rs.map((r) => r.status)));
       assert.equal(new Set(rs.map((r) => r.body.ref)).size, 1);
-      const again = await h.httpPost("/v1/public/bookings", body(), headers);
+      const again = await h.httpPost("/v1/public/bookings", challenged(8), headers);
       assert.equal(again.body.ref, rs[0]!.body.ref);
       assert.equal((await h.store.listBookings()).length, 1);
-      const changed = await h.httpPost("/v1/public/bookings", body({ passengers: 3 }), headers);
+      const changed = await h.httpPost("/v1/public/bookings", challenged(9, { passengers: 3 }), headers);
       assert.deepEqual([changed.status, changed.body.error], [409, "idempotency_key_reused_with_different_body"]);
     } finally {
       await h.stop();

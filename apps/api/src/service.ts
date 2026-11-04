@@ -141,6 +141,28 @@ export class BookingService {
 
   // ================================================================ Herkese açık (uydu siteler)
 
+  /** PR2-N4: verification is required also on an idempotent cache HIT.
+   * A cached response includes lookupToken, so the existing booking cannot be
+   * returned merely because an attacker guessed the key+body.
+   */
+  async #verifyBookingProof(tx: Store, site: SiteRecord, token: string | undefined, ip: string): Promise<ServiceResult<never> | null> {
+    if (!token || token.length > 2048) return fail(403, "attribution_not_verified");
+    let verification: HumanVerification;
+    try {
+      verification = await this.#d.verifyHuman(token, ip);
+    } catch {
+      return fail(403, "human_check_failed");
+    }
+    if (!verification.ok) return fail(403, "human_check_failed");
+    // Siteverify is single-use. An accepted proof is also reserved for 10 minutes
+    // in the LOCAL_ONLY store; this includes attempts with a wrong host or action.
+    if (!(await tx.reserveHumanToken(sha256(token), this.#d.clock().getTime()))) return fail(403, "human_check_failed");
+    if (verification.action !== "booking" || !verification.hostname || !site.domains.includes(verification.hostname)) {
+      return fail(403, "attribution_not_verified");
+    }
+    return null;
+  }
+
   async submit(input: {
     raw: unknown;
     origin: string | undefined;
@@ -164,6 +186,12 @@ export class BookingService {
       const prior = await tx.getIdempotency(scope);
       if (prior) {
         if (prior.requestHash !== requestHash) return fail(409, "idempotency_key_reused_with_different_body");
+        const intake = validateIntake(input.raw);
+        if (!intake.ok) return fail(422, "validation_failed", intake.errors);
+        const resolution = resolveSite(this.#d.sites, intake.value.siteId, input.origin, this.#d.devOrigins);
+        if (!resolution.ok) return fail(resolution.reason === "unknown_site" ? 404 : 403, resolution.reason);
+        const denied = await this.#verifyBookingProof(tx, resolution.site, intake.value.humanToken, input.ip);
+        if (denied) return denied;
         return prior.status < 400 ? ok(prior.body, prior.status) : { ok: false, status: prior.status, body: prior.body as ApiError };
       }
       const result = await this.#createBooking(tx, input);
@@ -180,24 +208,9 @@ export class BookingService {
     const resolved = resolveSite(this.#d.sites, req.siteId, input.origin, this.#d.devOrigins);
     if (!resolved.ok) return fail(resolved.reason === "unknown_site" ? 404 : 403, resolved.reason);
     const site = resolved.site;
-    // Origin/Host/Referer/UTM are untrusted claims. A verified challenge hostname binds the
-    // booking to exactly one registered site. No token, wrong action or wrong hostname => deny.
-    if (!req.humanToken || req.humanToken.length > 2048) return fail(403, "attribution_not_verified");
-    let verification: HumanVerification;
-    try {
-      verification = await this.#d.verifyHuman(req.humanToken, input.ip);
-    } catch {
-      return fail(403, "human_check_failed"); // provider unavailable: fail closed
-    }
-    if (!verification.ok) return fail(403, "human_check_failed");
-    // A *verified* token is spent even when hostname/action are wrong, matching Siteverify's
-    // single-use behavior. The hash is reserved before comparing site attribution.
-    if (!(await tx.reserveHumanToken(sha256(req.humanToken), this.#d.clock().getTime()))) {
-      return fail(403, "human_check_failed"); // local replay protection in addition to provider single-use
-    }
-    if (verification.action !== "booking" || !verification.hostname || !site.domains.includes(verification.hostname)) {
-      return fail(403, "attribution_not_verified");
-    }
+    // A challenge proves the registered site's hostname+booking action, never client headers.
+    const denied = await this.#verifyBookingProof(tx, site, req.humanToken, input.ip);
+    if (denied) return denied;
     if (req.paymentMethod !== undefined && !site.collectionMethods.includes(req.paymentMethod)) {
       return fail(422, "payment_method_not_allowed_for_site");
     }

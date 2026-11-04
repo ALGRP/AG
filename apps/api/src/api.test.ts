@@ -55,6 +55,7 @@ const W45 = "2026-W45";
 /** 2FA'lı yetkili — kimlik sağlayıcı (SEL-332) gelince HTTP'den gelecek kimliği temsil eder; testte servise doğrudan verilir. */
 const MANAGER: Actor = { id: "test-finance-manager", role: "finance_manager", mfa: true };
 let slip = 0;
+let humanRetrySequence = 0;
 
 
 function harness(startAt = "2026-11-02T08:00:00Z") {
@@ -115,7 +116,7 @@ function harness(startAt = "2026-11-02T08:00:00Z") {
         ...over,
         humanToken: over.humanToken ?? localHumanToken(
           new URL(ORIGIN[(over.siteId as string) ?? "partner-site"]!).hostname,
-          `apiBooking${key.replace(/[^A-Za-z0-9_-]/g, "").padEnd(12, "_")}`,
+          `apiBooking${key.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 62).padEnd(12, "_")}_${++humanRetrySequence}`,
         ),
       };
       return h.post("/v1/public/bookings", body, { origin: ORIGIN[body.siteId as string]!, "idempotency-key": key.padEnd(16, "0") });

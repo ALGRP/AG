@@ -270,7 +270,7 @@ describe("A10 QA-F11 idempotent retry after a lost response", () => {
 });
 
 describe("A10 PR2-N4 idempotent replay must not bypass site and challenge checks", () => {
-  it("A10.19 [RULE] a replay without a challenge or without the site's Origin must not return the cached booking secret", { todo: "PR2-N4 · Codex Paket-02 (aba1027 sonrası)" }, async () => {
+  it("A10.19 [RULE] a replay without a challenge or without the site's Origin must not return the cached booking secret", async () => {
     const h = harness();
     await h.start();
     try {
