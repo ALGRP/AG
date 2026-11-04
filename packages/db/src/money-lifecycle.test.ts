@@ -139,4 +139,12 @@ COMMIT;`);
       ('00000000-0000-4000-8000-0000000fb002','2026-W44','sup-p','p1',1000,'EUR','tr-m-0001','2026-10-29 09:00+03');`);
     assert.equal(r.status, 0, r.out);
   });
+
+  it("PR3-N4 [RULE] a booking cannot be INSERTED with cash totals that no money event supports (cache drift via INSERT)", { todo: "PR3-N4 · Codex Paket-03 (0005 yalnız UPDATE'i koruyor)" }, () => {
+    const r = psql(db, `INSERT INTO booking (${COLS}, collected_amount, collection_method, collected_at) VALUES
+      ('00000000-0000-4000-8000-00000000f0d1','site-one','p1','sup-a','shuttle',5000,'EUR','AG-QQMM24','AYT-ALN','a','b','2026-10-28 10:00',2,'n','e@x.test','+90','tr',ARRAY['cash']::collection_method[],'h','fmd1','confirmed','shuttle-split-v1',1000,500,3500,'FIXED_SHUTTLE','2026-10-27 09:00+03',4000,'cash','2026-10-28 10:00+03');`);
+    assert.notEqual(r.status, 0, "booking inserted with collected_amount 4000 and no collection event");
+    assert.match(r.out, /AG_F4_COLLECTED_AMOUNT_DRIFT/);
+  });
 });
+
