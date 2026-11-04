@@ -70,4 +70,14 @@ ${booking("a701", "AG-QQNN22", "p1", "sup-a")}`);
     const r = psql(db, booking("a702", "AG-QQNN23", "p9", "sup_a"));
     assert.equal(r.status, 0, `app-valid supplier id rejected: ${r.out.trim()}`);
   });
+
+  it("PR3-N9 [RULE] revoking a site's self-operation verification does not lock its historical self-supplied bookings", { todo: "PR3-N9 · Codex Paket-03 (kendi aracı kontrolü yalnız tedarikçi atanırken)" }, () => {
+    const setup = psql(db, `UPDATE site SET self_operation_verified_at = '2026-10-01' WHERE id = 'site-one';
+${booking("a703", "AG-QQNN24", "p9", "p9").replace("1000,500,3500", "0,500,4500")}
+UPDATE site SET self_operation_verified_at = NULL WHERE id = 'site-one';`);
+    assert.equal(setup.status, 0, setup.out);
+    const r = psql(db, "UPDATE booking SET notes = 'ops note after revocation' WHERE id = '00000000-0000-4000-8000-00000000a703';");
+    assert.equal(r.status, 0, `historical self-supplied booking locked after revocation: ${r.out.trim()}`);
+  });
 });
+
