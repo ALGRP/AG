@@ -152,7 +152,13 @@ export class BookingService {
     const rawSite =
       typeof input.raw === "object" && input.raw !== null ? (input.raw as Record<string, unknown>).siteId : undefined;
     const scope = `intake:${String(rawSite)}:${key}`;
-    const requestHash = sha256(JSON.stringify(input.raw));
+    // PR2-N3: humanToken is single-use transport proof, not booking intent.
+    // Retry after a lost 201 with the SAME idempotency key may use a fresh Turnstile token.
+    // All business fields (price, passenger, site etc.) still participate in the hash.
+    const normalizedBody = typeof input.raw === "object" && input.raw !== null && !Array.isArray(input.raw)
+      ? { ...(input.raw as Record<string, unknown>), humanToken: undefined }
+      : input.raw;
+    const requestHash = sha256(JSON.stringify(normalizedBody));
 
     return this.#d.store.transaction(async (tx) => {
       const prior = await tx.getIdempotency(scope);

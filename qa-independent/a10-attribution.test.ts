@@ -256,7 +256,7 @@ describe("A10 QA-F11 site-bound challenge and header-forgery guards (LOCAL_ONLY)
 });
 
 describe("A10 QA-F11 idempotent retry after a lost response", () => {
-  it("A10.18 [RULE] a retry with the same idempotency key and a fresh challenge returns the original booking, not 409", { todo: "PR2-N3 · Codex Paket-02 (requestHash humanToken içeriyor; form.js hatada belirteci sıfırlıyor)" }, async () => {
+  it("A10.18 [RULE] a retry with the same idempotency key and a fresh challenge returns the original booking, not 409", async () => {
     const h = harness();
     h.setNow("2026-11-04T08:00:00Z");
     const key = "qa-retry-key-0000000001";
