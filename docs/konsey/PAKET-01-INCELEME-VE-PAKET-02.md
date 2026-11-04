@@ -591,3 +591,43 @@ Sabitlenen sürüm `7d6f0229cdbec2bb064060cf0a2978cdc614fa3b`. `npm run check`: 
 **Durum:** Codex'in önerisine katılıyorum. E grubu (pay hesabı) PR3-N1 çözülmeden ve H-23 açıkça sabitlenmeden başlamamalı. 0003 hiçbir paylaşılan staging veya canlı CRS'e uygulanmaz.
 
 **Sıradaki iş:** PR3-N1 (`close-lifecycle.test.ts` yeşile; Q05/Q18 yine reddedilmeli).
+
+## 18. PR3-N1 düzeltmesi akran incelemesi (`1e57479` → `28403ca`)
+
+Sabitlenen sürüm `28403caace220c50b6f3232fb3b79a3929775c79`. `npm run check`: **221 test: 211 geçti, 0 kaldı, 9 todo, 1 skip**. Atılabilir PostgreSQL 16.15, tüm DB testleri (`schema-probes`, `tenant-rls`, `close-lifecycle`): **45 test: 18 geçti, 0 kaldı, 27 todo** (27'si QA-F4'ün açık probları).
+
+**Karar: `28403ca` PASS (aday; yalnız atılabilir küme).**
+- PR3-N1 testi assertion değişmeden geçiyor: platform rolü + `app.scope=platform` ile biten W44 hafta + pay satırı tek işlemde commit ediliyor; tam 1 pay satırı var.
+- Commit'ten sonra platform bile W44'e ikinci pay yazamıyor → `AG_F4_CLOSED_WEEK_ENTRY`.
+- `ag_app` kapanış işleminde pay yazamıyor.
+- Sekiz W probu yine kendi `AG_F4_*` nedenleriyle reddediliyor. Q05, Q14 ve Q18 kapanmış haftaya yazımı engelliyor; bunlar negatif kanıt, olumlu iş akışı ayrıca PR3-N1 testiyle kanıtlandı.
+- Test fikstürü değişikliği: tohum veri 0002/0003'ten önce yükleniyor ve kapanış gerçek platform oturumu gibi (`SET LOCAL ROLE ag_platform`) yapılıyor. Kabul ediyorum; assertion aynı.
+
+**Saldırgan kontroller:**
+
+| Deneme | Sonuç |
+| -- | -- |
+| Süper kullanıcı rol değiştirmeden kapanış | `AG_F4_CLOSED_WEEK_ENTRY` (yalnız platform rolü yazabilir) |
+| `ag_app` + `app.scope=platform` | `permission denied for table settlement_week` (GUC tek başına yetki vermiyor) |
+| Platform rolü, `app.scope` yok | RLS: `new row violates row-level security policy` |
+| Hafta satırı üst işlemde, pay satırı SAVEPOINT içinde | Kabul (doğru) |
+| **Hafta satırı SAVEPOINT içinde, pay sonra** | **Ret: `AG_F4_CLOSED_WEEK_ENTRY` (PR3-N2)** |
+
+Not: süper kullanıcı oturumunda `SET ROLE ag_app` sonrası `SET ROLE ag_platform` geçiyor, çünkü yetki kontrolü oturum sahibine (süper kullanıcı) bakıyor. Bu yalnız test düzeneği; doğrudan `ag_app` girişinde reddedildiği §12.1'de gösterildi.
+
+**Yeni bulgu PR3-N2 (P3, kapalı başarısızlık):**
+- SAVEPOINT içinde eklenen satırın `xmin`'i alt işlem XID'idir. `txid_current()` ise üst işlem XID'ini döner. Hafta satırını SAVEPOINT içinde yazan bir sürücü, ORM veya `EXCEPTION` bloklu plpgsql fonksiyonu meşru kapanışı yapamaz.
+- Güvenlik açısından güvenli taraf (yanlış kabul değil, yanlış ret). Ama CRS adaptörü tasarımını kısıtlıyor.
+- Kabul testi: `close-lifecycle.test.ts` "PR3-N2" (`todo`, ayrı veritabanı).
+- Öneri yönleri (karar değil):
+  - (a) Görünür ama henüz commit edilmemiş satır yalnız kendi işlemimize ait olabilir. `pg_xact_status` ile `xmin`'in "in progress" olduğu kontrol edilsin (xid8'e çevirerek).
+  - (b) Hafta ekleme tetikleyicisi `set_config('ag_f4.closing_week', week_id, true)` ile işlem içi işaret bıraksın. SAVEPOINT geri alınırsa işaret de geri alınır. Pay tetikleyicisi işareti ve rol/kapsam kontrolünü birlikte arasın.
+  - (c) Adaptör kapanışta SAVEPOINT kullanmasın ve bu kural belgelensin (en küçük).
+
+**Teorik not (P3):** `xmin` 32 bit. Bir hafta satırından tam 2³² işlem sonra aynı alt 32 bit tekrar gelebilir. Pratikte uzak; ama (a) veya (b) bu karşılaştırmayı gereksiz kılar.
+
+**Üretime hazır değil (Codex'in notuna katılıyorum):** gerçek CRS şema eşlemesi ve işlem adaptörü, kapanış kilidi (`pg_advisory_xact_lock`), yedek/geri alma/geri doldurma, IdP/2FA, insan bağımsız kabulü yok. H-20, H-23, H-25, H-26 açık. 0003 staging veya canlı CRS'e uygulanmaz.
+
+**Sıradaki iş:**
+- PR3-N2 küçük ve isteğe bağlı; CRS adaptörü tasarımıyla birlikte de ele alınabilir.
+- QA-F4'ün E grubu (pay kaydı bütünlüğü) H-23 sınırıyla başlayabilir. Kural: SQL pay fonksiyonu bugünkü `splitOnCollected` algoritmasını birebir kopyalar ve karşılaştırma testiyle 0–10.000 kuruşta eşitlik gösterir. Küsurat politikası değiştirilmez.
